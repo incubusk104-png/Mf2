@@ -18,7 +18,6 @@ object HabitIconCatalog {
         HabitIcon("walking", R.drawable.ic_health_walking, "Walk", HabitCategory.HEALTH, 0xFFAED581, 7 * 60),
         HabitIcon("sleep", R.drawable.ic_health_moon_stars, "Sleep Early", HabitCategory.HEALTH, 0xFF7986CB, 22 * 60),
         HabitIcon("stretch", R.drawable.ic_health_stretching, "Stretch", HabitCategory.HEALTH, 0xFF4DB6AC, 7 * 60 + 30),
-        HabitIcon("meditate", R.drawable.ic_mind_meditating, "Meditate", HabitCategory.MIND, 0xFFBA68C8, 8 * 60),
         HabitIcon("journal", R.drawable.ic_mind_notebook, "Journal", HabitCategory.MIND, 0xFFFFB74D, 21 * 60),
         HabitIcon("gratitude", R.drawable.ic_mind_gratitude, "Gratitude", HabitCategory.MIND, 0xFFFFD54F, 21 * 60 + 30),
         HabitIcon("noPhone", R.drawable.ic_mind_phone_noslash, "No Phone Morning", HabitCategory.MIND, 0xFF9575CD, 7 * 60),
