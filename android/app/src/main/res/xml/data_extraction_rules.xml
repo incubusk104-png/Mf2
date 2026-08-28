@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ backup & device-to-device transfer rules: keep habit data,
+     but never copy Supabase session tokens between devices. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="supabase_sync.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="supabase_sync.xml" />
+    </device-transfer>
+</data-extraction-rules>

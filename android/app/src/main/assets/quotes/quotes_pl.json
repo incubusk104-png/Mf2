@@ -1,0 +1,47 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Spokój",
+      "tagline": "Wejdź w dzień łagodnie, krok po kroku.",
+      "promptHeader": "Chwila na refleksję",
+      "habitsHeader": "Rytm dnia",
+      "habitsSub": "Przechodź przez nie we własnym tempie.",
+      "allDone": "Wszystko zrobione. Pozwól dniowi łagodnie opaść.",
+      "emptyHabits": "Brak nawyków. Dodaj mały rytuał, gdy będziesz gotów."
+    },
+    "FOCUSED": {
+      "label": "Skupienie",
+      "tagline": "Jasny plan. Czyste wykonanie.",
+      "promptHeader": "Dyrektywa na dziś",
+      "habitsHeader": "Lista zadań",
+      "habitsSub": "Pracuj po liście. Od góry do dołu.",
+      "allDone": "Lista wyczyszczona. Dobra robota.",
+      "emptyHabits": "Brak nawyków. Dodaj pierwszy cel."
+    },
+    "MOTIVATED": {
+      "label": "Motywacja",
+      "tagline": "Rozpęd jest dziś Twój — wykorzystaj go!",
+      "promptHeader": "Paliwo na dziś",
+      "habitsHeader": "Zbierajmy zwycięstwa",
+      "habitsSub": "Każde odhaczenie buduje serię. Po nie!",
+      "allDone": "Pełny sukces! Dziś rozbiłeś wszystko.",
+      "emptyHabits": "Czysta karta, wielka energia. Dodaj pierwszy nawyk i ruszaj!"
+    },
+    "OVERWHELMED": {
+      "label": "Przytłoczenie",
+      "tagline": "Nie musisz robić wszystkiego. Radzisz sobie dobrze.",
+      "promptHeader": "Tylko jedna malutka rzecz",
+      "habitsHeader": "Tylko jeśli masz przestrzeń",
+      "habitsSub": "Dziś jedno wystarczy. Naprawdę.",
+      "allDone": "Spójrz — i tak się pojawiłeś. To się liczy.",
+      "emptyHabits": "Pusto tutaj i to w porządku. Odpoczynek też się liczy."
+    }
+  },
+  "starterHabits": [
+    "Wypij szklankę wody",
+    "5 minut dziennika",
+    "Przeczytaj 10 stron",
+    "Poranne rozciąganie",
+    "Wieczorny spacer"
+  ]
+}

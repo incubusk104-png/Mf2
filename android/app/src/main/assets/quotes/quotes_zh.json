@@ -1,0 +1,93 @@
+{
+  "modeCopy": {
+    "CALM": { "label": "平静", "tagline": "缓缓开始新的一天，一步一个脚印。", "promptHeader": "片刻反思", "habitsHeader": "今日节奏", "habitsSub": "按自己的节奏来。", "allDone": "全部完成。让这一天温柔收尾。", "emptyHabits": "还没有习惯。准备好时添加一个小仪式吧。" },
+    "FOCUSED": { "label": "专注", "tagline": "清晰的计划。干净的执行。", "promptHeader": "今日指令", "habitsHeader": "清单", "habitsSub": "逐项完成。从上到下。", "allDone": "清单清空。执行出色。", "emptyHabits": "尚未定义习惯。添加你的第一个目标。" },
+    "MOTIVATED": { "label": "充满动力", "tagline": "今天势头是你的——用起来！", "promptHeader": "今日燃料", "habitsHeader": "来积累成就吧", "habitsSub": "每次打卡都在延续记录。冲！", "allDone": "全部拿下！今天每一项都搞定了。", "emptyHabits": "空白画布，满满的能量。添加第一个习惯冲吧！" },
+    "OVERWHELMED": { "label": "不堪重负", "tagline": "你不必全做。你已经做得很好了。", "promptHeader": "只做一件小事", "habitsHeader": "有余力再做", "habitsSub": "今天一件就够了。真的。", "allDone": "看——你还是出现了。这就很重要。", "emptyHabits": "这里什么都没有，没关系。休息也算数。" }
+  },
+  "prompts": {
+    "CALM": ["今天有什么事可以慢慢来，不急不躁？", "深呼吸。现在此刻已经感觉还可以的是什么？", "如果给自己许可去温柔对待，今天会是什么样？", "注意身边一个小小的舒适。今天稍后如何回到它？", "有什么是你今天可以暂时放下的？", "如果今天有一种质感，你希望它感觉如何？", "昨天哪个安静的时刻值得今早一点感恩？", "傍晚前可以在哪里安排一个不急不忙的暂停？", "今天的哪段对话可以用柔和而非急切进入？", "选一项任务用半速完成。注意这如何改变做事的体验。"],
+    "FOCUSED": ["说出你最高价值的任务。先做它。", "开始前要消除哪个干扰？", "用一句话定义今天什么叫完成。", "你一直在回避哪个任务？把它安排在下一个小时。", "什么值得今天45分钟深度不中断的工作？", "选一件要完成的事——不是开始。完成它。", "今天可以对什么说不以保护你的专注？", "设你的前三项。划掉下面两项。开始。", "关闭下一个小时不需要的所有标签页和应用。然后开始。", "什么是最小的可衡量成果能让今天成为一次胜利？"],
+    "MOTIVATED": ["今天你火力全开——哪个目标获得最大推进？", "你一直在等'对的时候'的大胆一步？就是现在。", "引导这股能量：未来的你会为今天做了什么而击掌？", "今天可以升级哪个习惯——再久一点，再强一点？", "今天做什么能让你的连续记录感谢你？", "乘浪而上：你最大抱负的下一个行动是什么？", "今天的能量是资源。你会投资在哪里获得最好回报？", "中午前能锁定什么胜利？", "今天可以鼓励谁？分享的势头是加倍的势头。", "选清单上最吓人的一项，现在迈出一步具体行动。"],
+    "OVERWHELMED": ["喝一杯水。这就是全部任务。", "慢慢呼吸三次。现在不需要别的。", "选清单上最小的项目。就那个。其余可以等。", "出去或开窗一分钟呼吸新鲜空气。", "把一件东西放回原位。一件就够了。", "放松下巴，放下肩膀。这也算进步。", "像朋友那样给自己发一句善意的话。", "设五分钟休息计时器。休息也是生产性的。", "花两分钟写下脑海中的一切，然后合上笔记本。", "今天取消或推迟一件事。留白是被允许的。"]
+  },
+  "premiumPrompts": {
+    "CALM": ["回忆一个让你完全放松的地方。把它的宁静带入今天的一项任务。", "什么声音、气味或光线帮你安定？今晚把它请进你的空间。", "给自己写一句话，开头是：'我已经足够……'"],
+    "FOCUSED": ["给收件箱限时：十分钟，一次。省下的时间做什么？", "找出瓶颈任务——阻塞其他三项的那个。先清它。", "如果今天是你最自律的一天，这周会是什么样？"],
+    "MOTIVATED": ["写下这个目标的90天版本。今天贡献了什么？", "当你今天坚持到底谁受益？想象他们。现在行动。", "今天把一个习惯加倍——两页变四页，十分钟变二十分钟。"],
+    "OVERWHELMED": ["用三个词说出现在最沉重的。命名它会缩小它。", "给自己许可今天把一件事做差。完成胜过完美。", "告诉一个人你怎么样。连接减轻负担。"]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201C自然不急，却无不成。\u201D \u2014 老子", "author": "老子", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201C你内心有一片寂静和圣殿，随时可以退回。\u201D \u2014 赫尔曼·黑塞", "author": "赫尔曼·黑塞", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201C几乎所有东西拔掉插头几分钟后就能重新工作，包括你自己。\u201D \u2014 安妮·拉莫特", "author": "安妮·拉莫特", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201C平静是重新训练心智按生活本来面貌处理的结果。\u201D \u2014 韦恩·戴尔", "author": "韦恩·戴尔", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201C慢下来，你追逐的一切都会回过头来追上你。\u201D \u2014 约翰·德·保罗", "author": "约翰·德·保罗", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201C平静的心带来内在力量和自信。\u201D \u2014 达赖喇嘛", "author": "达赖喇嘛", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201C生活不只是加速。\u201D \u2014 圣雄甘地", "author": "圣雄甘地", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201C紧张是你以为应该成为的人。放松是你本来的样子。\u201D \u2014 中国谚语", "author": "中国谚语", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201C微笑、呼吸、慢慢走。\u201D \u2014 一行禅师", "author": "一行禅师", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201C在动荡和混乱中，保持内心的宁静。\u201D \u2014 迪帕克·乔普拉", "author": "迪帕克·乔普拉", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201C将所有思绪集中于手头的工作。\u201D \u2014 亚历山大·格拉汉姆·贝尔", "author": "亚历山大·格拉汉姆·贝尔", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201C光是忙碌不够。问题是：忙什么？\u201D \u2014 亨利·大卫·梭罗", "author": "亨利·大卫·梭罗", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201C成功的战士是普通人，有激光般的专注。\u201D \u2014 李小龙", "author": "李小龙", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201C你可以同时做两件事，但不能同时有效专注两件事。\u201D \u2014 加里·凯勒", "author": "加里·凯勒", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201C专注在哪里，能量就流向哪里。\u201D \u2014 托尼·罗宾斯", "author": "托尼·罗宾斯", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201C自律是你现在想要的和你最想要的之间的选择。\u201D \u2014 亚伯拉罕·林肯（传）", "author": "亚伯拉罕·林肯（传）", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201C简单归结为两步：识别本质，消除其余。\u201D \u2014 里奥·巴伯塔", "author": "里奥·巴伯塔", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201C你持续专注的东西会成长。\u201D \u2014 罗伊·T·贝内特", "author": "罗伊·T·贝内特", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201C主要的事就是把主要的事当作主要的事。\u201D \u2014 史蒂芬·柯维", "author": "史蒂芬·柯维", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201C饿死干扰，喂养专注。\u201D \u2014 佚名", "author": "佚名", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201C开始的方法是停止谈论，开始行动。\u201D \u2014 沃尔特·迪士尼", "author": "沃尔特·迪士尼", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201C能量和毅力征服一切。\u201D \u2014 本杰明·富兰克林", "author": "本杰明·富兰克林", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201C你不尝试的投篮100%不中。\u201D \u2014 韦恩·格雷茨基", "author": "韦恩·格雷茨基", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201C成功是日复一日重复的小努力的总和。\u201D \u2014 罗伯特·科利尔", "author": "罗伯特·科利尔", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201C先做难事。容易的事自然就解决了。\u201D \u2014 戴尔·卡耐基", "author": "戴尔·卡耐基", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201C在完成之前总是看起来不可能。\u201D \u2014 纳尔逊·曼德拉", "author": "纳尔逊·曼德拉", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201C行动是所有成功的基础钥匙。\u201D \u2014 巴勃罗·毕加索", "author": "巴勃罗·毕加索", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201C伟大的事由一系列小事汇聚而成。\u201D \u2014 文森特·梵高", "author": "文森特·梵高", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201C领先的秘诀是开始。\u201D \u2014 马克·吐温（传）", "author": "马克·吐温（传）", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201C别看时钟；做它做的事。继续走。\u201D \u2014 萨姆·莱文森", "author": "萨姆·莱文森", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201C你不必看到整段楼梯，只需迈出第一步。\u201D \u2014 马丁·路德·金", "author": "马丁·路德·金", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201C没有什么比行动更快减少焦虑。\u201D \u2014 沃尔特·安德森", "author": "沃尔特·安德森", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201C对自己温柔些。你已经在尽力了。\u201D \u2014 佚名", "author": "佚名", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201C怎么吃大象？一口一口吃。\u201D \u2014 谚语", "author": "谚语", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201C休息不是懒惰。\u201D \u2014 约翰·拉伯克", "author": "约翰·拉伯克", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201C从你所在的地方开始。用你拥有的。做你能做的。\u201D \u2014 阿瑟·阿什", "author": "阿瑟·阿什", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201C你可以同时是杰作和进行中的作品。\u201D \u2014 索菲亚·布什", "author": "索菲亚·布什", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201C有时一整天最重要的事是两次深呼吸间的休息。\u201D \u2014 艾蒂·希勒苏姆", "author": "艾蒂·希勒苏姆", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201C一次一天——这就够了。\u201D \u2014 佚名", "author": "佚名", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201C如果累了，学会休息，而不是放弃。\u201D \u2014 班克西", "author": "班克西", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201C采用自然的节奏：她的秘诀是耐心。\u201D \u2014 拉尔夫·沃尔多·爱默生", "author": "拉尔夫·沃尔多·爱默生", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201C安静心智，灵魂便会说话。\u201D \u2014 玛·贾亚·萨蒂·巴加瓦蒂", "author": "玛·贾亚·萨蒂·巴加瓦蒂", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201C知足者富。\u201D \u2014 老子", "author": "老子", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201C效率是正确地做事；效果是做正确的事。\u201D \u2014 彼得·德鲁克", "author": "彼得·德鲁克", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201C缺乏方向而非时间才是问题。我们都有24小时。\u201D \u2014 齐格·齐格勒", "author": "齐格·齐格勒", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201C做很多事的最短路径是一次只做一件。\u201D \u2014 莫扎特（传）", "author": "莫扎特（传）", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201C无论你认为自己行还是不行，你都是对的。\u201D \u2014 亨利·福特", "author": "亨利·福特", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201C一年后你可能希望今天就开始了。\u201D \u2014 卡伦·兰姆", "author": "卡伦·兰姆", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201C完成的小事胜过计划的大事。\u201D \u2014 彼得·马歇尔", "author": "彼得·马歇尔", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201C压垮你的不是负荷，而是你扛的方式。\u201D \u2014 卢·霍尔茨", "author": "卢·霍尔茨", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201C情绪只是访客。让它们来去自如。\u201D \u2014 穆吉", "author": "穆吉", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201C你无法平息风暴，所以别试了。你能做的是平静自己。风暴会过去。\u201D \u2014 蒂姆·霍基", "author": "蒂姆·霍基", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": ["喝一杯水", "5分钟日记", "读10页书", "晨间拉伸", "晚间散步"]
+}

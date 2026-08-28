@@ -1,0 +1,47 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Tenang",
+      "tagline": "Masuki hari dengan lembut, satu langkah pada satu masa.",
+      "promptHeader": "Seketika untuk renungan",
+      "habitsHeader": "Rentak hari ini",
+      "habitsSub": "Lalui semuanya mengikut rentak anda sendiri.",
+      "allDone": "Semua selesai. Biarkan hari ini reda dengan tenang.",
+      "emptyHabits": "Belum ada tabiat. Tambah satu ritual kecil apabila anda bersedia."
+    },
+    "FOCUSED": {
+      "label": "Fokus",
+      "tagline": "Rancangan jelas. Pelaksanaan kemas.",
+      "promptHeader": "Arahan hari ini",
+      "habitsHeader": "Senarai semak",
+      "habitsSub": "Selesaikan senarai. Dari atas ke bawah.",
+      "allDone": "Senarai selesai. Kerja yang baik.",
+      "emptyHabits": "Tiada tabiat ditetapkan. Tambah sasaran pertama anda."
+    },
+    "MOTIVATED": {
+      "label": "Bermotivasi",
+      "tagline": "Momentum milik anda hari ini — gunakannya!",
+      "promptHeader": "Bahan api untuk hari ini",
+      "habitsHeader": "Jom kumpul kemenangan",
+      "habitsSub": "Setiap tanda membina streak. Pergi dapatkannya!",
+      "allDone": "Sapu bersih! Anda selesaikan semuanya hari ini.",
+      "emptyHabits": "Helaian kosong, tenaga besar. Tambah tabiat pertama anda dan mula!"
+    },
+    "OVERWHELMED": {
+      "label": "Tertekan",
+      "tagline": "Anda tak perlu buat semuanya. Anda okey.",
+      "promptHeader": "Satu perkara kecil sahaja",
+      "habitsHeader": "Hanya jika anda ada ruang",
+      "habitsSub": "Satu sudah cukup hari ini. Sungguh.",
+      "allDone": "Tengok tu — anda tetap hadir. Itu yang penting.",
+      "emptyHabits": "Tiada apa di sini, dan tak mengapa. Rehat pun dikira."
+    }
+  },
+  "starterHabits": [
+    "Minum segelas air",
+    "5 minit menulis jurnal",
+    "Baca 10 muka surat",
+    "Regangan pagi",
+    "Berjalan waktu petang"
+  ]
+}

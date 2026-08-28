@@ -1,0 +1,20 @@
+{
+  "$schema": "https://rork.com/schema/rork.json",
+  "apps": [
+    {
+      "name": "Mindset Frames",
+      "path": "android",
+      "framework": "kotlin"
+    },
+    {
+      "name": "Backend",
+      "path": "backend",
+      "framework": "supabase"
+    },
+    {
+      "name": "Mindset Frames Web",
+      "path": "web",
+      "framework": "web"
+    }
+  ]
+}

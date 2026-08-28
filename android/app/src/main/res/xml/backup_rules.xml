@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and below cloud backup: keep habit data, but never back up
+     Supabase session tokens — restoring them onto another device would leak
+     an active auth session. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="supabase_sync.xml" />
+</full-backup-content>

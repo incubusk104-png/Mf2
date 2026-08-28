@@ -1,0 +1,191 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Calme",
+      "tagline": "Entrez doucement dans la journée, un pas gentle à la fois.",
+      "promptHeader": "Un moment pour réfléchir",
+      "habitsHeader": "Le rythme d'aujourd'hui",
+      "habitsSub": "Avancez à votre propre rythme.",
+      "allDone": "Tout est fait. Laissez la journée se poser doucement.",
+      "emptyHabits": "Pas encore d'habitudes. Ajoutez un petit rituel quand vous êtes prêt."
+    },
+    "FOCUSED": {
+      "label": "Concentré",
+      "tagline": "Plan clair. Exécution nette.",
+      "promptHeader": "Directive du jour",
+      "habitsHeader": "Checklist",
+      "habitsSub": "Travaillez la liste. De haut en bas.",
+      "allDone": "Liste terminée. Bien exécuté.",
+      "emptyHabits": "Aucune habitude définie. Ajoutez votre premier objectif."
+    },
+    "MOTIVATED": {
+      "label": "Motivé",
+      "tagline": "L'élan est vôtre aujourd'hui — utilisez-le !",
+      "promptHeader": "Carburant pour aujourd'hui",
+      "habitsHeader": "Empilons les victoires",
+      "habitsSub": "Chaque coche construit la série. Allez-y !",
+      "allDone": "Grand chelem ! Vous avez tout accompli aujourd'hui.",
+      "emptyHabits": "Page blanche, pleine énergie. Ajoutez votre première habitude et go !"
+    },
+    "OVERWHELMED": {
+      "label": "Dépassé",
+      "tagline": "Vous n'avez pas à tout faire. Vous vous en sortez bien.",
+      "promptHeader": "Juste une petite chose",
+      "habitsHeader": "Seulement si vous avez l'espace",
+      "habitsSub": "Une suffit aujourd'hui. Vraiment.",
+      "allDone": "Regardez — vous êtes apparu quand même. Ça compte.",
+      "emptyHabits": "Rien ici, et c'est okay. Le repos compte aussi."
+    }
+  },
+  "prompts": {
+    "CALM": [
+      "Qu'est-ce qui peut se dérouler lentement aujourd'hui, sans précipitation ?",
+      "Prenez une lente respiration. Qu'est-ce qui va déjà bien, là, maintenant, tel quel ?",
+      "À quoi ressemblerait la journée si vous vous donniez la permission d'y aller doucement ?",
+      "Remarquez une petite douceur autour de vous. Comment y revenir plus tard aujourd'hui ?",
+      "Que pouvez-vous lâcher prise, juste pour aujourd'hui ?",
+      "Si aujourd'hui avait une texture, comment aimeriez-vous la sentir ?",
+      "Quel moment calme d'hier mérite un peu de gratitude ce matin ?",
+      "Où pouvez-vous ménager une pause sans précipitation avant le soir ?",
+      "Quelle conversation aujourd'hui pourriez-vous aborder avec douceur plutôt qu'urgence ?",
+      "Choisissez une tâche à faire à moitié vitesse aujourd'hui. Remarquez comment le faire change."
+    ],
+    "FOCUSED": [
+      "Nommez votre tâche à plus fort impact. Faites-la en premier.",
+      "Quelle distraction allez-vous éliminer avant de commencer ?",
+      "Définissez 'terminé' pour aujourd'hui en une phrase.",
+      "Quelle tâche évitiez-vous ? Planifiez-la pour la prochaine heure.",
+      "Qu'est-ce qui mérite 45 minutes de travail profond et ininterrompu aujourd'hui ?",
+      "Choisissez une chose à terminer — pas commencer. Terminez-la.",
+      "À quoi pouvez-vous dire 'non' aujourd'hui pour protéger votre concentration ?",
+      "Fixez vos trois priorités. Rayez les deux du bas. Commencez.",
+      "Fermez tous les onglets et applications inutiles pour la prochaine heure. Puis commencez.",
+      "Quel est le plus petit résultat mesurable qui ferait de la journée une victoire ?"
+    ],
+    "MOTIVATED": [
+      "Vous avez du feu aujourd'hui — quel objectif reçoit la plus grande poussée ?",
+      "Quel pas audacieux attendiez-vous pour le 'bon moment' ? C'est maintenant.",
+      "Canalisez cette énergie : pour quoi votre vous futur vous donnerait-il un high-five aujourd'hui ?",
+      "Quelle habitude pouvez-vous intensifier aujourd'hui — un peu plus longtemps, un peu plus fort ?",
+      "Que pouvez-vous faire aujourd'hui dont votre série vous remerciera ?",
+      "Surfez la vague : quelle est la prochaine action vers votre plus grande ambition ?",
+      "L'énergie d'aujourd'hui est une ressource. Où l'investirez-vous pour le meilleur retour ?",
+      "Quelle victoire pouvez-vous sécuriser avant midi ?",
+      "Qui pourriez-vous encourager aujourd'hui ? L'élan partagé est doublé.",
+      "Choisissez l'élément le plus intimidant de votre liste et faites-y un pas concret maintenant."
+    ],
+    "OVERWHELMED": [
+      "Buvez un verre d'eau. C'est toute la tâche.",
+      "Prenez trois lentes respirations. Rien d'autre n'est requis maintenant.",
+      "Choisissez le plus petit élément de votre liste. Juste celui-là. Le reste peut attendre.",
+      "Sortez ou ouvrez une fenêtre pour une minute d'air frais.",
+      "Remettez une chose à sa place. Une, c'est assez.",
+      "Desserrez la mâchoire, baissez les épaules. Ça compte comme un progrès.",
+      "Envoyez-vous une phrase bienveillante, comme le ferait un ami.",
+      "Réglez un minuteur pour cinq minutes de repos. Reposer est aussi productif.",
+      "Écrivez tout ce qui vous encombre pendant deux minutes, puis fermez le carnet.",
+      "Annulez ou reportez une chose aujourd'hui. L'espace est permis."
+    ]
+  },
+  "premiumPrompts": {
+    "CALM": [
+      "Rappelez un lieu où vous êtes totalement à l'aise. Portez son silence dans une tâche aujourd'hui.",
+      "Quel son, parfum ou lumière vous aide à vous poser ? Invitez-le dans votre espace ce soir.",
+      "Écrivez une phrase pour vous-même commençant par : 'Il suffit que je…'"
+    ],
+    "FOCUSED": [
+      "Timeboxez votre boîte : dix minutes, une fois. Que ferez-vous du temps gagné ?",
+      "Identifiez la tâche goulot — celle qui en bloque trois autres. Dégagez-la d'abord.",
+      "À quoi ressemblerait cette semaine si aujourd'hui était votre jour le plus discipliné ?"
+    ],
+    "MOTIVATED": [
+      "Écrivez la version à 90 jours de cet objectif. Qu'apporte aujourd'hui ?",
+      "Qui bénéficie quand vous allez jusqu'au bout aujourd'hui ? Imaginez. Maintenant bougez.",
+      "Doublez une habitude aujourd'hui — deux pages deviennent quatre, dix minutes vingt."
+    ],
+    "OVERWHELMED": [
+      "Nommez ce qui est le plus lourd en trois mots. Nommer rétrécit.",
+      "Donnez-vous la permission de mal faire une chose aujourd'hui. Fait vaut mieux que parfait.",
+      "Écrivez ou dites à une personne comment vous allez. La connexion allège la charge."
+    ]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201CLa nature ne se presse pas, et pourtant tout s'accomplit.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201CEn vous, il y a un silence et un sanctuaire où vous pouvez vous retirer à tout moment.\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201CPresque tout remarche si on le débranche quelques minutes, y compris vous.\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201CLa paix est le résultat du réentraînement de l'esprit à traiter la vie telle qu'elle est.\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201CRalentissez et tout ce que vous poursuivez viendra vous rattraper.\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201CUn esprit calme apporte force intérieure et confiance en soi.\u201D \u2014 Dalaï Lama", "author": "Dalaï Lama", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201CIl y a plus à la vie que d'en augmenter la vitesse.\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201CLa tension, c'est qui vous pensez devoir être. La relaxation, c'est qui vous êtes.\u201D \u2014 Proverbe chinois", "author": "Proverbe chinois", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201CSouriez, respirez et allez lentement.\u201D \u2014 Thich Nhat Hanh", "author": "Thich Nhat Hanh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201CAu milieu du mouvement et du chaos, gardez le calme en vous.\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201CConcentrez toutes vos pensées sur le travail entre les mains.\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201CNe pas suffire d'être occupé. La question est : à quoi ?\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201CLe guerrier réussi est l'homme moyen, avec une concentration laser.\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201CVous pouvez faire deux choses à la fois, mais ne concentrer efficacement sur deux à la fois.\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201CLà où va la concentration, l'énergie flue.\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201CLa discipline, c'est choisir entre ce qu'on veut maintenant et ce qu'on veut le plus.\u201D \u2014 Abraham Lincoln (attr.)", "author": "Abraham Lincoln (attr.)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201CLa simplicité tient en deux étapes : identifier l'essentiel, éliminer le reste.\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201CCe sur quoi vous restez concentré grandira.\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201CL'essentiel est de garder l'essentiel comme l'essentiel.\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201CAffamez vos distractions, nourrissez votre concentration.\u201D \u2014 Inconnu", "author": "Inconnu", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201CPour commencer, cessez de parler et commencez à faire.\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201CL'énergie et la persévérance conquièrent tout.\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201CVous ratez 100% des tirs que vous ne tentez pas.\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201CLe succès est la somme de petits efforts, répétés jour après jour.\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201CFaites d'abord les tâches difficiles. Les faciles s'arrangeront d'elles-mêmes.\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201CCela semble toujours impossible jusqu'à ce que ce soit fait.\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201CL'action est la clé fondamentale de tout succès.\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201CLes grandes choses se font par une série de petites choses rassemblées.\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201CLe secret pour avancer est de commencer.\u201D \u2014 Mark Twain (attr.)", "author": "Mark Twain (attr.)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201CNe regardez pas l'horloge ; faites comme elle. Continuez.\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201CVous n'avez pas à voir tout l'escalier, juste faire le premier pas.\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201CRien ne diminue l'anxiété plus vite que l'action.\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201CSoyez doux avec vous-même. Vous faites de votre mieux.\u201D \u2014 Inconnu", "author": "Inconnu", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201CComment mange-t-on un éléphant ? Une bouchée à la fois.\u201D \u2014 Proverbe", "author": "Proverbe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201CLe repos n'est pas oisiveté.\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201CCommencez où vous êtes. Utilisez ce que vous avez. Faites ce que vous pouvez.\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201CVous pouvez être à la fois un chef-d'œuvre et un travail en cours.\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201CParfois, le plus important dans toute une journée est le repos entre deux profondes respirations.\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201CUn jour à la fois — c'est suffisant.\u201D \u2014 Inconnu", "author": "Inconnu", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201CSi vous êtes fatigué, apprenez à vous reposer, pas à abandonner.\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201CAdoptez le rythme de la nature : son secret est la patience.\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201CTaisez l'esprit, et l'âme parlera.\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201CHeureux qui se contente.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201CL'efficacité, c'est bien faire les choses ; l'efficacité, c'est faire les bonnes choses.\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201CL'absence de direction, pas de temps, est le problème. Nous avons tous des journées de vingt-quatre heures.\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201CLe plus court chemin pour faire beaucoup de choses est de n'en faire qu'une à la fois.\u201D \u2014 Mozart (attr.)", "author": "Mozart (attr.)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201CSi vous pensez pouvoir ou ne pas pouvoir, vous avez raison.\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201CDans un an, vous pourriez souhaiter avoir commencé aujourd'hui.\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201CLes petites actions accomplies valent mieux que les grandes actions planifiées.\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201CCe n'est pas la charge qui vous brise, c'est la façon dont vous la portez.\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201CLes sentiments ne sont que des visiteurs. Laissez-les venir et partir.\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201CVous ne pouvez calmer la tempête, alors arrêtez. Ce que vous pouvez, c'est vous calmer. La tempête passera.\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": [
+    "Boire un verre d'eau",
+    "5 minutes de journaling",
+    "Lire 10 pages",
+    "Étirements matinaux",
+    "Promenade du soir"
+  ]
+}

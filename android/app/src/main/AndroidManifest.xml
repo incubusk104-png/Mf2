@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- androidx.health.connect:connect-client declares minSdk 26 in its own
+         manifest, but this app supports minSdk 24. The override below lets the
+         manifest merge succeed; MindsetHealthConnectClient (integrations/HealthConnectClient.kt)
+         guards every entry point behind Build.VERSION.SDK_INT >= 26, so the
+         library is never actually touched on API 24/25 devices. -->
+    <uses-sdk tools:overrideLibrary="androidx.health.connect.client" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Offline detection for cloud backup — lets the app queue syncs instead of failing. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Re-schedule the daily reminder alarm after a device reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Needed for usage stats tracking features -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Needed only on Android 9 and below to save the shared progress image to the gallery.
+         Android 10+ uses scoped MediaStore inserts, which require no permission. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- Required on targetSdk 30+: Android's package-visibility filtering
+         hides other apps' package info by default. Without declaring HMS
+         Core here, HuaweiApiAvailability.isHuaweiMobileServicesAvailable()
+         can't see HMS Core is installed even when it genuinely is, and
+         always reports SERVICE_MISSING (code 1) — this is what was
+         blocking Huawei sign-in on devices that DO have HMS Core. -->
+    <queries>
+        <package android:name="com.huawei.hwid" />
+        <package android:name="com.huawei.appmarket" />
+        <intent>
+            <action android:name="com.huawei.hms.core.aidlservice" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        tools:replace="android:allowBackup"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="Mindset Frames"
+        android:enableOnBackInvokedCallback="true"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MindsetFrames">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.MindsetFrames">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Return leg of the email auth web-bridge: mindsetframes.online
+                 forwards Supabase confirmation results to
+                 com.mindsetframes.habittracker://auth-callback. singleTask
+                 reuses the running activity (no duplicate instances or login
+                 loops); MainActivity consumes each link exactly once. The
+                 legacy scheme stays registered for older links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.mindsetframes.habittracker"
+                    android:host="auth-callback" />
+                <data
+                    android:scheme="com.rork.mindsetframestracker"
+                    android:host="auth-callback" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <receiver
+            android:name=".util.CopySummaryReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".notifications.CheckInReceiver"
+            android:exported="false"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.rork.mindsetframestracker.DAILY_CHECK_IN" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".notifications.StreakAlertReceiver"
+            android:exported="false"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.rork.mindsetframestracker.STREAK_ALERT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".notifications.WeeklyRecapReceiver"
+            android:exported="false"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.rork.mindsetframestracker.WEEKLY_RECAP" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".notifications.CompanionReceiver"
+            android:exported="false"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.rork.mindsetframestracker.TRIAL_PAYMENT_REMINDER" />
+                <action android:name="com.rork.mindsetframestracker.EVENING_REFLECTION" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Added HabitAlarmReceiver for individual habit notification alarms -->
+        <receiver
+            android:name=".notifications.HabitAlarmReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
+        <receiver
+            android:name=".notifications.BootReceiver"
+            android:exported="false"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

@@ -1,0 +1,93 @@
+{
+  "modeCopy": {
+    "CALM": { "label": "Tenang", "tagline": "Masuk ke hari dengan lembut, satu langkah kecil setiap kali.", "promptHeader": "Momen untuk merenung", "habitsHeader": "Irama hari ini", "habitsSub": "Bergerak dengan tempo Anda sendiri.", "allDone": "Semua selesai. Biarkan hari berlalu dengan lembut.", "emptyHabits": "Belum ada kebiasaan. Tambah ritual kecil saat siap." },
+    "FOCUSED": { "label": "Fokus", "tagline": "Rencana jelas. Eksekusi bersih.", "promptHeader": "Arahan hari ini", "habitsHeader": "Daftar periksa", "habitsSub": "Kerjakan daftar. Atas ke bawah.", "allDone": "Daftar selesai. Eksekusi bagus.", "emptyHabits": "Belum ada kebiasaan. Tambah target pertama." },
+    "MOTIVATED": { "label": "Termotivasi", "tagline": "Momentum milik Anda hari ini — gunakan!", "promptHeader": "Bahan bakar hari ini", "habitsHeader": "Kumpulkan kemenangan", "habitsSub": "Tiap centang bangun rentetan. Ayo!", "allDone": "Sapu bersih! Anda hancurkan semuanya hari ini.", "emptyHabits": "Kertas kosong, energi besar. Tambah kebiasaan pertama dan mulai!" },
+    "OVERWHELMED": { "label": "Kewalahan", "tagline": "Tak harus kerjakan semuanya. Anda sudah baik.", "promptHeader": "Hanya satu hal kecil", "habitsHeader": "Hanya jika ada ruang", "habitsSub": "Satu cukup hari ini. Sungguh.", "allDone": "Lihat — Anda tetap muncul. Itu penting.", "emptyHabits": "Tak ada apa pun di sini, dan tidak apa-apa. Istirahat juga hitungan." }
+  },
+  "prompts": {
+    "CALM": ["Apa yang bisa berjalan lambat hari ini, tanpa terburu?", "Tarik napas lambat. Apa yang sudah baik sekarang?", "Hari seperti apa jika beri diri izin perlahan?", "Perhati satu kenyamanan kecil di sekitar. Bagaimana kembali nanti?", "Apa bisa Anda lepaskan, hanya hari ini?", "Jika hari punya tekstur, ingin rasanya seperti apa?", "Momen tenang mana kemarin yang patut bersyukur pagi ini?", "Di mana bisa selip jeda tanpa terburu sebelum malam?", "Percakapan mana hari ini bisa masuk dengan lembut bukan terburu?", "Pilih satu tugas dengan setengah kecepatan. Perhati cara kerjanya berubah."],
+    "FOCUSED": ["Sebut tugas dampak terbesar. Lakukan pertama.", "Gangguan apa yang dihapus sebelum mulai?", "Definisikan 'selesai' hari ini dalam satu kalimat.", "Tugas apa yang dihindari? Jadwalkan untuk jam depan.", "Apa yang layak 45 menit kerja mendalam hari ini?", "Pilih satu untuk diselesaikan — bukan dimulai. Selesaikan.", "Kata 'tidak' pada apa hari ini untuk lindungi fokus?", "Tetapkan tiga teratas. Coret dua di bawah. Mulai.", "Tutup semua tab dan app tak perlu untuk jam berikutnya. Lalu mulai.", "Apa hasil terukur terkecil yang jadikan hari ini menang?"],
+    "MOTIVATED": ["Ada api hari ini — tujuan mana dapat dorongan terbesar?", "Langkah berani yang ditunggu 'saat tepat'? Sekarang.", "Salurkan energi: untuk apa diri masa depan high-five hari ini?", "Kebiasaan mana ditingkatkan — sedikit lebih lama, lebih kuat?", "Apa yang bisa dikerjakan agar rentetan berterima kasih?", "Naiki ombak: tindakan berikutnya menuju ambisi terbesar?", "Energi hari ini sumber daya. Investasi di mana?", "Kemenangan apa yang dikunci sebelum tengah hari?", "Siapa diberi semangat hari ini? Momentum berbagi adalah dobel.", "Pilih item paling menakutkan dan ambil satu langkah konkret sekarang."],
+    "OVERWHELMED": ["Minum segelas air. Itu seluruh tugasnya.", "Tiga napas lambat. Tak perlu apa pun lagi sekarang.", "Pilih item terkecil di daftar. Hanya itu. Sisanya bisa tunggu.", "Ke luar atau buka jendela satu menit udara segar.", "Kembalikan satu hal ke tempatnya. Satu cukup.", "Rahangkan rahang, turunkan bahu. Itu juga kemajuan.", "Kirim diri satu kalimat baik, seperti teman.", "Timer lima menit istirahat. Istirahat juga produktif.", "Tulis semua di pikiran selama dua menit, lalu tutup buku.", "Batalkan atau tunda satu hal hari ini. Ruang diperbolehkan."]
+  },
+  "premiumPrompts": {
+    "CALM": ["Ingat tempat Anda merasa sepenuhnya nyaman. Bawa ketenangannya ke satu tugas hari ini.", "Suara, aroma, atau cahaya apa membantu menenangkan? Undang ke ruang Anda malam ini.", "Tulis satu kalimat untuk diri mulai dengan: 'Cukup bahwa saya…'"],
+    "FOCUSED": ["Batas waktui kotak masuk: sepuluh menit, sekali. Apa dilakukan dengan waktu hemat?", "Identifikasi tugas bottleneck — yang memblokir tiga lain. Bersihkan dulu.", "Seperti apa minggu ini jika hari ini hari paling disiplin?"],
+    "MOTIVATED": ["Tulis versi 90 hari dari tujuan ini. Apa kontribusi hari ini?", "Siapa diuntungkan ketika Anda tuntas hari ini? Bayangkan. Sekarang bergerak.", "Gandakan satu kebiasaan hari ini — dua halaman jadi empat, sepuluh menit jadi dua puluh."],
+    "OVERWHELMED": ["Namai yang paling berat sekarang dalam tiga kata. Menamai mengecilkan.", "Berikan izin kerjakan satu hal buruk hari ini. Selesai kalahkan sempurna.", "Katakan pada satu orang bagaimana kabar. Koneksi meringankan."]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201CAlam tidak terburu, namun semuanya tercapai.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201CDi dalam Anda ada keheningan dan tempat berlindung yang bisa kembali kapan saja.\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201CHampir semua berfungsi lagi jika dicabut beberapa menit, termasuk Anda.\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201CDamai adalah hasil melatih ulang pikiran memproses life apa adanya.\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201CPelankan dan semua yang Anda kejar akan berbalik mengejar Anda.\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201CPikiran tenang bawa kekuatan batin dan percaya diri.\u201D \u2014 Dalai Lama", "author": "Dalai Lama", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201CAda lebih dalam hidup dari menambah kecepatannya.\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201CKetegangan adalah siapa Anda pikir harus jadi. Relaksasi adalah siapa Anda.\u201D \u2014 Peribahasa Cina", "author": "Peribahasa Cina", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201CSenyum, napas, dan pergi pelan.\u201D \u2014 Thich Nhat Hanh", "author": "Thich Nhat Hanh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201CDi tengah gerak dan kekacauan, jaga keheningan di dalam.\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201CPusatkan semua pikiran pada kerjaan di tangan.\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201CTak cukup sibuk. Pertanyaan: sibuk dengan apa?\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201CPejuang sukses adalah orang biasa, dengan fokus laser.\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201CAnda bisa kerjakan dua hal sekaligus, tapi tak fokus efektif pada keduanya.\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201CKemana fokus pergi, energi mengalir.\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201CKedisiplinan memilih antara yang Anda mau sekarang dan paling Anda mau.\u201D \u2014 Abraham Lincoln (atr.)", "author": "Abraham Lincoln (atr.)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201CKesederhanaan dua langkah: identifikasi yang esensial, hapus sisanya.\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201CYang Anda pertahankan fokus akan tumbuh.\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201CHal utama adalah menjaga hal utama tetap utama.\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201CKelaparkan gangguan, beri makan fokus.\u201D \u2014 Tidak diketahui", "author": "Tidak diketahui", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201CCara memulai adalah berhenti bicara dan mulai berbuat.\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201CEnergi dan ketekunan menaklukkan segalanya.\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201CAnda meleset 100% dari tembakan yang tidak dicoba.\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201CKesuksesan adalah jumlah usaha kecil, diulang hari demi hari.\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201CKerjakan dulu yang sulit. Yang mudah akan terurus sendiri.\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201CSelalu tampak mustahil sampai selesai.\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201CTindakan adalah kunci dasar dari semua kesuksesan.\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201CHal besar dilakukan serangkaian hal kecil disatukan.\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201CRahasia maju adalah mulai.\u201D \u2014 Mark Twain (atr.)", "author": "Mark Twain (atr.)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201CJangan melihat jam; lakukan apa yang dilakukannya. Terus jalan.\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201CAnda tak perlu melihat seluruh tangga, ambil langkah pertama saja.\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201CTak ada yang mengurangi cemas lebih cepat dari tindakan.\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201CJangan keras pada diri sendiri. Anda melakukan yang terbaik.\u201D \u2014 Tidak diketahui", "author": "Tidak diketahui", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201CBagaimana memakan gajah? Satu gigitan setiap kali.\u201D \u2014 Peribahasa", "author": "Peribahasa", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201CIstirahat bukan kemalasan.\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201CMulai dari mana Anda berada. Gunakan apa yang Anda punya. Lakukan apa yang Anda bisa.\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201CAnda diizinkan menjadi mahakarya dan karya sedang berjalan sekaligus.\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201CKadang yang paling penting seharian adalah istirahat antara dua napas dalam.\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201CSatu hari pada satu waktu — itu cukup.\u201D \u2014 Tidak diketahui", "author": "Tidak diketahui", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201CJika lelah, belajarlah istirahat, bukan menyerah.\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201CADopsi tempo alam: rahasianya kesabaran.\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201CSenyapkan pikiran, dan jiwa akan berbicara.\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201CYang puas adalah kaya.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201CEfisiensi adalah melakukan hal benar; efektivitas melakukan hal yang benar.\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201CKekurangan arah, bukan waktu, adalah masalah. Semua punya 24 jam.\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201CCara terpendek melakukan banyak hal adalah satu pada satu waktu.\u201D \u2014 Mozart (atr.)", "author": "Mozart (atr.)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201CBerpikir bisa atau tidak, Anda benar.\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201CSatu tahun lagi Anda mungkin berharap mulai hari ini.\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201CPerbuatan kecil yang selesai lebih baik dari rencana besar.\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201CBukan beban yang menjatuhkan, tapi cara membawanya.\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201CPerasaan hanya tamu. Biarkan datang dan pergi.\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201CAnda tak bisa meredakan badai, jadi berhenti. Yang bisa ditenangkan adalah diri. Badai akan berlalu.\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": ["Minum segelas air", "5 menit jurnal", "Baca 10 halaman", "Peregangan pagi", "Jalan malam"]
+}

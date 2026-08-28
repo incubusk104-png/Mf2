@@ -1,0 +1,47 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Lugn",
+      "tagline": "Glid in i dagen, ett mjukt steg i taget.",
+      "promptHeader": "En stund att reflektera",
+      "habitsHeader": "Dagens rytm",
+      "habitsSub": "Gå igenom dessa i din egen takt.",
+      "allDone": "Allt klart. Låt dagen landa mjukt.",
+      "emptyHabits": "Inga vanor än. Lägg till en liten ritual när du är redo."
+    },
+    "FOCUSED": {
+      "label": "Fokuserad",
+      "tagline": "Tydlig plan. Rent utförande.",
+      "promptHeader": "Dagens direktiv",
+      "habitsHeader": "Checklista",
+      "habitsSub": "Jobba igenom listan. Uppifrån och ner.",
+      "allDone": "Listan avklarad. Snyggt jobbat.",
+      "emptyHabits": "Inga vanor definierade. Lägg till ditt första mål."
+    },
+    "MOTIVATED": {
+      "label": "Motiverad",
+      "tagline": "Momentumet är ditt idag — använd det!",
+      "promptHeader": "Bränsle för dagen",
+      "habitsHeader": "Nu staplar vi vinster",
+      "habitsSub": "Varje bock bygger sviten. Gå och ta dem!",
+      "allDone": "Full pott! Du krossade allihop idag.",
+      "emptyHabits": "Blankt blad, stor energi. Lägg till din första vana och kör!"
+    },
+    "OVERWHELMED": {
+      "label": "Överväldigad",
+      "tagline": "Du behöver inte göra allt. Du gör det bra.",
+      "promptHeader": "Bara en pytteliten sak",
+      "habitsHeader": "Bara om du har utrymme",
+      "habitsSub": "En räcker idag. Verkligen.",
+      "allDone": "Se där — du dök upp ändå. Det räknas.",
+      "emptyHabits": "Inget här, och det är okej. Vila räknas också."
+    }
+  },
+  "starterHabits": [
+    "Drick ett glas vatten",
+    "5 minuters dagbok",
+    "Läs 10 sidor",
+    "Morgonstretch",
+    "Kvällspromenad"
+  ]
+}

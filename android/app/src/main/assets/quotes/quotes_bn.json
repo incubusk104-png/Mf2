@@ -1,0 +1,191 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "শান্ত",
+      "tagline": "ধীরে ধীরে দিনে প্রবেশ করুন, একবারে একটি কোমল পদক্ষেপ।",
+      "promptHeader": "একটু ভাবার মুহূর্ত",
+      "habitsHeader": "আজকের ছন্দ",
+      "habitsSub": "নিজের গতিতে এগুলো সম্পন্ন করুন।",
+      "allDone": "সব হয়ে গেছে। দিনটিকে ধীরে থিতু হতে দিন।",
+      "emptyHabits": "এখনো কোনো অভ্যাস নেই। প্রস্তুত হলে একটি ছোট রীতি যোগ করুন।"
+    },
+    "FOCUSED": {
+      "label": "মনোযোগী",
+      "tagline": "স্পষ্ট পরিকল্পনা। নিখুঁত বাস্তবায়ন।",
+      "promptHeader": "আজকের নির্দেশ",
+      "habitsHeader": "চেকলিস্ট",
+      "habitsSub": "তালিকা ধরে কাজ করুন। উপর থেকে নিচে।",
+      "allDone": "তালিকা শেষ। দারুণ কাজ।",
+      "emptyHabits": "কোনো অভ্যাস নেই। প্রথম লক্ষ্য যোগ করুন।"
+    },
+    "MOTIVATED": {
+      "label": "উদ্যমী",
+      "tagline": "আজ গতি আপনার — কাজে লাগান!",
+      "promptHeader": "আজকের জ্বালানি",
+      "habitsHeader": "চলুন জয় জমাই",
+      "habitsSub": "প্রতিটি টিক স্ট্রিক গড়ে। যান, জিতে নিন!",
+      "allDone": "সম্পূর্ণ সাফল্য! আজ সবগুলোই শেষ করেছেন।",
+      "emptyHabits": "খালি পাতা, বিশাল শক্তি। প্রথম অভ্যাস যোগ করুন আর শুরু করুন!"
+    },
+    "OVERWHELMED": {
+      "label": "চাপে আছি",
+      "tagline": "সব করতে হবে না। আপনি ঠিকঠাক এগোচ্ছেন।",
+      "promptHeader": "শুধু একটা ছোট্ট কাজ",
+      "habitsHeader": "শুধু যদি অবকাশ থাকে",
+      "habitsSub": "আজ একটাই যথেষ্ট। সত্যি।",
+      "allDone": "দেখুন তো — তবুও আপনি এসেছেন। এটাই গুরুত্বপূর্ণ।",
+      "emptyHabits": "এখানে কিছু নেই, আর তাতে সমস্যা নেই। বিশ্রামও গণনায় ধরা হয়।"
+    }
+  },
+  "prompts": {
+    "CALM": [
+      "আজ কোন একটা জিনিস তাড়াহুড়ো না করে ধীরে ধীরে হতে দিতে পারেন?",
+      "ধীরে একটা শ্বাস নিন। এই মুহূর্তে, যেমন আছে তেমনই — কোনটা ইতিমধ্যে ঠিকঠাক লাগছে?",
+      "নিজেকে নরমভাবে চলার অনুমতি দিলে আজকের দিনটা কেমন দেখাত?",
+      "চারপাশের একটা ছোট্ট আরাম খেয়াল করুন। আজ পরে কীভাবে সেখানে ফিরতে পারেন?",
+      "শুধু আজকের জন্য কোন জিনিসটার ওপর থেকে মুঠো আলগা করতে পারেন?",
+      "আজকের দিনের যদি একটা অনুভূতি থাকত, সেটা কেমন হোক চাইতেন?",
+      "গতকালের কোন শান্ত মুহূর্তটা আজ সকালে একটু কৃতজ্ঞতা পাওয়ার যোগ্য?",
+      "সন্ধ্যার আগে কোথায় একটা তাড়াহুড়োহীন বিরতি রাখতে পারেন?",
+      "আজ কোন কথোপকথনে তাড়া নয়, কোমলতা নিয়ে ঢুকতে পারেন?",
+      "আজ একটা কাজ অর্ধেক গতিতে করুন। খেয়াল করুন কাজ করার ধরনটা কেমন বদলে যায়।"
+    ],
+    "FOCUSED": [
+      "আপনার সবচেয়ে প্রভাবশালী কাজটা ঠিক করুন। সেটাই আগে করুন।",
+      "শুরু করার আগে কোন একটা মনোযোগ-নষ্টকারী জিনিস সরিয়ে দেবেন?",
+      "আজকের জন্য 'শেষ' মানে কী — এক বাক্যে লিখুন।",
+      "কোন কাজটা এড়িয়ে যাচ্ছেন? পরের ঘণ্টায় সেটার সময় ঠিক করুন।",
+      "আজ কোন কাজটা ৪৫ মিনিটের গভীর, নিরবচ্ছিন্ন মনোযোগ পাওয়ার যোগ্য?",
+      "শেষ করার জন্য একটা কাজ বেছে নিন — শুরু নয়। শেষ করুন।",
+      "মনোযোগ রক্ষা করতে আজ কোন জিনিসে 'না' বলতে পারেন?",
+      "সেরা তিনটা ঠিক করুন। নিচের দুটো কেটে দিন। শুরু করুন।",
+      "পরের এক ঘণ্টায় যা লাগবে না, সব ট্যাব আর অ্যাপ বন্ধ করুন। তারপর শুরু করুন।",
+      "আজকের দিনটাকে জয় বানাতে পারে এমন সবচেয়ে ছোট মাপা ফলাফল কী?"
+    ],
+    "MOTIVATED": [
+      "আজ আপনার ভেতরে আগুন আছে — সবচেয়ে বড় ধাক্কাটা কোন লক্ষ্য পাবে?",
+      "কোন সাহসী পদক্ষেপের জন্য 'সঠিক মুহূর্তের' অপেক্ষায় ছিলেন? সেই মুহূর্ত এখনই।",
+      "এই শক্তিটা কাজে লাগান: ভবিষ্যতের আপনি আজ কী করলে আপনাকে বাহবা দেবে?",
+      "আজ কোন অভ্যাসটা এক ধাপ ওপরে নিতে পারেন — একটু লম্বা, একটু জোরালো?",
+      "আজ এমন কী করতে পারেন যার জন্য আপনার স্ট্রিক আপনাকে ধন্যবাদ দেবে?",
+      "ঢেউয়ে ভাসুন: আপনার সবচেয়ে বড় স্বপ্নের একেবারে পরের পদক্ষেপটা কী?",
+      "আজকের শক্তি একটা সম্পদ। সেরা ফলের জন্য কোথায় বিনিয়োগ করবেন?",
+      "দুপুরের আগে কোন জয়টা নিশ্চিত করতে পারেন?",
+      "আজ কাকে উৎসাহ দিতে পারেন? ভাগ করা গতি মানে দ্বিগুণ গতি।",
+      "তালিকার সবচেয়ে ভয়ের কাজটা বেছে নিন আর এখনই তার দিকে একটা বাস্তব পদক্ষেপ নিন।"
+    ],
+    "OVERWHELMED": [
+      "এক গ্লাস পানি খান। পুরো কাজ এটুকুই।",
+      "তিনটা ধীর শ্বাস নিন। এই মুহূর্তে আর কিছুই লাগবে না।",
+      "তালিকার সবচেয়ে ছোট্ট কাজটা বেছে নিন। শুধু সেটাই। বাকিটা অপেক্ষা করতে পারে।",
+      "এক মিনিট তাজা বাতাসের জন্য বাইরে যান বা জানালা খুলুন।",
+      "একটা জিনিস তার জায়গায় ফিরিয়ে রাখুন। একটাই যথেষ্ট।",
+      "চোয়াল আলগা করুন, কাঁধ নামান। এটাও অগ্রগতি।",
+      "বন্ধু যেমন লিখত, তেমন করে নিজেকে একটা সদয় বাক্য পাঠান।",
+      "পাঁচ মিনিট বিশ্রামের টাইমার দিন। বিশ্রামও ফলদায়ক।",
+      "দুই মিনিট ধরে মনের সব কিছু লিখে ফেলুন, তারপর খাতা বন্ধ করুন।",
+      "আজ একটা জিনিস বাতিল করুন বা পিছিয়ে দিন। ফাঁকা জায়গা রাখা যায়।"
+    ]
+  },
+  "premiumPrompts": {
+    "CALM": [
+      "এমন একটা জায়গার কথা ভাবুন যেখানে আপনি পুরোপুরি স্বস্তিতে থাকেন। সেই স্থিরতা আজ একটা কাজে নিয়ে আসুন।",
+      "কোন শব্দ, গন্ধ বা আলো আপনাকে শান্ত করে? আজ সন্ধ্যায় সেটাকে আপনার জায়গায় ডেকে আনুন।",
+      "নিজেকে একটা বাক্য লিখুন, শুরু হোক এভাবে: 'এটুকুই যথেষ্ট যে আমি…'"
+    ],
+    "FOCUSED": [
+      "ইনবক্সের জন্য সময় বাঁধুন: দশ মিনিট, একবার। বেঁচে যাওয়া সময় দিয়ে কী করবেন?",
+      "বটলনেক কাজটা চিনে নিন — যেটা আরও তিনটাকে আটকে রেখেছে। আগে সেটা সারুন।",
+      "আজ যদি আপনার সবচেয়ে শৃঙ্খলাবদ্ধ দিন হতো, এই সপ্তাহটা কেমন দেখাত?"
+    ],
+    "MOTIVATED": [
+      "এই লক্ষ্যের ৯০ দিনের সংস্করণটা লিখুন। আজকের দিনটা তাতে কী যোগ করছে?",
+      "আজ আপনি কথা রাখলে কে উপকৃত হয়? তাদের কল্পনা করুন। এবার এগোন।",
+      "আজ একটা অভ্যাস দ্বিগুণ করুন — দুই পাতা হোক চার, দশ মিনিট হোক বিশ।"
+    ],
+    "OVERWHELMED": [
+      "এখন যা সবচেয়ে ভারী লাগছে, তিন শব্দে নাম দিন। নাম দিলে সেটা ছোট হয়ে যায়।",
+      "আজ একটা কাজ খারাপভাবে করার অনুমতি দিন নিজেকে। নিখুঁতের চেয়ে সম্পন্ন ভালো।",
+      "একজনকে লিখে বা বলে জানান কেমন আছেন। সংযোগ বোঝা হালকা করে।"
+    ]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201Cপ্রকৃতি তাড়াহুড়ো করে না, তবু সব কিছু সম্পন্ন হয়।\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201Cআপনার ভেতরে এমন এক স্থিরতা আর আশ্রয় আছে, যেখানে আপনি যেকোনো সময় ফিরে যেতে পারেন।\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201Cকয়েক মিনিট প্লাগ খুলে রাখলে প্রায় সব কিছুই আবার চলে — আপনিও।\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201Cশান্তি হলো জীবনকে যেমন আছে তেমনভাবে নিতে মনকে নতুন করে শেখানোর ফল।\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201Cগতি কমান — যা কিছুর পেছনে ছুটছেন, তা ঘুরে এসে আপনাকেই ধরবে।\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201Cশান্ত মন ভেতরের শক্তি আর আত্মবিশ্বাস আনে।\u201D \u2014 Dalai Lama", "author": "Dalai Lama", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201Cজীবনের গতি বাড়ানোর চেয়ে জীবনে আরও অনেক কিছু আছে।\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201Cটেনশন হলো আপনি যা হওয়া উচিত ভাবেন। স্বস্তি হলো আপনি যা।\u201D \u2014 চীনা প্রবাদ", "author": "চীনা প্রবাদ", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201Cহাসুন, শ্বাস নিন আর ধীরে চলুন।\u201D \u2014 Thich Nhat Hanh", "author": "Thich Nhat Hanh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201Cচলাচল আর বিশৃঙ্খলার মাঝেও ভেতরের স্থিরতা ধরে রাখুন।\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201Cহাতের কাজে আপনার সব চিন্তা কেন্দ্রীভূত করুন।\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201Cব্যস্ত থাকাই যথেষ্ট নয়। প্রশ্ন হলো: আমরা কী নিয়ে ব্যস্ত?\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201Cসফল যোদ্ধা হলো লেজারের মতো মনোযোগী একজন সাধারণ মানুষ।\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201Cএকসাথে দুটো কাজ করতে পারেন, কিন্তু একসাথে দুটোতে কার্যকরভাবে মনোযোগ দিতে পারবেন না।\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201Cমনোযোগ যেদিকে যায়, শক্তি সেদিকে বয়।\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201Cশৃঙ্খলা হলো এখন যা চান আর সবচেয়ে বেশি যা চান — এর মধ্যে বেছে নেওয়া।\u201D \u2014 Abraham Lincoln (প্রচলিত)", "author": "Abraham Lincoln (প্রচলিত)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201Cসরলতা দুটো ধাপে নামে: জরুরিটা চিনুন, বাকিটা বাদ দিন।\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201Cযেটায় মনোযোগ ধরে রাখবেন, সেটাই বাড়বে।\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201Cআসল কথা হলো আসল কথাটাকে আসল কথা হিসেবে রাখা।\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201Cমনোযোগ-নষ্টকারীদের উপোস রাখুন, মনোযোগকে খাওয়ান।\u201D \u2014 অজানা", "author": "অজানা", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201Cশুরু করার উপায় হলো কথা থামিয়ে কাজে নেমে পড়া।\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201Cশক্তি আর লেগে থাকা সব কিছু জয় করে।\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201Cযে শট নেন না, তার শতভাগই মিস।\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201Cসাফল্য হলো দিনের পর দিন পুনরাবৃত্ত ছোট ছোট চেষ্টার যোগফল।\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201Cকঠিন কাজগুলো আগে করুন। সহজগুলো নিজেরাই হয়ে যাবে।\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201Cশেষ না হওয়া পর্যন্ত সব কিছুই অসম্ভব মনে হয়।\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201Cকর্মই সব সাফল্যের মূল চাবিকাঠি।\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201Cবড় কাজ হয় ছোট ছোট কাজ একসাথে জুড়ে।\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201Cএগিয়ে যাওয়ার রহস্য হলো শুরু করা।\u201D \u2014 Mark Twain (প্রচলিত)", "author": "Mark Twain (প্রচলিত)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201Cঘড়ি দেখবেন না; ঘড়ি যা করে তাই করুন। চলতে থাকুন।\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201Cপুরো সিঁড়িটা দেখতে হবে না, শুধু প্রথম ধাপটা নিন।\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201Cকোনো কিছুই কাজের চেয়ে দ্রুত দুশ্চিন্তা কমায় না।\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201Cনিজের সাথে কোমল হোন। আপনি আপনার সাধ্যমতো করছেন।\u201D \u2014 অজানা", "author": "অজানা", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201Cহাতি কীভাবে খায়? একবারে এক কামড়।\u201D \u2014 প্রবাদ", "author": "প্রবাদ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201Cবিশ্রাম অলসতা নয়।\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201Cযেখানে আছেন সেখান থেকে শুরু করুন। যা আছে তাই ব্যবহার করুন। যা পারেন তাই করুন।\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201Cআপনি একই সাথে একটা মাস্টারপিস আর চলমান কাজ — দুটোই হতে পারেন।\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201Cকখনো কখনো সারা দিনের সবচেয়ে গুরুত্বপূর্ণ জিনিসটা হলো দুটো গভীর শ্বাসের মাঝের বিরতি।\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201Cএকবারে এক দিন — এটুকুই যথেষ্ট।\u201D \u2014 অজানা", "author": "অজানা", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201Cক্লান্ত হলে থেমে যাওয়া নয়, বিশ্রাম নিতে শিখুন।\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201Cপ্রকৃতির গতি গ্রহণ করুন: তার রহস্য হলো ধৈর্য।\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201Cমনকে শান্ত করুন, আত্মা কথা বলবে।\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201Cযে তুষ্ট, সে-ই ধনী।\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201Cদক্ষতা হলো কাজ ঠিকভাবে করা; কার্যকারিতা হলো ঠিক কাজটা করা।\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201Cসমস্যা সময়ের অভাব নয়, দিকের অভাব। আমাদের সবার দিনই চব্বিশ ঘণ্টার।\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201Cঅনেক কাজ করার সংক্ষিপ্ত পথ হলো একবারে শুধু একটা কাজ করা।\u201D \u2014 Mozart (প্রচলিত)", "author": "Mozart (প্রচলিত)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201Cআপনি পারবেন ভাবুন বা পারবেন না ভাবুন — দুটোতেই আপনি ঠিক।\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201Cএক বছর পরে হয়তো চাইবেন, আজই শুরু করেছিলেন।\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201Cপরিকল্পিত বড় কাজের চেয়ে সম্পন্ন ছোট কাজ ভালো।\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201Cআপনাকে ভেঙে ফেলে বোঝা নয়, বোঝা বহনের ধরন।\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201Cঅনুভূতিরা শুধু অতিথি। আসতে দিন, যেতে দিন।\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201Cঝড় থামাতে পারবেন না, তাই চেষ্টা ছাড়ুন। যা পারেন তা হলো নিজেকে শান্ত করা। ঝড় কেটে যাবে।\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": [
+    "এক গ্লাস পানি পান করুন",
+    "৫ মিনিট জার্নালিং",
+    "১০ পৃষ্ঠা পড়ুন",
+    "সকালের স্ট্রেচিং",
+    "সন্ধ্যার হাঁটা"
+  ]
+}

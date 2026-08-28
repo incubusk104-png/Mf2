@@ -1,0 +1,191 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Kalmado",
+      "tagline": "Dahan-dahan sa araw, isang gentle step sa pagkakataon.",
+      "promptHeader": "Sandali para mag-reflek",
+      "habitsHeader": "Rhythm ngayon",
+      "habitsSub": "Tuloy mo sa sarili mong bilis.",
+      "allDone": "Lahat tapos. Hayaan mong dumating ang araw nang mahinahon.",
+      "emptyHabits": "Wala pang habits. Magdagdag ng isang maliit na ritual kapag ready ka na."
+    },
+    "FOCUSED": {
+      "label": "Naka-focus",
+      "tagline": "Malinaw ang plano. Malinis ang execution.",
+      "promptHeader": "Direktiba ngayon",
+      "habitsHeader": "Checklist",
+      "habitsSub": "I-work ang list. Taas pababa.",
+      "allDone": "Na-clear ang list. Magaling ang execution.",
+      "emptyHabits": "Wala pang habits. Magdagdag ng unang target mo."
+    },
+    "MOTIVATED": {
+      "label": "May Drive",
+      "tagline": "Sa'yo ang momentum ngayon — gamitin mo!",
+      "promptHeader": "Panggatong para ngayon",
+      "habitsHeader": "Stack natin ang wins",
+      "habitsSub": "Bawat check ay dagdag sa streak. Go!",
+      "allDone": "Full sweep! Na-crush mo lahat ngayon.",
+      "emptyHabits": "Blank slate, malakas ang energy. Magdagdag ng unang habit at go!"
+    },
+    "OVERWHELMED": {
+      "label": "Na-o-overwhelm",
+      "tagline": "Hindi mo kailangang gawin lahat. Okay lang ang ginagawa mo.",
+      "promptHeader": "Isang munting bagay lang",
+      "habitsHeader": "Kung may space ka lang",
+      "habitsSub": "Isa lang ang sapat ngayon. Talaga.",
+      "allDone": "Tingnan mo — nagpakita ka pa rin. Mahalaga 'yon.",
+      "emptyHabits": "Wala rito, at okay lang 'yon. Ang pahinga ay pwede rin."
+    }
+  },
+  "prompts": {
+    "CALM": [
+      "Ano ang isang bagay na pwede mong hayaang dahan-dahan ngayon, walang pagmamadali?",
+      "Huminga ng dahan-dahan. Ano ang okay na ngayon, kung anong estado nito?",
+      "Ano ang magiging hitsura ng araw na 'to kung papayagan mo ang sarili mong mag-mabuti?",
+      "Pansinin ang isang maliit na ginhawa sa paligid mo. Paano mo ito babalikan mamaya?",
+      "Ano ang pwede mong bitawan, kahit ngayon lang?",
+      "Kung may texture ang araw na 'to, ano ang gusto mong maramdaman?",
+      "Anong tahimik na sandali kahapon ang nangangailangan ng kaunting pasasalamat ngayong umaga?",
+      "Saan ka pwedeng magpahinga nang isang minuto bago mag-gabi?",
+      "Anong usapan ngayon ang pwede mong pasukin ng lambot sa halip na pagmamadali?",
+      "Pumili ng isang task na gawin sa kalahating bilis ngayon. Pansinin kung paano nagbabago ang paggawa."
+    ],
+    "FOCUSED": [
+      "Tukuyin ang pinakamalaking task mo. Gawin mo muna.",
+      "Anong distraction ang iiwasan mo bago magsimula?",
+      "Tukuyin ang 'tapos na' para ngayon sa isang pangungusap.",
+      "Aling task ang iniiwasan mo? I-schedule sa susunod na oras.",
+      "Ano ang karapat-dapat ng 45 minutos ng malalim na trabaho ngayon?",
+      "Pumili ng isang bagay na tatapusin — hindi uumpisahan. Tapusin mo.",
+      "Ano ang pwede mong sabihing 'hindi' ngayon para protektahan ang focus mo?",
+      "Itakda ang top three mo. Buraan ang dalawang sa baba. Magsimula.",
+      "Isara ang lahat ng tab at app na hindi mo kailangan sa susunod na oras. Tapos magsimula.",
+      "Ano ang pinakamaliit na measurable outcome na gagawing win ang araw na 'to?"
+    ],
+    "MOTIVATED": [
+      "May apoy ka ngayon — aling goal ang magkakaroon ng pinakamalaking push?",
+      "Anong matapang na hakbang ang hinihintay mo ng 'tamang oras'? Ngayon na.",
+      "I-channel ang energy na 'to: anong gagawin mo ngayon na high-five ka ng future-you?",
+      "Aling habit ang pwede mong i-level up ngayon — konti mas mahaba, konti mas malakas?",
+      "Ano ang pwede mong gawin ngayon na pasasalamatan ng streak mo?",
+      "Sakay ang wave: ano ang susunod na action sa pinakamalaking ambisyon mo?",
+      "Rekurso ang energy ngayon. Saan mo ito ilalagay para sa best return?",
+      "Anong win ang pwede mong i-lock bago mag-noon?",
+      "Sino ang pwede mong i-encourage ngayon? Ang momentum na naibahagi ay nadoble.",
+      "Piliin ang pinakamalakas na item sa list mo at gumawa ng isang concrete step ngayon."
+    ],
+    "OVERWHELMED": [
+      "Uminom ng isang basong tubig. 'Yan lang ang buong task.",
+      "Kumuha ng tatlong mabagal na hinga. Wala nang kailangan ngayon.",
+      "Piliin ang pinakamaliit na item sa list mo. 'Yan lang. Pwede nang maghintay ang iba.",
+      "Lumabas o magbukas ng bintana ng isang minuto para sa sariwang hangin.",
+      "Balik ang isang bagay sa tamang pwesto. Isa lang sapat na.",
+      "Magpahinga ang panga, babaan ang balikat. Bilang progress 'yan.",
+      "Magpadala sa sarili ng isang mabuting pangungusap, tulad ng gagawin ng kaibigan.",
+      "Mag-set ng timer ng limang minutos ng pahinga. Productive rin ang pahinga.",
+      "Isulat ang lahat ng nasa isip mo ng dalawang minuto, tapos isara ang notebook.",
+      "Kanselahin o ipagpaliban ang isang bagay ngayon. Pwede ang espasyo."
+    ]
+  },
+  "premiumPrompts": {
+    "CALM": [
+      "Alalahanin ang lugar kung saan ka ganap na naka-relax. Dalhin ang kalmayan nito sa isang task ngayon.",
+      "Anong tunog, amoy, o liwanag ang nakakatulong sa'yo? Anyayahin mo sa espasyo mo mamayang gabi.",
+      "Magsulat ng isang pangungusap sa sarili mo na nagsisimula sa: 'Tama na na ako ay...'"
+    ],
+    "FOCUSED": [
+      "Time-box ang inbox mo: sampung minuto, minsan. Ano ang gagawin mo sa natipid na oras?",
+      "Tukuyin ang bottleneck task — 'yung pumipigil sa tatlo pang iba. Linawin muna.",
+      "Ano ang magiging hitsura ng linggong 'to kung ngayon ang pinaka-disciplined day mo?"
+    ],
+    "MOTIVATED": [
+      "Isulat ang 90-day version ng goal na 'to. Ano ang kontribusyon ngayon dito?",
+      "Sino ang nakikinabang kapag tinuloy mo ngayon? Isipin mo sila. Now move.",
+      "I-doble ang isang habit ngayon — dalawang pahina apat na, sampung minuto dalawampu."
+    ],
+    "OVERWHELMED": [
+      "Pangalanan ang pinakamabigat ngayon sa tatlong salita. Kapag pinangalanan, lumiliit ito.",
+      "Bigyan ang sarili mo ng permiso na gumawa ng isang bagay nang hindi maganda ngayon. Tapos na kaysa perfect.",
+      "I-text o sabihin sa isang tao kung kumusta ka. Napapagaan ang bigat kapag may connection."
+    ]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201CHindi nagmamadali ang kalikasan, pero natatapos ang lahat.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201CSa loob mo may katahimikan at santuwaryo na pwede mong balikan anumang oras.\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201CHalos lahat ay gagana ulit kapag inunplug ng ilang minuto, kasama ka na rito.\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201CAng kapayapaan ay bunga ng muling pagsanay ng isip na prosesuhin ang buhay kung ano ito.\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201CMagbagagal at lahat ng hinahabol mo ay babalik at hahabol sa'yo.\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201CAng kalmadong isip ay nagdudulot ng lakas ng loob at self-confidence.\u201D \u2014 Dalai Lama", "author": "Dalai Lama", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201CMas marami pa sa buhay kaysa sa pagbilis nito.\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201CAng tensyon ay kung sino mo iniisip na dapat kang maging. Ang relaxation ay kung sino ka talaga.\u201D \u2014 Chinese proverb", "author": "Chinese proverb", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201CNgumiti, huminga, at magdahan-dahan.\u201D \u2014 Thich Nhat Hanh", "author": "Thich Nhat Hanh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201CSa gitna ng kilos at kaguluhan, panatilihin ang katahimikan sa loob mo.\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201CI-concentrate ang lahat ng iniisip mo sa trabaho sa kamay.\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201CHindi sapat na abala ka. Ang tanong: saan ka abala?\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201CAng matagumpay na mandirigma ay ang karaniwang tao, na may laser-like focus.\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201CPwede kang gumawa ng dalawang bagay nang sabay, pero hindi mo pwedeng i-focus nang epektibo ang dalawang bagay nang sabay.\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201CSaan napunta ang focus, doon dumadaloy ang energy.\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201CAng disiplina ay pagpili sa pagitan ng kung ano ang gusto mo ngayon at kung ano ang gusto mo pinakamarami.\u201D \u2014 Abraham Lincoln (attr.)", "author": "Abraham Lincoln (attr.)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201CAng simplicity ay nabubuo sa dalawang hakbang: tukuyin ang essential, alisin ang iba.\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201CAng pinapanatili mong focus ay lalago.\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201CAng pangunahing bagay ay panatilihin ang pangunahing bagay bilang pangunahing bagay.\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201CGutumin ang distractions, pakainin ang focus.\u201D \u2014 Unknown", "author": "Unknown", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201CAng paraan para makasimula ay titigil sa pag-uusap at magsimulang gumawa.\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201CAng energy at persistence ay sumasaklaw sa lahat ng bagay.\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201CPumapala ka sa 100% ng mga shots na hindi mo kinukuha.\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201CAng tagumpay ay kabuuan ng maliliit na efforts, inuulit araw-araw.\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201CGawin muna ang mahirap na trabaho. Ang madali ay mag-aayos sa sarili.\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201CPalaging parang imposible hanggang sa matapos.\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201CAng aksyon ang foundational key sa lahat ng tagumpay.\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201CAng mga malalaking bagay ay ginagawa sa pamamagitan ng serye ng maliliit na bagay na pinagsama.\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201CAng sikreto ng pag-abante ay pagsisimula.\u201D \u2014 Mark Twain (attr.)", "author": "Mark Twain (attr.)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201CHuwag panoorin ang orasan; gawin ang ginagawa nito. Magpatuloy.\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201CHindi mo kailangang makita ang buong hagdan, kunin lang ang unang hakbang.\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201CWalang bumababa sa anxiety nang mas mabilis kaysa sa aksyon.\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201CMabait ka sa sarili mo. Ang ginagawa mo ang pinakamabuti mong kayang gawin.\u201D \u2014 Unknown", "author": "Unknown", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201CPaano mo kakainin ang elepante? Isang kagat sa pagkakataon.\u201D \u2014 Proverb", "author": "Proverb", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201CAng pahinga ay hindi pagkatamaran.\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201CMagsimula kung nasaan ka. Gamitin ang mayroon ka. Gawin ang kaya mo.\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201CPwede kang maging masterpiece at work in progress sabay.\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201CMinsan ang pinakamahalagang bagay sa isang araw ay ang pahinga na kinukuha natin sa pagitan ng dalawang malalim na hinga.\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201CIsang araw sa pagkakataon — sapat na.\u201D \u2014 Unknown", "author": "Unknown", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201CKung napapagod ka, matuto kang magpahinga, hindi sumuko.\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201CAngkop ang bilis ng kalikasan: ang sikreto niya ay patience.\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201CTumahimik ang isip, at magsasalita ang kaluluwa.\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201CSiyang mayaman na kontento.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201CEfficiency ay paggawa ng tama; effectiveness ay paggawa ng tamang bagay.\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201CHindi kakulangan ng oras ang problema, kundi kakulangan ng direksyon. Pare-pareho ang 24 oras natin.\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201CAng maikling paraan para gumawa ng maraming bagay ay gawin isa sa pagkakataon.\u201D \u2014 Mozart (attr.)", "author": "Mozart (attr.)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201CKung nag-iisip kang kaya mo o hindi, tama ka.\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201CIsang taon mula ngayon maaaring ikaw ay mag-iisip na sana sinimulan mo ngayon.\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201CAng maliliit na gawain na tapos ay mas mabuti kaysa sa malalaking plano.\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201CHindi ang bigat ang bumabagsak sa'yo, kundi ang paraan ng pagdadala mo.\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201CAng feelings ay bisita lang. Hayaan mong dumating at umalis.\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201CHindi mo mapapatahan ang bagyo, kaya tumigil ka na. Ang kaya mong gawin ay patahanin ang sarili mo. Dadaan ang bagyo.\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": [
+    "Uminom ng isang basong tubig",
+    "5 minutos ng journaling",
+    "Magbasa ng 10 pahina",
+    "Morning stretch",
+    "Evening walk"
+  ]
+}

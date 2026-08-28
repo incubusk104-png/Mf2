@@ -1,0 +1,191 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "پرسکون",
+      "tagline": "دن میں آہستگی سے داخل ہوں، ایک نرم قدم ایک وقت میں۔",
+      "promptHeader": "غور کرنے کا ایک لمحہ",
+      "habitsHeader": "آج کی لے",
+      "habitsSub": "انہیں اپنی رفتار سے مکمل کریں۔",
+      "allDone": "سب ہو گیا۔ دن کو آرام سے تھمنے دیں۔",
+      "emptyHabits": "ابھی کوئی عادت نہیں۔ تیار ہوں تو ایک چھوٹی رسم شامل کریں۔"
+    },
+    "FOCUSED": {
+      "label": "مرکوز",
+      "tagline": "واضح منصوبہ۔ صاف عمل۔",
+      "promptHeader": "آج کی ہدایت",
+      "habitsHeader": "چیک لسٹ",
+      "habitsSub": "فہرست پر کام کریں۔ اوپر سے نیچے۔",
+      "allDone": "فہرست مکمل۔ عمدہ کام۔",
+      "emptyHabits": "کوئی عادت متعین نہیں۔ اپنا پہلا ہدف شامل کریں۔"
+    },
+    "MOTIVATED": {
+      "label": "پرجوش",
+      "tagline": "آج رفتار آپ کی ہے — اسے استعمال کریں!",
+      "promptHeader": "آج کا ایندھن",
+      "habitsHeader": "آئیں کامیابیاں جمع کریں",
+      "habitsSub": "ہر نشان سلسلہ بڑھاتا ہے۔ جائیں اور جیتیں!",
+      "allDone": "مکمل کامیابی! آج آپ نے سب کچھ کر ڈالا۔",
+      "emptyHabits": "خالی صفحہ، بڑی توانائی۔ پہلی عادت شامل کریں اور شروع ہو جائیں!"
+    },
+    "OVERWHELMED": {
+      "label": "دباؤ میں",
+      "tagline": "سب کچھ کرنا ضروری نہیں۔ آپ ٹھیک جا رہے ہیں۔",
+      "promptHeader": "بس ایک ننھی سی چیز",
+      "habitsHeader": "صرف اگر گنجائش ہو",
+      "habitsSub": "آج ایک ہی کافی ہے۔ واقعی۔",
+      "allDone": "دیکھیں — آپ پھر بھی آئے۔ یہی اہم ہے۔",
+      "emptyHabits": "یہاں کچھ نہیں، اور کوئی بات نہیں۔ آرام بھی شمار ہوتا ہے۔"
+    }
+  },
+  "prompts": {
+    "CALM": [
+      "آج کون سی ایک چیز ہے جسے آپ بغیر جلدی کیے آہستہ آہستہ ہونے دے سکتے ہیں؟",
+      "آہستہ سانس لیں۔ ابھی، جیسا ہے ویسا ہی — کیا پہلے سے ٹھیک محسوس ہو رہا ہے؟",
+      "اگر آپ خود کو نرمی سے چلنے کی اجازت دیں تو آج کا دن کیسا نظر آئے گا؟",
+      "اپنے ارد گرد کوئی چھوٹی سی راحت محسوس کریں۔ آج بعد میں اس کی طرف کیسے لوٹ سکتے ہیں؟",
+      "صرف آج کے لیے آپ کس چیز پر اپنی گرفت ڈھیلی کر سکتے ہیں؟",
+      "اگر آج کے دن کا کوئی احساس ہوتا تو آپ چاہتے کہ وہ کیسا محسوس ہو؟",
+      "کل کا کون سا خاموش لمحہ آج صبح تھوڑے شکر کا مستحق ہے؟",
+      "شام سے پہلے آپ کہاں ایک پرسکون وقفہ رکھ سکتے ہیں؟",
+      "آج کس گفتگو میں آپ جلدی کے بجائے نرمی کے ساتھ شامل ہو سکتے ہیں؟",
+      "آج ایک کام آدھی رفتار سے کرنے کا انتخاب کریں۔ محسوس کریں کہ کام کرنے کا انداز کیسے بدلتا ہے۔"
+    ],
+    "FOCUSED": [
+      "اپنا سب سے اہم کام منتخب کریں۔ پہلے وہی کریں۔",
+      "شروع کرنے سے پہلے کون سی ایک توجہ بھٹکانے والی چیز ختم کریں گے؟",
+      "آج کے لیے 'مکمل' کی تعریف ایک جملے میں کریں۔",
+      "کس کام سے آپ بچتے آ رہے ہیں؟ اسے اگلے گھنٹے کے لیے طے کریں۔",
+      "آج کون سا کام 45 منٹ کی گہری، بلا تعطل محنت کا مستحق ہے؟",
+      "ختم کرنے کے لیے ایک چیز چنیں — شروع کرنے کے لیے نہیں۔ اسے مکمل کریں۔",
+      "اپنی توجہ بچانے کے لیے آج آپ کس چیز کو 'نہیں' کہہ سکتے ہیں؟",
+      "اپنے تین اہم کام طے کریں۔ نیچے والے دو کاٹ دیں۔ شروع کریں۔",
+      "اگلے گھنٹے کے لیے غیر ضروری ہر ٹیب اور ایپ بند کریں۔ پھر شروع کریں۔",
+      "وہ سب سے چھوٹا قابلِ پیمائش نتیجہ کیا ہے جو آج کو جیت بنا دے؟"
+    ],
+    "MOTIVATED": [
+      "آج آپ میں جوش ہے — سب سے بڑا زور کس مقصد کو ملے گا؟",
+      "کس جرات مندانہ قدم کے لیے آپ 'صحیح وقت' کا انتظار کر رہے تھے؟ وہ وقت اب ہے۔",
+      "اس توانائی کو استعمال کریں: مستقبل کے آپ، آج کیا کرنے پر آپ کو داد دیں گے؟",
+      "آج کون سی عادت کو ایک درجہ اوپر لے جا سکتے ہیں — تھوڑی لمبی، تھوڑی مضبوط؟",
+      "آج ایسا کیا کر سکتے ہیں جس کے لیے آپ کا سلسلہ آپ کا شکر گزار ہو؟",
+      "لہر پر سوار ہوں: آپ کے سب سے بڑے خواب کا اگلا قدم کیا ہے؟",
+      "آج کی توانائی ایک وسیلہ ہے۔ بہترین نتیجے کے لیے اسے کہاں لگائیں گے؟",
+      "دوپہر سے پہلے کون سی جیت پکی کر سکتے ہیں؟",
+      "آج کس کی حوصلہ افزائی کر سکتے ہیں؟ بانٹی ہوئی رفتار دُگنی رفتار ہے۔",
+      "اپنی فہرست کا سب سے ڈراؤنا کام چنیں اور ابھی اس کی طرف ایک ٹھوس قدم اٹھائیں۔"
+    ],
+    "OVERWHELMED": [
+      "ایک گلاس پانی پئیں۔ بس یہی پورا کام ہے۔",
+      "تین آہستہ سانسیں لیں۔ ابھی اس کے سوا کچھ نہیں چاہیے۔",
+      "فہرست کا سب سے چھوٹا کام چنیں۔ صرف وہی۔ باقی انتظار کر سکتا ہے۔",
+      "ایک منٹ کی تازہ ہوا کے لیے باہر نکلیں یا کھڑکی کھولیں۔",
+      "ایک چیز اس کی جگہ پر واپس رکھیں۔ ایک ہی کافی ہے۔",
+      "جبڑا ڈھیلا کریں، کندھے نیچے کریں۔ یہ بھی پیش رفت ہے۔",
+      "خود کو ایک مہربان جملہ بھیجیں، جیسے کوئی دوست بھیجتا۔",
+      "پانچ منٹ آرام کا ٹائمر لگائیں۔ آرام بھی مفید ہے۔",
+      "دو منٹ تک ذہن کی ہر بات لکھ ڈالیں، پھر کاپی بند کر دیں۔",
+      "آج ایک چیز منسوخ کریں یا ملتوی کر دیں۔ گنجائش رکھنا جائز ہے۔"
+    ]
+  },
+  "premiumPrompts": {
+    "CALM": [
+      "ایسی جگہ یاد کریں جہاں آپ مکمل سکون میں ہوتے ہیں۔ اس کا ٹھہراؤ آج کسی ایک کام میں لے آئیں۔",
+      "کون سی آواز، خوشبو یا روشنی آپ کو سکون دیتی ہے؟ آج شام اسے اپنی جگہ میں بلائیں۔",
+      "خود کو ایک جملہ لکھیں جو یوں شروع ہو: 'اتنا کافی ہے کہ میں…'"
+    ],
+    "FOCUSED": [
+      "اپنے ان باکس کے لیے وقت مقرر کریں: دس منٹ، ایک بار۔ بچے ہوئے وقت کا کیا کریں گے؟",
+      "رکاوٹ والا کام پہچانیں — جو تین اور کاموں کو روکے ہوئے ہے۔ پہلے اسے نمٹائیں۔",
+      "اگر آج آپ کا سب سے منظم دن ہو تو یہ ہفتہ کیسا نظر آئے گا؟"
+    ],
+    "MOTIVATED": [
+      "اس مقصد کا 90 دن والا روپ لکھیں۔ آج کا دن اس میں کیا حصہ ڈال رہا ہے؟",
+      "آج آپ عمل کریں تو کس کا فائدہ ہوگا؟ انہیں تصور کریں۔ اب چلیں۔",
+      "آج ایک عادت دُگنی کریں — دو صفحے چار ہو جائیں، دس منٹ بیس۔"
+    ],
+    "OVERWHELMED": [
+      "ابھی جو سب سے بھاری ہے اسے تین لفظوں میں نام دیں۔ نام دینے سے وہ چھوٹا ہو جاتا ہے۔",
+      "آج خود کو ایک کام برا کرنے کی اجازت دیں۔ مکمل، کامل سے بہتر ہے۔",
+      "کسی ایک شخص کو بتائیں یا لکھیں کہ آپ کیسے ہیں۔ تعلق بوجھ ہلکا کرتا ہے۔"
+    ]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201Cفطرت جلدی نہیں کرتی، پھر بھی سب کچھ مکمل ہو جاتا ہے۔\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201Cآپ کے اندر ایک ٹھہراؤ اور پناہ گاہ ہے جہاں آپ کسی بھی وقت لوٹ سکتے ہیں۔\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201Cتقریباً ہر چیز چند منٹ پلگ نکالنے سے دوبارہ چلنے لگتی ہے — آپ بھی۔\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201Cسکون اس بات کا نتیجہ ہے کہ ذہن کو زندگی جیسی ہے ویسی قبول کرنا سکھایا جائے۔\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201Cرفتار کم کریں — جس کے پیچھے بھاگ رہے ہیں وہ پلٹ کر خود آپ کو پا لے گا۔\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201Cپرسکون ذہن اندرونی طاقت اور خود اعتمادی لاتا ہے۔\u201D \u2014 Dalai Lama", "author": "Dalai Lama", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201Cزندگی صرف اس کی رفتار بڑھانے کا نام نہیں۔\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201Cتناؤ وہ ہے جو آپ سمجھتے ہیں کہ آپ کو ہونا چاہیے۔ سکون وہ ہے جو آپ ہیں۔\u201D \u2014 چینی کہاوت", "author": "چینی کہاوت", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201Cمسکرائیں، سانس لیں اور آہستہ چلیں۔\u201D \u2014 Thich Nhat Hanh", "author": "Thich Nhat Hanh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201Cحرکت اور افراتفری کے بیچ اپنے اندر ٹھہراؤ رکھیں۔\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201Cاپنی تمام سوچیں سامنے والے کام پر مرکوز کریں۔\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201Cمصروف ہونا کافی نہیں۔ سوال یہ ہے: ہم کس میں مصروف ہیں؟\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201Cکامیاب جنگجو وہی عام انسان ہے جس کی توجہ لیزر جیسی ہو۔\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201Cآپ دو کام ایک ساتھ کر سکتے ہیں، مگر دو چیزوں پر ایک ساتھ مؤثر توجہ نہیں دے سکتے۔\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201Cتوجہ جہاں جاتی ہے، توانائی وہیں بہتی ہے۔\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201Cنظم و ضبط اس میں انتخاب ہے جو آپ ابھی چاہتے ہیں اور جو آپ سب سے زیادہ چاہتے ہیں۔\u201D \u2014 Abraham Lincoln (منسوب)", "author": "Abraham Lincoln (منسوب)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201Cسادگی دو قدموں میں سمٹتی ہے: ضروری کو پہچانیں، باقی کو ہٹا دیں۔\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201Cجس پر توجہ قائم رکھیں گے وہی بڑھے گا۔\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201Cاصل بات یہ ہے کہ اصل بات کو اصل بات رہنے دیا جائے۔\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201Cتوجہ بھٹکانے والوں کو بھوکا رکھیں، اپنی توجہ کو خوراک دیں۔\u201D \u2014 نامعلوم", "author": "نامعلوم", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201Cشروع کرنے کا طریقہ یہ ہے کہ باتیں چھوڑ کر کام شروع کر دیں۔\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201Cتوانائی اور مستقل مزاجی ہر چیز پر غالب آتی ہے۔\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201Cجو شاٹ آپ نہیں لیتے اس کا سو فیصد ضائع ہے۔\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201Cکامیابی روز بروز دہرائی گئی چھوٹی کوششوں کا مجموعہ ہے۔\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201Cمشکل کام پہلے کریں۔ آسان کام خود ہو جائیں گے۔\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201Cجب تک ہو نہ جائے، ہر چیز ناممکن لگتی ہے۔\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201Cعمل ہر کامیابی کی بنیادی کنجی ہے۔\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201Cبڑے کام چھوٹے چھوٹے کاموں کے ملنے سے بنتے ہیں۔\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201Cآگے بڑھنے کا راز شروع کرنا ہے۔\u201D \u2014 Mark Twain (منسوب)", "author": "Mark Twain (منسوب)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201Cگھڑی مت دیکھیں؛ وہی کریں جو گھڑی کرتی ہے۔ چلتے رہیں۔\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201Cپوری سیڑھی دیکھنا ضروری نہیں، بس پہلا قدم اٹھائیں۔\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201Cکوئی چیز عمل سے زیادہ تیزی سے بےچینی کم نہیں کرتی۔\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201Cخود پر نرم رہیں۔ آپ اپنی بہترین کوشش کر رہے ہیں۔\u201D \u2014 نامعلوم", "author": "نامعلوم", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201Cہاتھی کیسے کھایا جاتا ہے؟ ایک وقت میں ایک نوالہ۔\u201D \u2014 کہاوت", "author": "کہاوت", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201Cآرام سستی نہیں۔\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201Cجہاں ہیں وہیں سے شروع کریں۔ جو ہے وہی استعمال کریں۔ جو ہو سکے وہ کریں۔\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201Cآپ کو بیک وقت شاہکار اور جاری کام دونوں ہونے کی اجازت ہے۔\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201Cکبھی کبھی پورے دن کی سب سے اہم چیز وہ وقفہ ہے جو ہم دو گہری سانسوں کے بیچ لیتے ہیں۔\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201Cایک وقت میں ایک دن — اتنا کافی ہے۔\u201D \u2014 نامعلوم", "author": "نامعلوم", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201Cتھک جائیں تو رکنا نہیں، آرام کرنا سیکھیں۔\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201Cفطرت کی رفتار اپنائیں: اس کا راز صبر ہے۔\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201Cذہن کو خاموش کریں، روح بولے گی۔\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201Cجو قناعت رکھتا ہے وہی امیر ہے۔\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201Cکارکردگی کام صحیح کرنا ہے؛ مؤثریت صحیح کام کرنا ہے۔\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201Cمسئلہ وقت کی کمی نہیں، سمت کی کمی ہے۔ سب کے دن چوبیس گھنٹے کے ہیں۔\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201Cبہت سے کام کرنے کا مختصر راستہ یہ ہے کہ ایک وقت میں صرف ایک کام کریں۔\u201D \u2014 Mozart (منسوب)", "author": "Mozart (منسوب)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201Cآپ سمجھیں کہ کر سکتے ہیں یا نہیں کر سکتے — دونوں صورتوں میں آپ صحیح ہیں۔\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201Cایک سال بعد شاید آپ چاہیں کہ کاش آج ہی شروع کیا ہوتا۔\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201Cکیے ہوئے چھوٹے کام، منصوبہ بند بڑے کاموں سے بہتر ہیں۔\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201Cآپ کو بوجھ نہیں توڑتا، بلکہ اسے اٹھانے کا انداز توڑتا ہے۔\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201Cاحساسات صرف مہمان ہیں۔ انہیں آنے دیں اور جانے دیں۔\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201Cآپ طوفان کو پرسکون نہیں کر سکتے، اس لیے کوشش چھوڑ دیں۔ آپ خود کو پرسکون کر سکتے ہیں۔ طوفان گزر جائے گا۔\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": [
+    "ایک گلاس پانی پئیں",
+    "5 منٹ ڈائری لکھیں",
+    "10 صفحات پڑھیں",
+    "صبح کی اسٹریچنگ",
+    "شام کی سیر"
+  ]
+}

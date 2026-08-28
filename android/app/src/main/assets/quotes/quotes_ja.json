@@ -1,0 +1,191 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "穏やか",
+      "tagline": "ゆっくりと、一歩ずつ。一日を始めよう。",
+      "promptHeader": "振り返りのひととき",
+      "habitsHeader": "今日のリズム",
+      "habitsSub": "自分のペースで進めて。",
+      "allDone": "すべて完了。一日を静かに終えよう。",
+      "emptyHabits": "まだ習慣がありません。準備できたら小さな習慣を一つ追加して。"
+    },
+    "FOCUSED": {
+      "label": "集中",
+      "tagline": "明確な計画。クリーンな実行。",
+      "promptHeader": "今日のディレクティブ",
+      "habitsHeader": "チェックリスト",
+      "habitsSub": "リストをこなす。上から下へ。",
+      "allDone": "リスト完了。見事な実行。",
+      "emptyHabits": "習慣が定義されていません。最初のターゲットを追加して。"
+    },
+    "MOTIVATED": {
+      "label": "やる気",
+      "tagline": "今日のモメンタムは君のもの — 使おう！",
+      "promptHeader": "今日の燃料",
+      "habitsHeader": "勝利を積み重ねよう",
+      "habitsSub": "チェックごとにストリークが伸びる。さあ行こう！",
+      "allDone": "全制覇！今日すべてを達成した。",
+      "emptyHabits": "まっさらでエネルギー満々。最初の習慣を追加して飛び出そう！"
+    },
+    "OVERWHELMED": {
+      "label": "圧倒",
+      "tagline": "全部やらなくていい。今のままで十分。",
+      "promptHeader": "ほんの小さな一つだけ",
+      "habitsHeader": "余裕があれば",
+      "habitsSub": "今日は一つで十分。本当に。",
+      "allDone": "見て — それでも来た。それが大事。",
+      "emptyHabits": "何もなくて、それでいい。休むことも大事。"
+    }
+  },
+  "prompts": {
+    "CALM": [
+      "今日、急がずゆっくり進められることは何ですか？",
+      "ゆっくり呼吸して。今、このままで大丈夫なことは何ですか？",
+      "今日、自分に優しくする許可を与えたら、どんな一日になりますか？",
+      "周囲の小さな心地よさに気づいて。今日、また戻れるかな？",
+      "今日だけ、手放せるものは何ですか？",
+      "もし今日が質感を持つなら、どんな感覚がいいですか？",
+      "昨日の静かな瞬間のうち、今朝少し感謝したいのはどれですか？",
+      "夜までに、どこで一息止まれますか？",
+      "今日の会話で、切迫ではなく優しさで入れるものはどれですか？",
+      "今日一つのタスクを半分の速度でやってみて。やり方がどう変わるか気づいて。"
+    ],
+    "FOCUSED": [
+      "最も影響力のあるタスクを一つ挙げて。それを先にやる。",
+      "始める前に排除する気散らしは何ですか？",
+      "今日の「完了」を一文で定義して。",
+      "避けていたタスクはどれ？次の1時間にスケジュールしよう。",
+      "今日45分の深く中断のない作業に値するのは何ですか？",
+      "終わらせるものを一つ選ぶ — 始めるではなく。終わらせる。",
+      "集中を守るために今日「ノー」と言えるものは何ですか？",
+      "トップ3を設定して。下の2つを消す。始める。",
+      "次の1時間に不要なタブとアプリをすべて閉じて。そして始める。",
+      "今日を勝利にする最小の測定可能な成果は何ですか？"
+    ],
+    "MOTIVATED": [
+      "今日は火がついている — 最も大きく推す目標はどれ？",
+      "「ちょうどいい時」を待っていた大胆な一歩は？今がその時。",
+      "このエネルギーをチャンネルに：未来の自分がハイタッチする今日の行動は？",
+      "今日レベルアップできる習慣はどれ — もう少し長く、もう少し強く？",
+      "今日ストリークが感謝するような行動は何ですか？",
+      "波に乗れ：最大の野心の次のアクションは何？",
+      "今日のエネルギーは資源だ。最高のリターンはどこに投じる？",
+      "正午までに確保できる勝利は何ですか？",
+      "今日励ませる人は誰？共有したモメンタムは倍になる。",
+      "リストで最も怖い項目を選び、今一つの具体的なステップを踏み出す。"
+    ],
+    "OVERWHELMED": [
+      "コップ一杯の水を飲む。それが全部のタスク。",
+      "ゆっくり3回呼吸して。他には何もいまは要らない。",
+      "リストの一番小さい項目を選ぶ。それだけ。残りは待っていい。",
+      "外に出るか窓を開けて1分、新鮮な空気を。",
+      "一つのものを元の場所に戻す。一つで十分。",
+      "顎の力を抜いて、肩を下げて。それも進歩。",
+      "友達みたいに自分に優しい一言を送って。",
+      "5分の休憩タイマーをセット。休むも生産的。",
+      "2分間頭の中をすべて書き出して、ノートを閉じる。",
+      "今日一つキャンセルか延期する。余白は許される。"
+    ]
+  },
+  "premiumPrompts": {
+    "CALM": [
+      "完全にリラックスできる場所を思い出して。その静けさを今日一つのタスクに持ち込む。",
+      "落ち着く音、香り、光は何？今夜、空間に招き入れよう。",
+      "「私が…で十分」で始まる一文を自分に書く。"
+    ],
+    "FOCUSED": [
+      "受信箱をタイムボックス：10分、1回。浮いた時間で何をする？",
+      "ボトルネックのタスクを特定 — 3つをブロックしているもの。先に片付ける。",
+      "今日が最も規律ある日なら、今週はどうなる？"
+    ],
+    "MOTIVATED": [
+      "この目標の90日版を書く。今日はそれに何を貢献する？",
+      "今日やり抜いた恩恵を受ける人は誰？想像して。さあ動く。",
+      "今日一つの習慣を倍に — 2ページが4ページに、10分が20分に。"
+    ],
+    "OVERWHELMED": [
+      "今最も重いものを3語で名付ける。名付ければ縮む。",
+      "今日一つのことを下手にやる許可を自分に与える。完成が完美に勝る。",
+      "一人の人に今の調子を伝える。繋がりが重さを軽くする。"
+    ]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201C自然は急がない。それでもすべては成し遂げられる。\u201D \u2014 老子", "author": "老子", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201Cあなたの中には、いつでも戻れる静寂と聖域がある。\u201D \u2014 ヘルマン・ヘッセ", "author": "ヘルマン・ヘッセ", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201C数分間プラグを抜けば、ほとんどのものはまた動く。あなたも含めて。\u201D \u2014 アン・ラモット", "author": "アン・ラモット", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201C平和は、人生をあるがままに処理するよう心を再訓練した結果。\u201D \u2014 ウェイン・ダイアー", "author": "ウェイン・ダイアー", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201Cゆっくりすれば、追っていたものが追いかけてくる。\u201D \u2014 ジョン・デ・パオラ", "author": "ジョン・デ・パオラ", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201C穏やかな心は内なる強さと自信を生む。\u201D \u2014 ダライ・ラマ", "author": "ダライ・ラマ", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201C人生には速度を上げる以上のものがある。\u201D \u2014 マハトマ・ガンジー", "author": "マハトマ・ガンジー", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201C緊張はあるべき自分。リラックスは本当の自分。\u201D \u2014 中国のことわざ", "author": "中国のことわざ", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201C微笑んで、呼吸して、ゆっくり歩く。\u201D \u2014 ティック・ナット・ハン", "author": "ティック・ナット・ハン", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201C動と混沌の中で、内に静けさを保つ。\u201D \u2014 ディーパック・チョプラ", "author": "ディーパック・チョプラ", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201C手元の仕事にすべての思考を集中せよ。\u201D \u2014 アレクサンダー・グラハム・ベル", "author": "アレクサンダー・グラハム・ベル", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201C忙しいだけでは不十分。問いは：何に忙しいのか？\u201D \u2014 ヘンリー・デイヴィッド・ソロー", "author": "ヘンリー・デイヴィッド・ソロー", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201C成功する戦士は、レーザーのような集中を持つ普通の人。\u201D \u2014 ブルース・リー", "author": "ブルース・リー", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201C二つ同時にできるが、二つ同時に集中はできない。\u201D \u2014 ゲイリー・ケラー", "author": "ゲイリー・ケラー", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201C集中が向かう所、エネルギーが流れる。\u201D \u2014 トニー・ロビンズ", "author": "トニー・ロビンズ", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201C規律は今欲しいものと最も欲しいものの選択。\u201D \u2014 エイブラハム・リンカーン（伝）", "author": "エイブラハム・リンカーン（伝）", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201Cシンプルさは二ステップ：本質を見極め、残りを消す。\u201D \u2014 レオ・ババウタ", "author": "レオ・ババウタ", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201C集中し続けるものが成長する。\u201D \u2014 ロイ・T・ベネット", "author": "ロイ・T・ベネット", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201C主なことは、主なことを主なこととして保つこと。\u201D \u2014 スティーブン・コヴィー", "author": "スティーブン・コヴィー", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201C気散らしを飢えさせ、集中を養え。\u201D \u2014 不詳", "author": "不詳", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201C始める方法は、話すのをやめてやり始めること。\u201D \u2014 ウォルト・ディズニー", "author": "ウォルト・ディズニー", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201Cエネルギーと忍耐はすべてを征服する。\u201D \u2014 ベンジャミン・フランクリン", "author": "ベンジャミン・フランクリン", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201C打たないショットは100%外す。\u201D \u2014 ウェイン・グレツキー", "author": "ウェイン・グレツキー", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201C成功は小さな努力の合計、日々繰り返される。\u201D \u2014 ロバート・コリアー", "author": "ロバート・コリアー", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201C難しい仕事を先にやれ。簡単な仕事は自ずと片付く。\u201D \u2014 デール・カーネギー", "author": "デール・カーネギー", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201C終わるまでは常に不可能に見える。\u201D \u2014 ネルソン・マンデラ", "author": "ネルソン・マンデラ", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201C行動はすべての成功の基礎となる鍵。\u201D \u2014 パブロ・ピカソ", "author": "パブロ・ピカソ", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201C大きなことは小さなことが集まって成し遂げられる。\u201D \u2014 ヴィンセント・ヴァン・ゴッホ", "author": "ヴィンセント・ヴァン・ゴッホ", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201C先に進む秘訣は始めること。\u201D \u2014 マーク・トウェイン（伝）", "author": "マーク・トウェイン（伝）", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201C時計を見るな、時計がするように続ける。\u201D \u2014 サム・レヴェンソン", "author": "サム・レヴェンソン", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201C階段全体を見る必要はない。最初の一歩を踏み出すだけ。\u201D \u2014 マーティン・ルーサー・キングJr.", "author": "マーティン・ルーサー・キングJr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201C行動より早く不安を減らすものはない。\u201D \u2014 ウォルター・アンダーソン", "author": "ウォルター・アンダーソン", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201C自分に優しく。あなたはできる限りやっている。\u201D \u2014 不詳", "author": "不詳", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201C象をどう食べる？一口ずつ。\u201D \u2014 ことわざ", "author": "ことわざ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201C休むことは怠惰ではない。\u201D \u2014 ジョン・ラボック", "author": "ジョン・ラボック", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201C今いる所から始める。あるものを使う。できることをする。\u201D \u2014 アーサー・アッシュ", "author": "アーサー・アッシュ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201C傑作であり、進行中の作品でもあることを許される。\u201D \u2014 ソフィア・ブッシュ", "author": "ソフィア・ブッシュ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201C一日で最も重要なことは、二つの深呼吸の間の休息かもしれない。\u201D \u2014 エティ・ヒレズム", "author": "エティ・ヒレズム", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201C一日一歩 — それで十分。\u201D \u2014 不詳", "author": "不詳", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201C疲れたら、休むことを学ぶ。諦めるではなく。\u201D \u2014 バンクシー", "author": "バンクシー", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201C自然の歩調を取り入れよ：その秘訣は忍耐。\u201D \u2014 ラルフ・ワルド・エマーソン", "author": "ラルフ・ワルド・エマーソン", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201C心を静めよ、魂が語るだろう。\u201D \u2014 マー・ジャヤ・サティ・バガヴァティ", "author": "マー・ジャヤ・サティ・バガヴァティ", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201C満足する者は富める。\u201D \u2014 老子", "author": "老子", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201C効率は正しくやること。有効性は正しいことをやること。\u201D \u2014 ピーター・ドラッカー", "author": "ピーター・ドラッカー", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201C方向の欠如が問題で、時間の欠如ではない。24時間は誰にもある。\u201D \u2014 ジグ・ジグラー", "author": "ジグ・ジグラー", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201C多くを為す最短の道は、一度に一つを為すこと。\u201D \u2014 モーツァルト（伝）", "author": "モーツァルト（伝）", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201Cできると思ってもできないと思っても、あなたは正しい。\u201D \u2014 ヘンリー・フォード", "author": "ヘンリー・フォード", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201C1年後、今日始めていればと願うかもしれない。\u201D \u2014 カレン・ラム", "author": "カレン・ラム", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201Cなされた小さな行いは、計画された大きな行いに勝る。\u201D \u2014 ピーター・マーシャル", "author": "ピーター・マーシャル", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201Cあなたを挫くのは荷物ではない。運び方だ。\u201D \u2014 ルー・ホルツ", "author": "ルー・ホルツ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201C感情は訪問者にすぎない。来るに任せ、去るに任せよ。\u201D \u2014 ムージ", "author": "ムージ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201C嵐は静められない。だからやめる。できるのは自分を静めること。嵐は過ぎる。\u201D \u2014 ティンバー・ホーキー", "author": "ティンバー・ホーキー", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": [
+    "コップ一杯の水を飲む",
+    "5分間ジャーナリング",
+    "10ページ読む",
+    "朝のストレッチ",
+    "夕方の散歩"
+  ]
+}

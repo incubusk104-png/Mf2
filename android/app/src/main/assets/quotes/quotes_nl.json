@@ -1,0 +1,47 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Kalm",
+      "tagline": "Glijd de dag in, één zachte stap tegelijk.",
+      "promptHeader": "Een moment van reflectie",
+      "habitsHeader": "Het ritme van vandaag",
+      "habitsSub": "Doorloop deze op je eigen tempo.",
+      "allDone": "Alles gedaan. Laat de dag zacht landen.",
+      "emptyHabits": "Nog geen gewoontes. Voeg een klein ritueel toe wanneer je er klaar voor bent."
+    },
+    "FOCUSED": {
+      "label": "Gefocust",
+      "tagline": "Helder plan. Strakke uitvoering.",
+      "promptHeader": "De opdracht van vandaag",
+      "habitsHeader": "Checklist",
+      "habitsSub": "Werk de lijst af. Van boven naar beneden.",
+      "allDone": "Lijst leeg. Goed uitgevoerd.",
+      "emptyHabits": "Geen gewoontes gedefinieerd. Voeg je eerste doel toe."
+    },
+    "MOTIVATED": {
+      "label": "Gemotiveerd",
+      "tagline": "Het momentum is vandaag van jou — gebruik het!",
+      "promptHeader": "Brandstof voor vandaag",
+      "habitsHeader": "Laten we winsten stapelen",
+      "habitsSub": "Elk vinkje bouwt de reeks op. Pak ze!",
+      "allDone": "Schone lei! Je hebt vandaag alles gehaald.",
+      "emptyHabits": "Leeg vel, grote energie. Voeg je eerste gewoonte toe en ga!"
+    },
+    "OVERWHELMED": {
+      "label": "Overweldigd",
+      "tagline": "Je hoeft niet alles te doen. Je doet het prima.",
+      "promptHeader": "Slechts één klein ding",
+      "habitsHeader": "Alleen als je ruimte hebt",
+      "habitsSub": "Eén is genoeg vandaag. Echt.",
+      "allDone": "Kijk eens — je bent er toch. Dat telt.",
+      "emptyHabits": "Niets hier, en dat is oké. Rust telt ook."
+    }
+  },
+  "starterHabits": [
+    "Drink een glas water",
+    "5 minuten journalen",
+    "Lees 10 pagina's",
+    "Ochtendstretch",
+    "Avondwandeling"
+  ]
+}

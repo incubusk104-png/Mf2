@@ -1,0 +1,93 @@
+{
+  "modeCopy": {
+    "CALM": { "label": "Bình tĩnh", "tagline": "Bước vào ngày nhẹ nhàng, từng bước nhỏ.", "promptHeader": "Khoảnh khắc suy ngẫm", "habitsHeader": "Nhịp hôm nay", "habitsSub": "Đi theo nhịp của bạn.", "allDone": "Tất cả xong. Để ngày lắng đọng nhẹ nhàng.", "emptyHabits": "Chưa có thói quen. Thêm một nghi thức nhỏ khi sẵn sàng." },
+    "FOCUSED": { "label": "Tập trung", "tagline": "Kế hoạch rõ. Thực thi gọn.", "promptHeader": "Chỉ thị hôm nay", "habitsHeader": "Danh sách", "habitsSub": "Làm theo list. Trên xuống dưới.", "allDone": "Danh sách xong. Thực thi tốt.", "emptyHabits": "Chưa định nghĩa thói quen. Thêm mục tiêu đầu tiên." },
+    "MOTIVATED": { "label": "Hào hứng", "tagline": "Đà hôm nay là của bạn — dùng nó!", "promptHeader": "Nhiên liệu hôm nay", "habitsHeader": "Gom chiến thắng nào", "habitsSub": "Mỗi dấu kiểm xây chuỗi. Lên!", "allDone": "Trọn bộ! Bạn hoàn thành tất cả hôm nay.", "emptyHabits": "Trang trắng, năng lượng đầy. Thêm thói quen đầu và đi!" },
+    "OVERWHELMED": { "label": "Quá tải", "tagline": "Bạn không phải làm hết. Bạn đang ổn.", "promptHeader": "Chỉ một việc nhỏ", "habitsHeader": "Chỉ nếu có chỗ", "habitsSub": "Một thôi hôm nay. Thật đấy.", "allDone": "Kìa — bạn vẫn đến. Đó quan trọng.", "emptyHabits": "Không gì ở đây, và vẫn ổn. Nghỉ cũng tính." }
+  },
+  "prompts": {
+    "CALM": ["Điều gì có thể từ từ hôm nay, không vội?", "Hít thở chậm. Điều gì đã ổn ngay bây giờ?", "Hôm nay sẽ ra sao nếu cho phép mình nhẹ nhàng?", "Nhận ra một điều thoải mái quanh bạn. Làm sao quay lại sau?", "Bạn có thể buông điều gì, chỉ hôm nay?", "Nếu hôm nay có kết cấu, bạn muốn cảm giác nào?", "Khoảnh khắc yên tĩnh nào hôm qua xứng đáng благодарность sáng nay?", "Nơi nào có thể tạo một khoảng nghỉ trước tối?", "Cuộc trò chuyện nào hôm nay bắt đầu bằng nhẹ nhàng thay vì gấp gáp?", "Chọn một việc làm nửa tốc độ. Nhận ra cách nó thay đổi việc làm."],
+    "FOCUSED": ["Nêu việc tác động lớn nhất. Làm đầu tiên.", "Phân tâm nào loại bỏ trước khi bắt đầu?", "Định nghĩa 'xong' hôm nay trong một câu.", "Việc nào bạn né? Lên lịch cho giờ tới.", "Điều gì xứng đáng 45 phút tập trung sâu?", "Chọn hoàn thành — không bắt đầu. Hoàn thành nó.", "Nói 'không' với điều gì hôm nay để bảo vệ sự tập trung?", "Đặt top 3. Gạch 2 dưới. Bắt đầu.", "Đóng mọi tab và app không cần cho giờ tới. Rồi bắt đầu.", "Kết quả đo lường nhỏ nhất nào làm hôm nay thành thắng?"],
+    "MOTIVATED": ["Hôm nay có lửa — mục tiêu nào nhận đẩy mạnh nhất?", "Bước táo bạo nào bạn chờ 'đúng thời'? Là bây giờ.", "Kênh năng lượng: việc gì hôm nay khiến tương lai-bạn high-five?", "Thói quen nào nâng cấp — lâu hơn, mạnh hơn?", "Làm gì hôm nay để chuỗi cảm ơn?", "Cưỡi sóng: hành động kế tiếp cho tham vọng lớn nhất?", "Năng lượng hôm nay là tài nguyên. Đầu tư đâu?", "Thắng nào khóa trước trưa?", "Khích lệ ai hôm nay? Đà chia sẻ là đà nhân đôi.", "Chọn mục đáng sợ nhất và bước một bước cụ thể ngay."],
+    "OVERWHELMED": ["Uống một ly nước. Đó là toàn bộ nhiệm vụ.", "Ba nhịp thở chậm. Không cần gì khác lúc này.", "Chọn mục nhỏ nhất. Chỉ mục đó. Phần còn lại đợi.", "Ra ngoài hoặc mở cửa sổ một phút không khí trong.", "Đặt một thứ về chỗ. Một là đủ.", "Thả hàm, hạ vai. Đó cũng là tiến bộ.", "Gửi mình một câu tử tế, như một người bạn.", "Hẹn giờ nghỉ năm phút. Nghỉ cũng hiệu quả.", "Viết mọi thứ trong đầu hai phút, rồi đóng sổ.", "Hủy hoặc dời một việc hôm nay. Không gian được phép."]
+  },
+  "premiumPrompts": {
+    "CALM": ["Nhớ nơi bạn hoàn toàn thoải mái. Mang tĩnh lặng đó vào một việc hôm nay.", "Âm thanh, hương hoặc ánh sáng nào giúp bạn yên? Mời vào không gian tối nay.", "Viết một câu cho mình bắt đầu: 'Là đủ rằng tôi…'"],
+    "FOCUSED": ["Giới hạn hộp thư: mười phút, một lần. Làm gì với thời gian tiết kiệm?", "Xác định việc nút thắt — chặn ba việc khác. Dọn nó trước.", "Tuần này sẽ ra sao nếu hôm nay là ngày kỷ luật nhất?"],
+    "MOTIVATED": ["Viết phiên bản 90 ngày của mục tiêu. Hôm nay đóng góp gì?", "Ai hưởng lợi khi bạn theo đến cùng? Tưởng tượng. Di chuyển.", "Nhân đôi một thói quen hôm nay — hai trang thành bốn, mười phút thành hai mươi."],
+    "OVERWHELMED": ["Đặt tên điều nặng nhất trong ba từ. Gọi tên thu nhỏ nó.", "Cho phép làm một việc tệ hôm nay. Xong hơn hoàn hảo.", "Kể cho một người bạn đang thế nào. Kết nối nhẹ gánh."]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201CThiên nhiên không vội, thế mà mọi việc đều xong.\u201D \u2014 Lão Tử", "author": "Lão Tử", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201CBên trong bạn có sự tĩnh lặng và nơi nương tựa có thể quay về bất cứ lúc nào.\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201CGần như mọi thứ hoạt động lại nếu rút phích vài phút, kể cả bạn.\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201CBình an là kết quả của việc rèn lại tâm trí xử lý đời như nó có.\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201CChậm lại và mọi thứ bạn đuổi theo sẽ quay lại tìm bạn.\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201CTâm trí bình tĩnh mang lại sức mạnh nội tâm và tự tin.\u201D \u2014 Đạt Lai Lạt Ma", "author": "Đạt Lai Lạt Ma", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201CĐời còn nhiều hơn việc tăng tốc.\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201CCăng thẳng là người bạn nghĩ nên là. Thư giãn là người bạn là.\u201D \u2014 Tục ngữ Trung Quốc", "author": "Tục ngữ Trung Quốc", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201CMỉm cười, thở và đi chậm.\u201D \u2014 Thích Nhất Hạnh", "author": "Thích Nhất Hạnh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201CGiữa vận động và hỗn loạn, giữ tĩnh tại bên trong.\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201CTập trung mọi suy nghĩ vào công việc trong tay.\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201CKhông đủ để bận. Câu hỏi là: bận với gì?\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201CChiến binh thành công là người bình thường, với tập trung laser.\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201CBạn có thể làm hai việc cùng lúc, nhưng không thể tập trung hiệu quả cả hai.\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201CĐâu có tập trung, đó có năng lượng chảy.\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201CKỷ luật là chọn giữa điều bạn muốn nay và điều bạn muốn nhất.\u201D \u2014 Abraham Lincoln (tr.)", "author": "Abraham Lincoln (tr.)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201CĐơn giản hoá hai bước: xác định cốt lõi, loại bỏ phần còn lại.\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201CĐiều bạn giữ tập trung sẽ phát triển.\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201CĐiều chính là giữ điều chính là điều chính.\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201CCho phân tâm đói, nuôi tập trung.\u201D \u2014 Khuyết danh", "author": "Khuyết danh", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201CCách bắt đầu là ngừng nói và bắt đầu làm.\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201CNăng lượng và kiên trì chinh phục mọi thứ.\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201CBạn bỏ lỡ 100% những cú đánh không thử.\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201CThành công là tổng những nỗ lực nhỏ, lặp lại ngày này qua ngày khác.\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201CLàm việc khó trước. Việc dễ tự lo.\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201CLuôn có vẻ bất khả thi cho đến khi xong.\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201CHành động là chìa khóa nền tảng của mọi thành công.\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201CĐiều vĩ đại được tạo bởi chuỗi những điều nhỏ được gom lại.\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201CBí quyết tiến lên là bắt đầu.\u201D \u2014 Mark Twain (tr.)", "author": "Mark Twain (tr.)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201CĐừng xem đồng hồ; làm như nó. Tiếp tục.\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201CBạn không cần thấy cả cầu thang, chỉ bước bước đầu.\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201CKhông gì giảm lo lắng nhanh hơn hành động.\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201CNhẹ nhàng với chính mình. Bạn đang làm tốt nhất.\u201D \u2014 Khuyết danh", "author": "Khuyết danh", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201CĂn voi thế nào? Một miếng một lúc.\u201D \u2014 Tục ngữ", "author": "Tục ngữ", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201CNghỉ không phải lười.\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201CBắt đầu từ nơi bạn đang có. Dùng điều bạn có. Làm điều bạn có thể.\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201CBạn được phép vừa là kiệt tác vừa là tác phẩm đang tạo.\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201CĐôi khi điều quan trọng nhất trong cả ngày là nghỉ giữa hai nhịp thở sâu.\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201CMột ngày một lần — thế là đủ.\u201D \u2014 Khuyết danh", "author": "Khuyết danh", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201CNếu mệt, học nghỉ, đừng bỏ cuộc.\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201CTheo nhịp thiên nhiên: bí mật của nó là kiên nhẫn.\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201CYên tĩnh tâm trí, và linh hồn sẽ nói.\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201CAi tri túc là giàu.\u201D \u2014 Lão Tử", "author": "Lão Tử", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201CHiệu quả là làm đúng; hiệu năng là làm điều đúng.\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201CThiếu hướng, không thiếu thời gian, mới là vấn đề. Ai cũng có 24 giờ.\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201CĐường ngắn nhất làm nhiều việc là làm một việc mỗi lúc.\u201D \u2014 Mozart (tr.)", "author": "Mozart (tr.)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201CDù nghĩ được hay không, bạn đúng.\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201CMột năm nữa bạn có thể ước đã bắt đầu hôm nay.\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201CViệc nhỏ đã làm hơn việc lớn đã plan.\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201CKhông phải gánh nặng đánh đổ bạn, mà là cách bạn mang.\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201CCảm xúc chỉ là khách. Để chúng đến và đi.\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201CBạn không thể lặng bão, nên dừng. Có thể lặng mình. Bão sẽ qua.\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": ["Uống một ly nước", "5 phút viết nhật ký", "Đọc 10 trang", "Căng cơ buổi sáng", "Đi bộ buổi tối"]
+}

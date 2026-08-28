@@ -1,0 +1,47 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Rolig",
+      "tagline": "Gli inn i dagen, ett mykt steg om gangen.",
+      "promptHeader": "Et øyeblikk til refleksjon",
+      "habitsHeader": "Dagens rytme",
+      "habitsSub": "Gå gjennom disse i ditt eget tempo.",
+      "allDone": "Alt gjort. La dagen lande mykt.",
+      "emptyHabits": "Ingen vaner ennå. Legg til et lite ritual når du er klar."
+    },
+    "FOCUSED": {
+      "label": "Fokusert",
+      "tagline": "Klar plan. Rent utført.",
+      "promptHeader": "Dagens direktiv",
+      "habitsHeader": "Sjekkliste",
+      "habitsSub": "Jobb deg gjennom listen. Ovenfra og ned.",
+      "allDone": "Listen ryddet. Godt utført.",
+      "emptyHabits": "Ingen vaner definert. Legg til ditt første mål."
+    },
+    "MOTIVATED": {
+      "label": "Motivert",
+      "tagline": "Momentumet er ditt i dag — bruk det!",
+      "promptHeader": "Drivstoff for dagen",
+      "habitsHeader": "La oss stable seire",
+      "habitsSub": "Hvert kryss bygger rekken. Gå og ta dem!",
+      "allDone": "Full pott! Du knuste alle sammen i dag.",
+      "emptyHabits": "Blankt ark, stor energi. Legg til din første vane og kjør!"
+    },
+    "OVERWHELMED": {
+      "label": "Overveldet",
+      "tagline": "Du trenger ikke gjøre alt. Du klarer deg fint.",
+      "promptHeader": "Bare én bitteliten ting",
+      "habitsHeader": "Bare hvis du har rom",
+      "habitsSub": "Én er nok i dag. Virkelig.",
+      "allDone": "Se der — du stilte opp likevel. Det teller.",
+      "emptyHabits": "Ingenting her, og det er greit. Hvile teller også."
+    }
+  },
+  "starterHabits": [
+    "Drikk et glass vann",
+    "5 minutter med dagbok",
+    "Les 10 sider",
+    "Morgentøying",
+    "Kveldstur"
+  ]
+}

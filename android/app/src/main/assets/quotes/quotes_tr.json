@@ -1,0 +1,191 @@
+{
+  "modeCopy": {
+    "CALM": {
+      "label": "Sakin",
+      "tagline": "Güne nazikçe, adım adım gir.",
+      "promptHeader": "Düşünmek için bir an",
+      "habitsHeader": "Bugünün ritmi",
+      "habitsSub": "Bunları kendi hızında tamamla.",
+      "allDone": "Her şey tamam. Bırak gün usulca yerine otursun.",
+      "emptyHabits": "Henüz alışkanlık yok. Hazır olduğunda küçük bir ritüel ekle."
+    },
+    "FOCUSED": {
+      "label": "Odaklı",
+      "tagline": "Net plan. Temiz uygulama.",
+      "promptHeader": "Bugünün talimatı",
+      "habitsHeader": "Kontrol listesi",
+      "habitsSub": "Listeyi işle. Yukarıdan aşağıya.",
+      "allDone": "Liste temizlendi. İyi iş çıkardın.",
+      "emptyHabits": "Tanımlı alışkanlık yok. İlk hedefini ekle."
+    },
+    "MOTIVATED": {
+      "label": "Motive",
+      "tagline": "Momentum bugün senin — kullan!",
+      "promptHeader": "Bugün için yakıt",
+      "habitsHeader": "Hadi zaferleri toplayalım",
+      "habitsSub": "Her işaret seriyi büyütür. Git ve al!",
+      "allDone": "Tam isabet! Bugün hepsini bitirdin.",
+      "emptyHabits": "Boş sayfa, büyük enerji. İlk alışkanlığını ekle ve başla!"
+    },
+    "OVERWHELMED": {
+      "label": "Bunalmış",
+      "tagline": "Her şeyi yapmak zorunda değilsin. Gayet iyisin.",
+      "promptHeader": "Sadece minicik bir şey",
+      "habitsHeader": "Sadece yer varsa",
+      "habitsSub": "Bugün bir tane yeter. Gerçekten.",
+      "allDone": "Şuna bak — yine de geldin. Bu önemli.",
+      "emptyHabits": "Burada bir şey yok ve sorun değil. Dinlenmek de sayılır."
+    }
+  },
+  "prompts": {
+    "CALM": [
+      "Bugün acele etmeden, kendi akışında bırakabileceğin bir şey ne?",
+      "Yavaşça nefes al. Şu anda, olduğu haliyle zaten yolunda olan ne?",
+      "Kendine nazikçe ilerleme izni versen bugün nasıl görünürdü?",
+      "Çevrende küçük bir konforu fark et. Gün içinde ona nasıl geri dönebilirsin?",
+      "Sadece bugünlük, üzerindeki tutuşunu gevşetebileceğin şey ne?",
+      "Bugünün bir dokusu olsaydı, nasıl hissettirmesini isterdin?",
+      "Dünkü hangi sessiz an bu sabah küçük bir şükranı hak ediyor?",
+      "Akşamdan önce nereye acelesiz bir mola yerleştirebilirsin?",
+      "Bugün hangi konuşmaya aceleyle değil, yumuşaklıkla girebilirsin?",
+      "Bugün bir işi yarı hızda yapmayı seç. Yapma biçiminin nasıl değiştiğini fark et."
+    ],
+    "FOCUSED": [
+      "En yüksek etkili tek işini belirle. Önce onu yap.",
+      "Başlamadan önce hangi dikkat dağıtıcıyı ortadan kaldıracaksın?",
+      "Bugün için 'bitti'yi tek cümleyle tanımla.",
+      "Hangi işten kaçınıyorsun? Onu önümüzdeki saate planla.",
+      "Bugün 45 dakikalık derin, kesintisiz çalışmayı ne hak ediyor?",
+      "Bitirmek için bir şey seç — başlamak için değil. Bitir onu.",
+      "Odağını korumak için bugün neye hayır diyebilirsin?",
+      "İlk üçünü belirle. Alttaki ikisinin üstünü çiz. Başla.",
+      "Önümüzdeki saat için gerekmeyen tüm sekmeleri ve uygulamaları kapat. Sonra başla.",
+      "Bugünü kazanca çevirecek en küçük ölçülebilir sonuç ne?"
+    ],
+    "MOTIVATED": [
+      "Bugün içinde ateş var — en büyük itişi hangi hedef alacak?",
+      "Hangi cesur adım için 'doğru anı' bekliyordun? O an şimdi.",
+      "Bu enerjiyi yönlendir: gelecekteki sen, bugün ne yaptığın için sana beşlik çakardı?",
+      "Bugün hangi alışkanlığı bir seviye yükseltebilirsin — biraz daha uzun, biraz daha güçlü?",
+      "Bugün serinin sana teşekkür edeceği ne yapabilirsin?",
+      "Dalgayı yakala: en büyük hedefindeki bir sonraki adım ne?",
+      "Bugünün enerjisi bir kaynak. En iyi getiri için onu nereye yatıracaksın?",
+      "Öğlene kadar hangi kazanımı garantiye alabilirsin?",
+      "Bugün kimi yüreklendirebilirsin? Paylaşılan momentum ikiye katlanır.",
+      "Listendeki en korkutucu maddeyi seç ve şimdi ona doğru somut bir adım at."
+    ],
+    "OVERWHELMED": [
+      "Bir bardak su iç. Görevin tamamı bu.",
+      "Üç yavaş nefes al. Şu anda başka hiçbir şey gerekmiyor.",
+      "Listendeki en minik maddeyi seç. Sadece onu. Gerisi bekleyebilir.",
+      "Bir dakikalık temiz hava için dışarı çık ya da bir pencere aç.",
+      "Bir şeyi yerine geri koy. Bir tane fazlasıyla yeter.",
+      "Çeneni gevşet, omuzlarını indir. Bu da ilerleme sayılır.",
+      "Kendine, bir arkadaşın yazacağı gibi nazik bir cümle gönder.",
+      "Beş dakikalık dinlenme için sayaç kur. Dinlenmek de üretkendir.",
+      "İki dakika boyunca aklındaki her şeyi yaz, sonra defteri kapat.",
+      "Bugün bir şeyi iptal et ya da ertele. Alan açmak serbest."
+    ]
+  },
+  "premiumPrompts": {
+    "CALM": [
+      "Kendini tamamen rahat hissettiğin bir yeri hatırla. Onun dinginliğini bugün bir işe taşı.",
+      "Hangi ses, koku ya da ışık seni sakinleştirir? Bu akşam onu alanına davet et.",
+      "Kendine şöyle başlayan bir cümle yaz: 'Şu kadarı yeter ki ben…'"
+    ],
+    "FOCUSED": [
+      "Gelen kutuna süre koy: on dakika, bir kez. Kazandığın zamanla ne yapacaksın?",
+      "Darboğaz olan işi bul — diğer üçünü engelleyeni. Önce onu temizle.",
+      "Bugün en disiplinli günün olsaydı bu hafta nasıl görünürdü?"
+    ],
+    "MOTIVATED": [
+      "Bu hedefin 90 günlük halini yaz. Bugün ona ne katkı sağlıyor?",
+      "Bugün sözünü tuttuğunda kim kazanır? Onları gözünde canlandır. Şimdi harekete geç.",
+      "Bugün bir alışkanlığı ikiye katla — iki sayfa dört, on dakika yirmi olsun."
+    ],
+    "OVERWHELMED": [
+      "Şu an en ağır geleni üç kelimeyle adlandır. Adlandırmak onu küçültür.",
+      "Bugün bir şeyi kötü yapma izni ver kendine. Bitmiş, mükemmelden iyidir.",
+      "Bir kişiye nasıl olduğunu yaz ya da söyle. Bağ kurmak yükü hafifletir."
+    ]
+  },
+  "quotes": {
+    "CALM": [
+      { "id": "calm_1", "category": "calm", "text": "\u201CDoğa acele etmez, yine de her şey tamamlanır.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" },
+      { "id": "calm_2", "category": "calm", "text": "\u201Cİçinde, her an sığınabileceğin bir dinginlik ve sığınak var.\u201D \u2014 Hermann Hesse", "author": "Hermann Hesse", "mood_tag": "CALM" },
+      { "id": "calm_3", "category": "calm", "text": "\u201CNeredeyse her şey birkaç dakika fişten çekilince yeniden çalışır — sen de dahil.\u201D \u2014 Anne Lamott", "author": "Anne Lamott", "mood_tag": "CALM" },
+      { "id": "calm_4", "category": "calm", "text": "\u201CHuzur, zihnini hayatı olduğu gibi karşılamaya yeniden alıştırmanın sonucudur.\u201D \u2014 Wayne Dyer", "author": "Wayne Dyer", "mood_tag": "CALM" },
+      { "id": "calm_5", "category": "calm", "text": "\u201CYavaşla; kovaladığın her şey dönüp seni yakalayacaktır.\u201D \u2014 John De Paola", "author": "John De Paola", "mood_tag": "CALM" },
+      { "id": "calm_6", "category": "calm", "text": "\u201CSakin zihin, iç güç ve özgüven getirir.\u201D \u2014 Dalai Lama", "author": "Dalai Lama", "mood_tag": "CALM" },
+      { "id": "calm_7", "category": "calm", "text": "\u201CHayatta, hızını artırmaktan fazlası vardır.\u201D \u2014 Mahatma Gandhi", "author": "Mahatma Gandhi", "mood_tag": "CALM" },
+      { "id": "calm_8", "category": "calm", "text": "\u201CGerilim, olman gerektiğini düşündüğün kişidir. Rahatlık ise olduğun kişi.\u201D \u2014 Çin atasözü", "author": "Çin atasözü", "mood_tag": "CALM" },
+      { "id": "calm_9", "category": "calm", "text": "\u201CGülümse, nefes al ve yavaş git.\u201D \u2014 Thich Nhat Hanh", "author": "Thich Nhat Hanh", "mood_tag": "CALM" },
+      { "id": "calm_10", "category": "calm", "text": "\u201CHareketin ve kaosun ortasında, içindeki dinginliği koru.\u201D \u2014 Deepak Chopra", "author": "Deepak Chopra", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_1", "category": "focused", "text": "\u201CTüm düşüncelerini eldeki işe yoğunlaştır.\u201D \u2014 Alexander Graham Bell", "author": "Alexander Graham Bell", "mood_tag": "FOCUSED" },
+      { "id": "focused_2", "category": "focused", "text": "\u201CMeşgul olmak yetmez. Asıl soru: neyle meşgulüz?\u201D \u2014 Henry David Thoreau", "author": "Henry David Thoreau", "mood_tag": "FOCUSED" },
+      { "id": "focused_3", "category": "focused", "text": "\u201CBaşarılı savaşçı, lazer gibi odaklanmış sıradan insandır.\u201D \u2014 Bruce Lee", "author": "Bruce Lee", "mood_tag": "FOCUSED" },
+      { "id": "focused_4", "category": "focused", "text": "\u201CAynı anda iki şey yapabilirsin ama aynı anda ikisine de etkili biçimde odaklanamazsın.\u201D \u2014 Gary Keller", "author": "Gary Keller", "mood_tag": "FOCUSED" },
+      { "id": "focused_5", "category": "focused", "text": "\u201COdak nereye giderse, enerji oraya akar.\u201D \u2014 Tony Robbins", "author": "Tony Robbins", "mood_tag": "FOCUSED" },
+      { "id": "focused_6", "category": "focused", "text": "\u201CDisiplin, şimdi istediğinle en çok istediğin arasında seçim yapmaktır.\u201D \u2014 Abraham Lincoln (atfedilir)", "author": "Abraham Lincoln (atfedilir)", "mood_tag": "FOCUSED" },
+      { "id": "focused_7", "category": "focused", "text": "\u201CSadelik iki adıma iner: özü belirle, gerisini ele.\u201D \u2014 Leo Babauta", "author": "Leo Babauta", "mood_tag": "FOCUSED" },
+      { "id": "focused_8", "category": "focused", "text": "\u201CNeye odaklanmayı sürdürürsen o büyür.\u201D \u2014 Roy T. Bennett", "author": "Roy T. Bennett", "mood_tag": "FOCUSED" },
+      { "id": "focused_9", "category": "focused", "text": "\u201CAsıl mesele, asıl meseleyi asıl mesele olarak tutmaktır.\u201D \u2014 Stephen Covey", "author": "Stephen Covey", "mood_tag": "FOCUSED" },
+      { "id": "focused_10", "category": "focused", "text": "\u201CDikkat dağıtıcılarını aç bırak, odağını besle.\u201D \u2014 Bilinmiyor", "author": "Bilinmiyor", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_1", "category": "motivated", "text": "\u201CBaşlamanın yolu, konuşmayı bırakıp yapmaya koyulmaktır.\u201D \u2014 Walt Disney", "author": "Walt Disney", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_2", "category": "motivated", "text": "\u201CEnerji ve azim her şeyin üstesinden gelir.\u201D \u2014 Benjamin Franklin", "author": "Benjamin Franklin", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_3", "category": "motivated", "text": "\u201CKullanmadığın şansların yüzde yüzünü kaçırırsın.\u201D \u2014 Wayne Gretzky", "author": "Wayne Gretzky", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_4", "category": "motivated", "text": "\u201CBaşarı, her gün tekrarlanan küçük çabaların toplamıdır.\u201D \u2014 Robert Collier", "author": "Robert Collier", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_5", "category": "motivated", "text": "\u201CÖnce zor işleri yap. Kolay işler kendi kendine hallolur.\u201D \u2014 Dale Carnegie", "author": "Dale Carnegie", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_6", "category": "motivated", "text": "\u201CBitene kadar her şey imkânsız görünür.\u201D \u2014 Nelson Mandela", "author": "Nelson Mandela", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_7", "category": "motivated", "text": "\u201CEylem, tüm başarının temel anahtarıdır.\u201D \u2014 Pablo Picasso", "author": "Pablo Picasso", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_8", "category": "motivated", "text": "\u201CBüyük işler, bir araya getirilen küçük işlerle yapılır.\u201D \u2014 Vincent van Gogh", "author": "Vincent van Gogh", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_9", "category": "motivated", "text": "\u201Cİlerlemenin sırrı başlamaktır.\u201D \u2014 Mark Twain (atfedilir)", "author": "Mark Twain (atfedilir)", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_10", "category": "motivated", "text": "\u201CSaati izleme; onun yaptığını yap. Devam et.\u201D \u2014 Sam Levenson", "author": "Sam Levenson", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_1", "category": "overwhelmed", "text": "\u201CBütün merdiveni görmek zorunda değilsin, sadece ilk adımı at.\u201D \u2014 Martin Luther King Jr.", "author": "Martin Luther King Jr.", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_2", "category": "overwhelmed", "text": "\u201CHiçbir şey kaygıyı eylemden daha hızlı azaltmaz.\u201D \u2014 Walter Anderson", "author": "Walter Anderson", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_3", "category": "overwhelmed", "text": "\u201CKendine nazik davran. Elinden gelenin en iyisini yapıyorsun.\u201D \u2014 Bilinmiyor", "author": "Bilinmiyor", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_4", "category": "overwhelmed", "text": "\u201CBir fil nasıl yenir? Her seferinde bir lokma.\u201D \u2014 Atasözü", "author": "Atasözü", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_5", "category": "overwhelmed", "text": "\u201CDinlenmek tembellik değildir.\u201D \u2014 John Lubbock", "author": "John Lubbock", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_6", "category": "overwhelmed", "text": "\u201COlduğun yerden başla. Elindekini kullan. Yapabildiğini yap.\u201D \u2014 Arthur Ashe", "author": "Arthur Ashe", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_7", "category": "overwhelmed", "text": "\u201CHem bir başyapıt hem de devam eden bir çalışma olmana izin var.\u201D \u2014 Sophia Bush", "author": "Sophia Bush", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_8", "category": "overwhelmed", "text": "\u201CBazen bütün bir günün en önemli şeyi, iki derin nefes arasında verdiğimiz aradır.\u201D \u2014 Etty Hillesum", "author": "Etty Hillesum", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_9", "category": "overwhelmed", "text": "\u201CHer seferinde bir gün — bu yeterli.\u201D \u2014 Bilinmiyor", "author": "Bilinmiyor", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_10", "category": "overwhelmed", "text": "\u201CYorulursan bırakmayı değil, dinlenmeyi öğren.\u201D \u2014 Banksy", "author": "Banksy", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "premiumQuotes": {
+    "CALM": [
+      { "id": "calm_p1", "category": "calm", "text": "\u201CDoğanın temposunu benimse: onun sırrı sabırdır.\u201D \u2014 Ralph Waldo Emerson", "author": "Ralph Waldo Emerson", "mood_tag": "CALM" },
+      { "id": "calm_p2", "category": "calm", "text": "\u201CZihni sustur, ruh konuşacaktır.\u201D \u2014 Ma Jaya Sati Bhagavati", "author": "Ma Jaya Sati Bhagavati", "mood_tag": "CALM" },
+      { "id": "calm_p3", "category": "calm", "text": "\u201CHalinden memnun olan zengindir.\u201D \u2014 Lao Tzu", "author": "Lao Tzu", "mood_tag": "CALM" }
+    ],
+    "FOCUSED": [
+      { "id": "focused_p1", "category": "focused", "text": "\u201CVerimlilik işleri doğru yapmaktır; etkililik doğru işleri yapmaktır.\u201D \u2014 Peter Drucker", "author": "Peter Drucker", "mood_tag": "FOCUSED" },
+      { "id": "focused_p2", "category": "focused", "text": "\u201CSorun zaman eksikliği değil, yön eksikliğidir. Hepimizin günü yirmi dört saattir.\u201D \u2014 Zig Ziglar", "author": "Zig Ziglar", "mood_tag": "FOCUSED" },
+      { "id": "focused_p3", "category": "focused", "text": "\u201CBirçok işi yapmanın kısa yolu, aynı anda yalnızca bir iş yapmaktır.\u201D \u2014 Mozart (atfedilir)", "author": "Mozart (atfedilir)", "mood_tag": "FOCUSED" }
+    ],
+    "MOTIVATED": [
+      { "id": "motivated_p1", "category": "motivated", "text": "\u201CYapabileceğini de düşünsen yapamayacağını da, haklısın.\u201D \u2014 Henry Ford", "author": "Henry Ford", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p2", "category": "motivated", "text": "\u201CBir yıl sonra, bugün başlamış olmayı dileyebilirsin.\u201D \u2014 Karen Lamb", "author": "Karen Lamb", "mood_tag": "MOTIVATED" },
+      { "id": "motivated_p3", "category": "motivated", "text": "\u201CYapılmış küçük işler, planlanmış büyük işlerden iyidir.\u201D \u2014 Peter Marshall", "author": "Peter Marshall", "mood_tag": "MOTIVATED" }
+    ],
+    "OVERWHELMED": [
+      { "id": "overwhelmed_p1", "category": "overwhelmed", "text": "\u201CSeni yıkan yük değil, onu taşıma biçimindir.\u201D \u2014 Lou Holtz", "author": "Lou Holtz", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p2", "category": "overwhelmed", "text": "\u201CDuygular yalnızca misafirdir. Bırak gelsinler ve gitsinler.\u201D \u2014 Mooji", "author": "Mooji", "mood_tag": "OVERWHELMED" },
+      { "id": "overwhelmed_p3", "category": "overwhelmed", "text": "\u201CFırtınayı dindiremezsin, o yüzden denemeyi bırak. Yapabileceğin, kendini sakinleştirmek. Fırtına geçecek.\u201D \u2014 Timber Hawkeye", "author": "Timber Hawkeye", "mood_tag": "OVERWHELMED" }
+    ]
+  },
+  "starterHabits": [
+    "Bir bardak su iç",
+    "5 dakika günlük yaz",
+    "10 sayfa oku",
+    "Sabah esnemesi",
+    "Akşam yürüyüşü"
+  ]
+}

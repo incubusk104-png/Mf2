@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Defense in depth: targetSdk 28+ already blocks cleartext traffic by
+     default, but this makes the policy explicit and immune to accidental
+     regressions. All app traffic (Supabase, AdMob, Play) is HTTPS-only, and
+     only system CAs are trusted — user-installed certificates are rejected,
+     which blocks trivial on-device MITM proxying of API traffic. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
