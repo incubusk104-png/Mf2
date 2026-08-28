@@ -27,14 +27,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.HabitIconCatalog
-import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
 import java.util.UUID
 
 /**
@@ -56,8 +54,6 @@ fun HabitPickerGrid(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     header: (@Composable () -> Unit)? = null,
 ) {
-    val context = LocalContext.current
-
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -88,8 +84,8 @@ fun HabitPickerGrid(
                                     reminderMinutes = icon.defaultReminderMinutes,
                                     iconId = icon.id,
                                 )
-                                // Click sets the alarm immediately — no separate step.
-                                HabitAlarmScheduler.schedule(context, habit)
+                                // The screen adds it (respecting the cap) and, only
+                                // if it was actually added, schedules the alarm.
                                 onHabitAdded(habit)
                             }
                         }
