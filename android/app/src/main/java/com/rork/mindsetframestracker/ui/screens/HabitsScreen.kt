@@ -12,8 +12,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -92,13 +94,29 @@ fun HabitsScreen(viewModel: AppViewModel) {
             },
             onHabitAdded = { habit ->
                 if (viewModel.addHabitObject(habit)) {
+                    // Only arm the alarm once the habit was actually added.
+                    HabitAlarmScheduler.schedule(context, habit)
                     scope.launch { snackbarHostState.showSnackbar("Added ${habit.name} with a reminder") }
                 } else {
-                    showPremiumSheet = true
+                    // Cap reached on the free tier — make it obvious instead of
+                    // the tap looking like it did nothing.
+                    scope.launch {
+                        val result = snackbarHostState.showSnackbar(
+                            message = "Free limit is $MAX_FREE_HABITS habits — remove one or go Premium.",
+                            actionLabel = "Premium",
+                            duration = SnackbarDuration.Long,
+                        )
+                        if (result == SnackbarResult.ActionPerformed) showPremiumSheet = true
+                    }
                 }
             },
             onHabitRemoved = { iconId ->
-                data.habits.firstOrNull { it.iconId == iconId }?.let { viewModel.deleteHabit(it.id) }
+                val existing = data.habits.firstOrNull { it.iconId == iconId }
+                if (existing != null) {
+                    HabitAlarmScheduler.cancel(context, existing)
+                    viewModel.deleteHabit(existing.id)
+                    scope.launch { snackbarHostState.showSnackbar("Removed ${existing.name}") }
+                }
             },
             onTodoListTapped = {
                 if (viewModel.canAddHabit()) showTodoDialog = true
