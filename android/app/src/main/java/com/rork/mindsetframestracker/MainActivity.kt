@@ -130,9 +130,25 @@ class MainActivity : ComponentActivity() {
         val isAuthCallback = uri.host == "auth-callback" &&
             (uri.scheme == "com.mindsetframes.habittracker" ||
                 uri.scheme == "com.rork.mindsetframestracker")
-        if (!isAuthCallback) return
-        appViewModel.handleAuthDeepLink(uri)
-        intent.data = null
+        if (isAuthCallback) {
+            appViewModel.handleAuthDeepLink(uri)
+            intent.data = null
+            return
+        }
+        // Strava OAuth return leg: mindsetframes://strava-callback?code=...
+        val isStravaCallback = uri.scheme == "mindsetframes" && uri.host == "strava-callback"
+        if (isStravaCallback) {
+            val code = uri.getQueryParameter("code")
+            val error = uri.getQueryParameter("error")
+            when {
+                !code.isNullOrBlank() -> appViewModel.handleStravaAuthCode(code)
+                error != null -> appViewModel.onStravaConnectFailed(
+                    if (error == "access_denied") "Strava access was declined."
+                    else "Strava connection failed: $error",
+                )
+            }
+            intent.data = null
+        }
     }
 
     /**
@@ -156,6 +172,17 @@ class MainActivity : ComponentActivity() {
                     appViewModel.onHuaweiSignInFailed(result.message)
                 }
             }
+        } else if (requestCode == com.rork.mindsetframestracker.billing.SubscriptionBilling.SUBSCRIPTION_REQUEST_CODE) {
+            com.rork.mindsetframestracker.billing.SubscriptionBilling.handlePurchaseResult(
+                this,
+                appViewModel.pendingSubscriptionProductId,
+                data,
+            ) { outcome ->
+                appViewModel.onSubscriptionPurchaseResult(outcome)
+            }
+        } else if (requestCode == com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient.HEALTH_AUTH_REQUEST_CODE) {
+            val granted = com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient.parseAuthResult(this, data)
+            appViewModel.onHealthKitAuthResult(granted)
         } else if (requestCode == com.rork.mindsetframestracker.billing.TipBilling.PURCHASE_REQUEST_CODE) {
             com.rork.mindsetframestracker.billing.TipBilling.handlePurchaseResult(this, data) { outcome ->
                 when (outcome) {

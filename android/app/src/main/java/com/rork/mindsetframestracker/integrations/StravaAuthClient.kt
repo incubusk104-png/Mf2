@@ -32,7 +32,16 @@ object StravaAuthClient {
 
     private const val TAG = "StravaAuthClient"
 
-    private const val STRAVA_CLIENT_ID_PUBLIC = "a7f174d89a804f26415155772aaabe2a9cb8"
+    /**
+     * Strava OAuth client id — the short PUBLIC numeric id shown on
+     * strava.com/settings/api (NOT the client secret). Injected at build time
+     * via the STRAVA_CLIENT_ID env var / gradle property; see build.gradle.kts.
+     */
+    private val STRAVA_CLIENT_ID_PUBLIC: String = BuildConfig.STRAVA_CLIENT_ID
+
+    /** True when a Strava client id was configured at build time. */
+    val isConfigured: Boolean get() = STRAVA_CLIENT_ID_PUBLIC.isNotBlank()
+
     private const val REDIRECT_URI = "mindsetframes://strava-callback"
     private const val AUTH_URL = "https://www.strava.com/oauth/mobile/authorize"
 

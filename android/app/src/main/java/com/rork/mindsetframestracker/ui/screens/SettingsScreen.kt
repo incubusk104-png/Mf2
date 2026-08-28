@@ -79,6 +79,8 @@ import androidx.compose.material.icons.outlined.Restore
 import com.rork.mindsetframestracker.BuildConfig
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -139,7 +141,12 @@ import com.rork.mindsetframestracker.data.ThemeMode
 import com.rork.mindsetframestracker.data.AppLanguage
 import com.rork.mindsetframestracker.data.languagePickerOrder
 import com.rork.mindsetframestracker.data.isLanguageUnlocked
+import com.rork.mindsetframestracker.billing.Entitlements
+import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.data.hasFeatureAccess
+import com.rork.mindsetframestracker.data.subscriptionTier
+import com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.SyncUiState
 import com.rork.mindsetframestracker.ui.appStrings
@@ -389,6 +396,61 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 description = s.settingsWellbeingPixelsDesc,
                 actionLabel = null,
                 onClick = null,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+
+        // ── Activity integrations ─────────────────────────────────────
+        SettingsCard(title = "Activity sync") {
+            val healthConnected = settings.healthKitConnected
+            WellbeingRow(
+                icon = Icons.Outlined.MonitorHeart,
+                title = "Huawei Health",
+                description = if (healthConnected) {
+                    "Connected — steps can complete your walking and running habits."
+                } else {
+                    "Connect to complete activity habits from your daily steps. Free for everyone."
+                },
+                actionLabel = if (healthConnected) null else "Connect",
+                onClick = if (healthConnected) null else {
+                    {
+                        val act = activity
+                        if (act == null || !HuaweiHealthKitClient.requestAuthorization(act)) {
+                            viewModel.onStravaConnectFailed(
+                                "Huawei Health isn't available on this device yet.",
+                            )
+                        }
+                    }
+                },
+            )
+            val stravaConnected = viewModel.isStravaConnected()
+            val stravaEntitled = Entitlements.hasAccess(settings.subscriptionTier(), Feature.STRAVA)
+            WellbeingRow(
+                icon = Icons.AutoMirrored.Outlined.DirectionsRun,
+                title = "Strava",
+                description = when {
+                    stravaConnected -> "Connected — recent activities sync to your habits."
+                    stravaEntitled -> "Link your Strava account to import runs, rides, and walks."
+                    else -> "Included with Premium — link Strava to import runs, rides, and walks."
+                },
+                actionLabel = when {
+                    stravaConnected -> "Disconnect"
+                    stravaEntitled -> "Connect"
+                    else -> "Premium"
+                },
+                onClick = {
+                    when {
+                        stravaConnected -> viewModel.disconnectStrava()
+                        stravaEntitled && !StravaAuthClient.isConfigured ->
+                            viewModel.onStravaConnectFailed("Strava isn't configured for this build yet.")
+                        stravaEntitled -> runCatching {
+                            context.startActivity(StravaAuthClient.buildAuthIntent())
+                        }.onFailure {
+                            viewModel.onStravaConnectFailed("No browser available to open Strava.")
+                        }
+                        else -> showPremiumSheet = true
+                    }
+                },
                 modifier = Modifier.padding(top = 6.dp),
             )
         }
@@ -1291,7 +1353,11 @@ fun SettingsScreen(viewModel: AppViewModel) {
     }
 
     if (showPremiumSheet) {
-        PremiumSheet(onDismiss = { showPremiumSheet = false })
+        PremiumSheet(
+            onDismiss = { showPremiumSheet = false },
+            onPurchaseStarted = { viewModel.onSubscriptionPurchaseStarted(it) },
+            onRestore = { viewModel.restoreSubscription() },
+        )
     }
 
     if (showCompanionStudio) {

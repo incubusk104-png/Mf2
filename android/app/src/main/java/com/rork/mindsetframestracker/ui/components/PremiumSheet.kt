@@ -2,6 +2,7 @@ package com.rork.mindsetframestracker.ui.components
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.rork.mindsetframestracker.billing.SubscriptionBilling
 
 /**
  * Huawei AppGallery listing for Mindset Frames. The `appmarket://` deep link
@@ -80,15 +86,25 @@ object AppGalleryLink {
 
 /**
  * Premium upgrade sheet — lists everything included in Mindset Frames
- * Premium and routes the upgrade through the Huawei AppGallery listing.
- * Premium stays locked in-app until the entitlement is granted.
+ * Premium and starts the native Huawei IAP subscription purchase directly
+ * (works for update builds and sandbox testers before the public listing).
+ *
+ * [onPurchaseStarted] must record the product id in the ViewModel so
+ * MainActivity.onActivityResult can attribute the purchase result;
+ * [onRestore] triggers an owned-purchases query ("Restore purchase").
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PremiumSheet(onDismiss: () -> Unit) {
+fun PremiumSheet(
+    onDismiss: () -> Unit,
+    onPurchaseStarted: (String) -> Unit = {},
+    onRestore: (() -> Unit)? = null,
+) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val activity = LocalActivity.current
     val huaweiRed = Color(0xFFC7000B)
+    var purchaseError by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -172,77 +188,84 @@ fun PremiumSheet(onDismiss: () -> Unit) {
                 )
             }
 
-            if (AppGalleryLink.hasListing) {
-                Button(
-                    onClick = { AppGalleryLink.open(context) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = huaweiRed,
-                        contentColor = Color.White,
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp)
-                        .defaultMinSize(minHeight = 52.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .background(Color.White, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "H",
-                            color = huaweiRed,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
+            // Direct Huawei IAP subscription purchase — sandbox test accounts
+            // see the sandbox payment sheet and are never charged.
+            Button(
+                onClick = {
+                    val act = activity ?: return@Button
+                    purchaseError = null
+                    onPurchaseStarted("mindset_premium_monthly")
+                    SubscriptionBilling.purchase(act, "mindset_premium_monthly") { message ->
+                        purchaseError = message
                     }
-                    Text(
-                        text = "Get Premium on AppGallery",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 10.dp),
-                    )
-                }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = huaweiRed,
+                    contentColor = Color.White,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp)
+                    .defaultMinSize(minHeight = 52.dp),
+            ) {
                 Text(
-                    text = "Premium is unlocked through the Mindset Frames listing on Huawei AppGallery.",
+                    text = "Go Premium — Monthly",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Button(
+                onClick = {
+                    val act = activity ?: return@Button
+                    purchaseError = null
+                    onPurchaseStarted("mindset_premium_yearly")
+                    SubscriptionBilling.purchase(act, "mindset_premium_yearly") { message ->
+                        purchaseError = message
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .defaultMinSize(minHeight = 52.dp),
+            ) {
+                Text(
+                    text = "Go Premium — Yearly (best value)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            purchaseError?.let { message ->
+                Text(
+                    text = message,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 10.dp),
                 )
-            } else {
-                // Not published yet — no external link at all, so the free tier
-                // never routes anyone to a dead upgrade page.
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+            }
+
+            Text(
+                text = "Billed through your Huawei ID on AppGallery. Cancel anytime in " +
+                    "AppGallery > Me > Payments and purchases > Subscriptions.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+            )
+
+            if (onRestore != null) {
+                TextButton(
+                    onClick = onRestore,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 24.dp),
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    ) {
-                        Text(
-                            text = "Coming soon to AppGallery",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "Premium will unlock through the official Mindset Frames " +
-                                "listing on Huawei AppGallery once it goes live. Everything " +
-                                "you track now stays yours — free, forever.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                }
+                        .padding(top = 2.dp)
+                        .defaultMinSize(minHeight = 44.dp),
+                ) { Text("Restore purchase") }
             }
             TextButton(
                 onClick = onDismiss,

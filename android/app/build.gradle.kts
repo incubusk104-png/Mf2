@@ -53,14 +53,22 @@ android {
         applicationId = "com.mindsetframes.habittracker"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.0.1"
+        // UPDATE RELEASE: must be strictly higher than the versionCode live on
+        // AppGallery — required both for the update to install over the
+        // existing app AND for IAP sandbox testing (sandbox activates only
+        // when the test build's versionCode exceeds the released one).
+        versionCode = 21
+        versionName = "1.1.0"
 
         val supabaseUrl = resolveRorkValue("SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_URL", "mindset.supabaseUrl")
         val supabaseAnonKey = resolveRorkValue("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY", "mindset.supabaseAnonKey")
+        // Strava OAuth client id — the PUBLIC numeric id from strava.com/settings/api
+        // (the client secret lives ONLY in the strava-token-exchange Edge Function).
+        val stravaClientId = resolveRorkValue("STRAVA_CLIENT_ID", "EXPO_PUBLIC_STRAVA_CLIENT_ID", "mindset.stravaClientId")
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        buildConfigField("String", "STRAVA_CLIENT_ID", "\"$stravaClientId\"")
 
         println(
             "Rork config — supabase: ${if (supabaseUrl.isBlank()) "missing (sync hidden)" else "resolved"}"
