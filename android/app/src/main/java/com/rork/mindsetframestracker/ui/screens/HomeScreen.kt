@@ -192,6 +192,22 @@ fun HomeScreen(
         viewModel.consumeTipMessage()
     }
 
+    // Subscription purchase/restore outcome — same one-shot event pattern.
+    val subscriptionMessage by viewModel.subscriptionMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(subscriptionMessage) {
+        val message = subscriptionMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeSubscriptionMessage()
+    }
+
+    // Strava / Huawei Health connection outcome (deep-link + auth results).
+    val stravaMessage by viewModel.stravaMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(stravaMessage) {
+        val message = stravaMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeStravaMessage()
+    }
+
     // Effective theme (SYSTEM resolved) for the header's quick light/dark toggle.
     val systemDark = isSystemInDarkTheme()
     val isDarkTheme = when (data.settings.themeMode) {

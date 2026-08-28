@@ -86,6 +86,17 @@
                     android:scheme="com.rork.mindsetframestracker"
                     android:host="auth-callback" />
             </intent-filter>
+            <!-- Strava OAuth return leg: the browser redirects to
+                 mindsetframes://strava-callback?code=... after the athlete
+                 approves access. StravaAuthClient.REDIRECT_URI must match. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="mindsetframes"
+                    android:host="strava-callback" />
+            </intent-filter>
         </activity>
 
         <provider

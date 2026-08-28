@@ -432,7 +432,11 @@ fun WeeklyScreen(viewModel: AppViewModel) {
     }
 
     if (showPremiumSheet) {
-        PremiumSheet(onDismiss = { showPremiumSheet = false })
+        PremiumSheet(
+            onDismiss = { showPremiumSheet = false },
+            onPurchaseStarted = { viewModel.onSubscriptionPurchaseStarted(it) },
+            onRestore = { viewModel.restoreSubscription() },
+        )
     }
 
     if (showPrivacyPolicy) {

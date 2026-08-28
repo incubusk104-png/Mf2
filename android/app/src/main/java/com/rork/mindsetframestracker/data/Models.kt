@@ -85,6 +85,23 @@ data class AppSettings(
      */
     val isPremium: Boolean = false,
     /**
+     * The active Huawei IAP subscription product id (e.g.
+     * "mindset_premium_monthly"). Set by SubscriptionBilling on a verified
+     * purchase or restore, cleared when the store reports no active sub.
+     * Drives the SubscriptionTier used by Entitlements (Strava is
+     * REGULAR-tier only). Null while [isPremium] is false or when premium
+     * was granted through a legacy path.
+     */
+    val subscriptionProductId: String? = null,
+    /** True once Huawei Health Kit authorization has been granted. */
+    val healthKitConnected: Boolean = false,
+    /** Strava OAuth tokens — held only on-device; exchange/refresh happens
+     *  through the strava-token-exchange Edge Function (secret never ships). */
+    val stravaAccessToken: String? = null,
+    val stravaRefreshToken: String? = null,
+    /** Strava access-token expiry, epoch SECONDS (Strava's own unit). */
+    val stravaExpiresAt: Long = 0,
+    /**
      * App display language. English (US/UK) is free everywhere, one regional
      * language ([freeRegionalLanguage]) is free for this install; all other
      * languages are Premium.
@@ -231,3 +248,20 @@ const val MAX_FREE_HABITS = 5
  * languages, unlimited habits, and PDF reports.
  */
 fun AppSettings.hasFeatureAccess(): Boolean = isPremium
+
+/**
+ * The billing tier this install is entitled to, derived from the active
+ * subscription product. Legacy premium grants without a stored product id
+ * map to REGULAR so no existing premium user loses features on update.
+ */
+fun AppSettings.subscriptionTier(): com.rork.mindsetframestracker.billing.SubscriptionTier {
+    if (!isPremium) return com.rork.mindsetframestracker.billing.SubscriptionTier.NONE
+    val fromProduct = subscriptionProductId?.let {
+        com.rork.mindsetframestracker.billing.Entitlements.tierForProductId(it)
+    }
+    return if (fromProduct != null && fromProduct != com.rork.mindsetframestracker.billing.SubscriptionTier.NONE) {
+        fromProduct
+    } else {
+        com.rork.mindsetframestracker.billing.SubscriptionTier.REGULAR
+    }
+}

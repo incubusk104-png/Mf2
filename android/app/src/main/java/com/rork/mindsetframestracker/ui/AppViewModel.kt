@@ -11,6 +11,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rork.mindsetframestracker.BuildConfig
 import com.rork.mindsetframestracker.auth.HuaweiAuthClient
+import com.rork.mindsetframestracker.billing.RestoreResult
+import com.rork.mindsetframestracker.billing.SubscriptionBilling
+import com.rork.mindsetframestracker.billing.SubscriptionResult
+import com.rork.mindsetframestracker.integrations.StravaAuthClient
+import com.rork.mindsetframestracker.integrations.StravaTokens
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.CloudBackupWorker
 import com.rork.mindsetframestracker.data.Dates
@@ -120,6 +125,215 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         runCatching { refreshCompanionUnlocks() }.onFailure {
             if (BuildConfig.DEBUG) Log.e("AppViewModel", "Companion unlock refresh failed: ${it.message}", it)
+        }
+        // Silent entitlement sync with Huawei IAP: restores premium after an
+        // app update / reinstall / device change, and picks up sandbox
+        // renewals. Unavailable (no HMS / not signed in) keeps current state.
+        runCatching { restoreSubscriptionSilently() }.onFailure {
+            if (BuildConfig.DEBUG) Log.e("AppViewModel", "Subscription restore failed: ${it.message}", it)
+        }
+    }
+
+    // ── Premium subscription (Huawei IAP) ─────────────────────────────
+
+    /**
+     * The product the user is currently buying — SubscriptionBilling launches
+     * the payment sheet through the classic startActivityForResult path, so
+     * MainActivity.onActivityResult needs this to attribute the result.
+     */
+    var pendingSubscriptionProductId: String = ""
+        private set
+
+    private val _subscriptionMessage = MutableStateFlow<String?>(null)
+    val subscriptionMessage: StateFlow<String?> = _subscriptionMessage.asStateFlow()
+
+    fun consumeSubscriptionMessage() {
+        _subscriptionMessage.value = null
+    }
+
+    /** Remember which product the in-flight purchase sheet belongs to. */
+    fun onSubscriptionPurchaseStarted(productId: String) {
+        pendingSubscriptionProductId = productId
+    }
+
+    /** Called from MainActivity.onActivityResult for SUBSCRIPTION_REQUEST_CODE. */
+    fun onSubscriptionPurchaseResult(result: SubscriptionResult) {
+        pendingSubscriptionProductId = ""
+        when (result) {
+            is SubscriptionResult.Success -> {
+                grantSubscription(result.productId)
+                _subscriptionMessage.value = "Premium unlocked — welcome aboard! \uD83C\uDF89"
+            }
+            is SubscriptionResult.Cancelled -> {
+                // Silent — the user closed the payment sheet.
+            }
+            is SubscriptionResult.Error -> {
+                _subscriptionMessage.value = result.message
+            }
+        }
+    }
+
+    /** "Restore purchase" — explicit user action from the premium sheet. */
+    fun restoreSubscription() {
+        viewModelScope.launch {
+            when (val restored = SubscriptionBilling.queryActiveSubscription(getApplication())) {
+                is RestoreResult.Active -> {
+                    grantSubscription(restored.productId)
+                    _subscriptionMessage.value = "Premium restored."
+                }
+                is RestoreResult.NotSubscribed ->
+                    _subscriptionMessage.value = "No active subscription found for this Huawei ID."
+                is RestoreResult.Unavailable ->
+                    _subscriptionMessage.value = "Couldn't reach AppGallery billing. Check your Huawei ID sign-in."
+            }
+        }
+    }
+
+    /** Startup sync: only ever changes state on a definitive store answer. */
+    private fun restoreSubscriptionSilently() {
+        viewModelScope.launch {
+            runCatching { SubscriptionBilling.checkSandbox(getApplication()) }
+            when (val restored = SubscriptionBilling.queryActiveSubscription(getApplication())) {
+                is RestoreResult.Active -> grantSubscription(restored.productId)
+                is RestoreResult.NotSubscribed -> {
+                    // Revoke only entitlements that were granted from a store
+                    // purchase — a legacy/manual premium flag (no product id)
+                    // is never touched by the silent check.
+                    val settings = _state.value.settings
+                    if (settings.isPremium && settings.subscriptionProductId != null) {
+                        update {
+                            it.copy(
+                                settings = it.settings.copy(
+                                    isPremium = false,
+                                    subscriptionProductId = null,
+                                ),
+                            )
+                        }
+                    }
+                }
+                is RestoreResult.Unavailable -> Unit // keep current entitlement
+            }
+        }
+    }
+
+    private fun grantSubscription(productId: String) {
+        update {
+            it.copy(
+                settings = it.settings.copy(
+                    isPremium = true,
+                    subscriptionProductId = productId.ifBlank { it.settings.subscriptionProductId },
+                ),
+            )
+        }
+    }
+
+    // ── Strava connection ─────────────────────────────────────────
+
+    private val _stravaMessage = MutableStateFlow<String?>(null)
+    val stravaMessage: StateFlow<String?> = _stravaMessage.asStateFlow()
+
+    fun consumeStravaMessage() {
+        _stravaMessage.value = null
+    }
+
+    fun isStravaConnected(): Boolean = !_state.value.settings.stravaRefreshToken.isNullOrBlank()
+
+    /** Deep-link return leg (MainActivity) — exchanges the code server-side. */
+    fun handleStravaAuthCode(code: String) {
+        viewModelScope.launch {
+            StravaAuthClient.exchangeCodeForToken(code)
+                .onSuccess { tokens ->
+                    saveStravaTokens(tokens)
+                    _stravaMessage.value = "Strava connected — your activities can now complete habits."
+                }
+                .onFailure {
+                    _stravaMessage.value = "Strava connection failed. Please try again."
+                    if (BuildConfig.DEBUG) Log.e("AppViewModel", "Strava code exchange failed", it)
+                }
+        }
+    }
+
+    fun onStravaConnectFailed(message: String) {
+        _stravaMessage.value = message
+    }
+
+    fun disconnectStrava() {
+        update {
+            it.copy(
+                settings = it.settings.copy(
+                    stravaAccessToken = null,
+                    stravaRefreshToken = null,
+                    stravaExpiresAt = 0,
+                ),
+            )
+        }
+        _stravaMessage.value = "Strava disconnected."
+    }
+
+    /**
+     * Pulls recent Strava activities into [habitId]. Refreshes the access
+     * token through the Edge Function first when it is about to expire.
+     */
+    fun syncStravaActivities(habitId: String, activityType: String) {
+        val settings = _state.value.settings
+        val refresh = settings.stravaRefreshToken
+        if (refresh.isNullOrBlank()) {
+            _stravaMessage.value = "Connect Strava first."
+            return
+        }
+        viewModelScope.launch {
+            val current = StravaTokens(
+                accessToken = settings.stravaAccessToken.orEmpty(),
+                refreshToken = refresh,
+                expiresAt = settings.stravaExpiresAt,
+            )
+            val fresh = StravaAuthClient.refreshTokenIfNeeded(current).getOrElse {
+                _stravaMessage.value = "Strava session expired — please reconnect."
+                return@launch
+            }
+            if (fresh != current) saveStravaTokens(fresh)
+            StravaAuthClient.fetchRecentActivities(getApplication(), fresh.accessToken, habitId, activityType)
+                .onSuccess { count ->
+                    _stravaMessage.value =
+                        if (count > 0) "Imported $count Strava activities." else "No new Strava activities yet."
+                }
+                .onFailure { _stravaMessage.value = "Couldn't fetch Strava activities. Try again later." }
+        }
+    }
+
+    private fun saveStravaTokens(tokens: StravaTokens) {
+        update {
+            it.copy(
+                settings = it.settings.copy(
+                    stravaAccessToken = tokens.accessToken,
+                    stravaRefreshToken = tokens.refreshToken,
+                    stravaExpiresAt = tokens.expiresAt,
+                ),
+            )
+        }
+    }
+
+    // ── Huawei Health Kit connection ─────────────────────────────────
+
+    /** Called from MainActivity.onActivityResult for HEALTH_AUTH_REQUEST_CODE. */
+    fun onHealthKitAuthResult(granted: Boolean) {
+        update { it.copy(settings = it.settings.copy(healthKitConnected = granted)) }
+        _stravaMessage.value =
+            if (granted) "Huawei Health connected." else "Huawei Health authorization was not granted."
+    }
+
+    /** Books today's Health Kit steps onto [habitId] as an activity record. */
+    fun syncHealthKitToHabit(habitId: String, activityType: String) {
+        if (!_state.value.settings.healthKitConnected) {
+            _stravaMessage.value = "Connect Huawei Health first (Settings > Activity sync)."
+            return
+        }
+        viewModelScope.launch {
+            val ok = com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+                .syncTodayToHabit(getApplication(), habitId, activityType)
+            _stravaMessage.value =
+                if (ok) "Today's steps synced from Huawei Health."
+                else "No step data available yet — check Huawei Health permissions."
         }
     }
 
