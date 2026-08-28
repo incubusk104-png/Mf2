@@ -706,6 +706,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    /**
+     * Adds a fully-formed [Habit] (already carrying its iconId + reminder time).
+     * Used by the icon grid on the Habits tab: tapping an icon builds the habit
+     * and schedules its alarm, then hands it here. Respects the free-tier cap.
+     */
+    fun addHabitObject(habit: Habit): Boolean {
+        if (!canAddHabit()) return false
+        update { data ->
+            if (data.habits.any { it.id == habit.id }) data
+            else data.copy(habits = data.habits + habit)
+        }
+        queueSync()
+        return true
+    }
+
     data class BulkAddResult(
         val added: List<String>,
         /** Names that couldn't be added because the free-tier cap was hit. */
