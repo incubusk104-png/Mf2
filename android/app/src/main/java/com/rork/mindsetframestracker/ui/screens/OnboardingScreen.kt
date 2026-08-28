@@ -25,10 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Spa
 import androidx.compose.material.icons.outlined.TrackChanges
@@ -329,42 +329,57 @@ private fun MoodExplainerPage() {
     }
 }
 
+/** A single icon tile in the explainer preview — mirrors the real Habits grid:
+ *  artwork with no background tile, a label, and a green check badge when picked. */
 @Composable
-private fun MockHabitRow(name: String, isChecked: Boolean, streak: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (isChecked) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-            contentDescription = null,
-            tint = if (isChecked) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp),
-        )
+private fun MockIconTile(iconRes: Int, label: String, isSelected: Boolean) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(vertical = 6.dp),
+    ) {
+        Box(contentAlignment = Alignment.TopEnd) {
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = label,
+                modifier = Modifier.size(48.dp),
+            )
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(androidx.compose.ui.graphics.Color(0xFF4CAF50)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
+        }
         Text(
-            text = name,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (isChecked) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier
-                .padding(start = 12.dp)
-                .weight(1f),
-        )
-        Icon(
-            imageVector = Icons.Filled.LocalFireDepartment,
-            contentDescription = null,
-            tint = if (isChecked) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = "$streak",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 2.dp),
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp),
         )
     }
 }
 
 @Composable
 private fun HabitsExplainerPage() {
+    // Use real catalog icons so the preview matches the actual Habits screen.
+    val catalog = com.rork.mindsetframestracker.data.HabitIconCatalog.icons
+    val previewIcons = remember {
+        catalog.filter { !it.isTodoList }.take(3)
+    }
+    val todoIcon = remember { catalog.firstOrNull { it.isTodoList } }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -380,29 +395,66 @@ private fun HabitsExplainerPage() {
             Column(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MockHabitRow(name = "Drink water", isChecked = true, streak = 6)
-                MockHabitRow(name = "5 min journaling", isChecked = false, streak = 3)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        repeat(7) { index ->
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .background(
-                                        color = if (index < 5) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outlineVariant,
-                                        shape = CircleShape,
-                                    ),
-                            )
-                        }
+                // Row of tappable icons — the first is shown "picked" with an alarm chip.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    previewIcons.forEachIndexed { index, icon ->
+                        MockIconTile(
+                            iconRes = icon.drawableRes,
+                            label = icon.label,
+                            isSelected = index == 0,
+                        )
                     }
-                    Text(
-                        text = appStrings().onbThisWeek,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 10.dp),
-                    )
+                }
+
+                // "Reminder set" chip — communicates that tapping arms an alarm.
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = appStrings().onbHabitsReminderChip,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+
+                // The To-Do List highlight — the custom-item + custom-time entry.
+                if (todoIcon != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(id = todoIcon.drawableRes),
+                            contentDescription = todoIcon.label,
+                            modifier = Modifier.size(36.dp),
+                        )
+                        Text(
+                            text = appStrings().onbHabitsTodoHint,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }

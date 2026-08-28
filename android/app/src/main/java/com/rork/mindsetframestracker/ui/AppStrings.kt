@@ -57,6 +57,8 @@ class AppStrings(private val table: Map<String, String>) {
     val onbMoodBody: String get() = s("onbMoodBody")
     val onbHabitsTitle: String get() = s("onbHabitsTitle")
     val onbHabitsBody: String get() = s("onbHabitsBody")
+    val onbHabitsReminderChip: String get() = s("onbHabitsReminderChip")
+    val onbHabitsTodoHint: String get() = s("onbHabitsTodoHint")
     val onbPickStarter: String get() = s("onbPickStarter")
     val onbChooseFew: String get() = s("onbChooseFew")
     val onbAddYourOwn: String get() = s("onbAddYourOwn")

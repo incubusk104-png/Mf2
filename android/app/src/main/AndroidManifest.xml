@@ -16,6 +16,13 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Re-schedule the daily reminder alarm after a device reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Habit reminders fire at an exact time. On Android 12 (API 31/32) this
+         permission is granted automatically, so the alarms are exact there
+         without a prompt. On Android 13+ (API 33+) it is user-controllable; the
+         scheduler checks AlarmManager.canScheduleExactAlarms() at runtime and
+         falls back to an inexact windowed alarm when it isn't granted, so the
+         app never crashes and reminders still fire. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Needed for usage stats tracking features -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
