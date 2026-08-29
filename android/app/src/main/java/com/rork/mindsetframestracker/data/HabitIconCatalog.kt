@@ -37,7 +37,6 @@ object HabitIconCatalog {
         HabitIcon("spend", R.drawable.ic_finance_coin_plus, "Track Spending", HabitCategory.FINANCE, 0xFF81C784, 20 * 60),
         HabitIcon("noSpend", R.drawable.ic_finance_wallet_noslash, "No Impulse Buy", HabitCategory.FINANCE, 0xFFE57373, 9 * 60),
         HabitIcon("running", R.drawable.ic_health_running, "Running", HabitCategory.HEALTH, 0xFFAED581, 6 * 60 + 30),
-        HabitIcon("walk2", R.drawable.ic_health_walk, "Walk", HabitCategory.HEALTH, 0xFFAED581, 18 * 60),
         HabitIcon("basketball", R.drawable.ic_health_basketball, "Basketball", HabitCategory.HEALTH, 0xFFAED581, 17 * 60),
         HabitIcon("gym", R.drawable.ic_health_gym_all_activity, "Gym", HabitCategory.HEALTH, 0xFFAED581, 6 * 60),
         HabitIcon("medicine", R.drawable.ic_health_take_medicine, "Take Medicine", HabitCategory.HEALTH, 0xFF4FC3F7, 8 * 60),
