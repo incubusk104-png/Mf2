@@ -56,7 +56,6 @@ private val STRAVA_TRACKABLE_IDS: Set<String> = setOf(
     // App's own fitness icons that map to Strava activity types
     "walking",
     "running",
-    "walk2",
     "basketball",
     "gym",
     "stretch",
@@ -130,7 +129,7 @@ fun isActivityTrackableIcon(iconId: String): Boolean =
  * expected activity type names (PascalCase per Strava API docs).
  */
 fun stravaActivityTypeFor(iconId: String): String = when (iconId) {
-    "walking", "walk2" -> "Walk"
+    "walking" -> "Walk"
     "running" -> "Run"
     "basketball" -> "Basketball"
     "gym" -> "Workout"

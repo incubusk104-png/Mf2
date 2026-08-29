@@ -56,7 +56,6 @@ object HuaweiHealthKitClient {
         // App's own fitness icons
         "walking",
         "running",
-        "walk2",
         "basketball",
         "gym",
         "stretch",
