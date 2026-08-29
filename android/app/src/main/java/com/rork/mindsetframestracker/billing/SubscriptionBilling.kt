@@ -41,6 +41,14 @@ sealed class RestoreResult {
  * Follows the same resolution-for-result pattern as TipBilling —
  * priceType = 2 for subscriptions (not 0, which is consumable).
  *
+ * ## HMS Core IAP environment
+ *
+ * Before calling `createPurchaseIntent`, we first call `isEnvReady()` to
+ * verify the Huawei IAP environment is available. If it returns a
+ * resolution (e.g. "sign in to Huawei ID" or "update HMS Core"), we
+ * show that resolution to the user. Without this step, purchases silently
+ * fail on devices where the user has HMS Core but hasn't signed in yet.
+ *
  * SANDBOX TESTING (purchase without being charged): add your Huawei ID as a
  * test account in AppGallery Connect > Users and permissions > Sandbox, and
  * upload this build with a HIGHER versionCode than the released one. Sandbox
@@ -53,6 +61,9 @@ object SubscriptionBilling {
     private const val TAG = "SubscriptionBilling"
     const val SUBSCRIPTION_REQUEST_CODE = 8890
 
+    /** Request code for IAP environment readiness (sign-in to Huawei ID). */
+    const val ENV_READY_REQUEST_CODE = 8891
+
     val KNOWN_PRODUCT_IDS = setOf(
         "mindset_premium_monthly",
         "mindset_premium_yearly",
@@ -60,7 +71,63 @@ object SubscriptionBilling {
         "mindset_premium_founding_yearly",
     )
 
+    /**
+     * Checks whether the IAP environment is ready (HMS Core installed,
+     * user signed in to Huawei ID, region supports IAP). If a resolution
+     * is needed (e.g. sign-in), it is launched automatically.
+     *
+     * Call this at app startup or before the first purchase attempt.
+     */
+    fun checkEnvironment(
+        activity: Activity,
+        onReady: () -> Unit = {},
+        onError: (String) -> Unit = {},
+    ) {
+        runCatching {
+            Iap.getIapClient(activity).isEnvReady
+                .addOnSuccessListener {
+                    Log.i(TAG, "IAP environment is ready")
+                    onReady()
+                }
+                .addOnFailureListener { e ->
+                    val apiException = e as? IapApiException
+                    val status = apiException?.status
+                    if (status != null && status.hasResolution()) {
+                        Log.i(TAG, "IAP env not ready — launching resolution (code=${status.statusCode})")
+                        try {
+                            status.startResolutionForResult(activity, ENV_READY_REQUEST_CODE)
+                        } catch (ex: IntentSender.SendIntentException) {
+                            Log.e(TAG, "isEnvReady resolution failed", ex)
+                            onError("Could not set up Huawei payment. Try updating HMS Core.")
+                        }
+                    } else {
+                        Log.w(TAG, "IAP env not ready, no resolution: ${e.message}")
+                        onError("Huawei payment is not available. Make sure HMS Core is installed and you're signed in to your Huawei ID.")
+                    }
+                }
+        }.onFailure { e ->
+            Log.e(TAG, "isEnvReady threw: ${e.message}", e)
+            onError("Could not check Huawei payment availability.")
+        }
+    }
+
     fun purchase(
+        activity: Activity,
+        productId: String,
+        onError: (String) -> Unit,
+    ) {
+        // First ensure the IAP environment is ready (user signed in, HMS Core ok).
+        checkEnvironment(
+            activity = activity,
+            onReady = {
+                doPurchase(activity, productId, onError)
+            },
+            onError = onError,
+        )
+    }
+
+    /** Internal: actually create the purchase intent after env check passes. */
+    private fun doPurchase(
         activity: Activity,
         productId: String,
         onError: (String) -> Unit,
@@ -88,8 +155,19 @@ object SubscriptionBilling {
                     }
                 }
                 .addOnFailureListener { e ->
-                    Log.e(TAG, "createPurchaseIntent failed for $productId", e)
-                    onError(e.message ?: "Unknown billing error")
+                    val code = (e as? IapApiException)?.statusCode
+                    Log.e(TAG, "createPurchaseIntent failed for $productId (code=$code)", e)
+                    // Handle specific error codes
+                    when (code) {
+                        OrderStatusCode.ORDER_PRODUCT_OWNED -> {
+                            // User already owns this subscription — trigger a restore
+                            onError("You already have an active subscription. Tap 'Restore purchase' to activate it.")
+                        }
+                        OrderStatusCode.ORDER_HWID_NOT_LOGIN -> {
+                            onError("Please sign in to your Huawei ID first.")
+                        }
+                        else -> onError(e.message ?: "Unknown billing error")
+                    }
                 }
         } catch (e: Exception) {
             Log.e(TAG, "createPurchaseIntent threw synchronously for $productId", e)
@@ -118,7 +196,13 @@ object SubscriptionBilling {
             OrderStatusCode.ORDER_PRODUCT_OWNED -> {
                 // Already subscribed (e.g. re-tap after a sandbox renewal) —
                 // treat as success and let restore pick up the entitlement.
-                onResult(SubscriptionResult.Success(info.inAppPurchaseData ?: "", info.inAppDataSignature ?: "", productId))
+                // Even if purchaseData is empty, we still grant premium via
+                // the productId that was being purchased.
+                val purchasedId = runCatching {
+                    JSONObject(info.inAppPurchaseData ?: "{}").optString("productId")
+                }.getOrNull()?.takeIf { it.isNotBlank() } ?: productId
+                Log.i(TAG, "ORDER_PRODUCT_OWNED for $purchasedId — granting premium")
+                onResult(SubscriptionResult.Success(info.inAppPurchaseData ?: "", info.inAppDataSignature ?: "", purchasedId))
             }
             else -> onResult(SubscriptionResult.Error("Purchase failed with code: ${info.returnCode}"))
         }
@@ -136,13 +220,16 @@ object SubscriptionBilling {
                 val req = OwnedPurchasesReq().apply { priceType = 2 }
                 Iap.getIapClient(context).obtainOwnedPurchases(req)
                     .addOnSuccessListener { result ->
-                        val active = result?.inAppPurchaseDataList.orEmpty().firstNotNullOfOrNull { raw ->
+                        val dataList = result?.inAppPurchaseDataList.orEmpty()
+                        Log.i(TAG, "obtainOwnedPurchases returned ${dataList.size} subscription(s)")
+                        val active = dataList.firstNotNullOfOrNull { raw ->
                             runCatching {
                                 val obj = JSONObject(raw)
                                 val productId = obj.optString("productId")
                                 // purchaseState 0 = purchased; subIsvalid true = renewing/active
                                 val purchased = obj.optInt("purchaseState", -1) == 0
                                 val valid = obj.optBoolean("subIsvalid", purchased)
+                                Log.i(TAG, "  sub: $productId, purchased=$purchased, valid=$valid")
                                 if (purchased && valid && productId in KNOWN_PRODUCT_IDS) productId else null
                             }.getOrNull()
                         }

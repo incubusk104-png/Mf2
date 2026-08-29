@@ -132,6 +132,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { restoreSubscriptionSilently() }.onFailure {
             if (BuildConfig.DEBUG) Log.e("AppViewModel", "Subscription restore failed: ${it.message}", it)
         }
+        // Consume any orphaned tip purchases left from previous sessions
+        // (e.g. process killed between purchase and consume call).
+        runCatching {
+            com.rork.mindsetframestracker.billing.TipBilling.consumeUnfinishedPurchases(application)
+        }.onFailure {
+            if (BuildConfig.DEBUG) Log.e("AppViewModel", "Tip consume cleanup failed: ${it.message}", it)
+        }
     }
 
     // ── Premium subscription (Huawei IAP) ─────────────────────────────

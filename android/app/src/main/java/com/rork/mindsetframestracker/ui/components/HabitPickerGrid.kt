@@ -40,10 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.HabitIconCatalog
-import java.util.UUID
 
 /**
  * Habit picker grid — clean 2-column layout inspired by premium habit apps.
@@ -58,7 +56,7 @@ import java.util.UUID
 @Composable
 fun HabitPickerGrid(
     selectedIconIds: Set<String>,
-    onHabitAdded: (Habit) -> Unit,
+    onIconTapped: (HabitIcon) -> Unit,
     onHabitRemoved: (String) -> Unit,
     onTodoListTapped: () -> Unit,
     modifier: Modifier = Modifier,
@@ -88,16 +86,7 @@ fun HabitPickerGrid(
                     when {
                         icon.isTodoList -> onTodoListTapped()
                         isSelected -> onHabitRemoved(icon.id)
-                        else -> {
-                            val habit = Habit(
-                                id = UUID.randomUUID().toString(),
-                                name = icon.label,
-                                createdAt = System.currentTimeMillis(),
-                                reminderMinutes = icon.defaultReminderMinutes,
-                                iconId = icon.id,
-                            )
-                            onHabitAdded(habit)
-                        }
+                        else -> onIconTapped(icon)
                     }
                 },
             )

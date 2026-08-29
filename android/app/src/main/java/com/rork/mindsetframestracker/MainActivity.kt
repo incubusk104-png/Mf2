@@ -188,8 +188,6 @@ class MainActivity : ComponentActivity() {
                 when (outcome) {
                     is com.rork.mindsetframestracker.billing.TipPurchaseResult.Success -> {
                         appViewModel.onTipPurchaseResult("Thank you for the tip! 💜")
-                        // TODO: send outcome.purchaseData + outcome.signature to
-                        // verify-tip-purchase once wired to your Supabase client.
                     }
                     is com.rork.mindsetframestracker.billing.TipPurchaseResult.Cancelled -> {
                         appViewModel.onTipPurchaseResult(null)
@@ -198,6 +196,14 @@ class MainActivity : ComponentActivity() {
                         appViewModel.onTipPurchaseResult(outcome.message)
                     }
                 }
+            }
+        } else if (requestCode == com.rork.mindsetframestracker.billing.SubscriptionBilling.ENV_READY_REQUEST_CODE) {
+            // IAP environment resolution completed (e.g. user signed in to
+            // Huawei ID). The next purchase attempt will succeed now.
+            if (resultCode == RESULT_OK) {
+                android.util.Log.i("MainActivity", "IAP environment is now ready after user action")
+            } else {
+                android.util.Log.w("MainActivity", "IAP environment resolution was cancelled/failed")
             }
         }
     }
