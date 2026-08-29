@@ -248,6 +248,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var showCompanionStudio by remember { mutableStateOf(false) }
     var showGrounding by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
+    var showActivityReport by remember { mutableStateOf(false) }
     val hasAccess = settings.hasFeatureAccess()
 
     var showTimePicker by remember { mutableStateOf(false) }
@@ -500,7 +501,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
         }
 
         // ── Activity Report ─────────────────────────────────────────
-        var showActivityReport by remember { mutableStateOf(false) }
         val hasAnyActivity = data.activityRecords.isNotEmpty()
         if (hasAnyActivity || settings.healthKitConnected || viewModel.isStravaConnected()) {
             SettingsCard(title = "Activity report") {
