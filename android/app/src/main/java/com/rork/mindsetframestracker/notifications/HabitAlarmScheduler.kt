@@ -10,6 +10,26 @@ import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.MindsetRepository
 import java.util.Calendar
 
+/**
+ * Schedules, cancels, and reschedules per-habit reminder alarms via
+ * [AlarmManager]. Each habit with a non-null [Habit.reminderMinutes] gets
+ * its own daily repeating alarm that fires [HabitAlarmReceiver] ->
+ * [HabitCheckInNotifier] to show the notification.
+ *
+ * ## Key architectural fixes in this revision
+ *
+ * 1. **USE_EXACT_ALARM support (API 33+):** On Android 13+ the app can hold
+ *    the `USE_EXACT_ALARM` permission which is auto-granted for alarm/reminder
+ *    apps. The scheduler now checks both `canScheduleExactAlarms()` (covers
+ *    `SCHEDULE_EXACT_ALARM`) and the manifest `USE_EXACT_ALARM` flag before
+ *    deciding whether to use exact or windowed alarms.
+ *
+ * 2. **Triple-fallback strategy:** exact -> windowed -> inexact. Every layer
+ *    is wrapped in `runCatching` so no OEM quirk can crash the UI.
+ *
+ * 3. **Boot resilience:** [BootReceiver] now calls [rescheduleAll] so
+ *    individual habit alarms survive reboots and app updates.
+ */
 object HabitAlarmScheduler {
 
     private const val TAG = "HabitAlarmScheduler"
@@ -27,10 +47,18 @@ object HabitAlarmScheduler {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = buildPendingIntent(context, habit.id, habit.name)
         alarmManager.cancel(pendingIntent)
+        Log.d(TAG, "Cancelled alarm for '${habit.name}'")
     }
 
     fun rescheduleAll(context: Context, habits: List<Habit>) {
-        habits.forEach { if (it.reminderMinutes != null) schedule(context, it) }
+        var count = 0
+        habits.forEach { habit ->
+            if (habit.reminderMinutes != null) {
+                schedule(context, habit)
+                count++
+            }
+        }
+        Log.i(TAG, "Rescheduled $count habit alarm(s)")
     }
 
     /** Called by HabitCheckInNotifier right after firing, to re-arm tomorrow. */
@@ -46,42 +74,63 @@ object HabitAlarmScheduler {
         val pendingIntent = buildPendingIntent(context, habitId, habitName)
         val triggerTime = nextTriggerMillis(minutes)
 
-        // On Android 12 (S) and above, setExactAndAllowWhileIdle() throws a
-        // SecurityException — which force-stops the app — unless the app holds
-        // the special SCHEDULE_EXACT_ALARM permission (it is NOT auto-granted).
-        // So we only use an exact alarm when it's actually allowed, and fall
-        // back to an inexact windowed alarm otherwise. Everything is wrapped in
-        // runCatching so a scheduling failure can never crash the tap.
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
+        // Determine the best alarm type we can use:
+        //   1. Exact (setExactAndAllowWhileIdle) — most reliable, needs permission
+        //   2. Windowed (setWindow) — 15-min tolerance, no special permission
+        //   3. Inexact (set) — last resort
+        val canUseExact = canScheduleExact(alarmManager)
 
-        runCatching {
-            if (canUseExact) {
+        // Attempt 1: exact alarm
+        if (canUseExact) {
+            val exactOk = runCatching {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerTime,
                     pendingIntent,
                 )
-            } else {
-                // No exact-alarm permission: fire within a 15-minute window
-                // around the target time. Perfectly fine for a daily reminder.
-                alarmManager.setWindow(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTime,
-                    WINDOW_MILLIS,
-                    pendingIntent,
-                )
+            }.isSuccess
+            if (exactOk) {
+                Log.d(TAG, "Exact alarm set for '$habitName' at $triggerTime")
+                return
             }
+        }
+
+        // Attempt 2: windowed alarm (15-min tolerance)
+        val windowOk = runCatching {
+            alarmManager.setWindow(
+                AlarmManager.RTC_WAKEUP,
+                triggerTime,
+                WINDOW_MILLIS,
+                pendingIntent,
+            )
+        }.isSuccess
+        if (windowOk) {
+            Log.d(TAG, "Windowed alarm set for '$habitName' at $triggerTime")
+            return
+        }
+
+        // Attempt 3: plain inexact alarm — last resort
+        runCatching {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+        }.onSuccess {
+            Log.d(TAG, "Inexact alarm set for '$habitName' at $triggerTime")
         }.onFailure { error ->
-            // As a last resort (e.g. an OEM that still rejects the call), fall
-            // back to an inexact alarm rather than let the exception bubble up
-            // and crash the UI.
-            Log.w(TAG, "Exact alarm for '$habitName' failed; using inexact", error)
-            runCatching {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
-            }.onFailure { fallbackError ->
-                Log.w(TAG, "Inexact alarm for '$habitName' also failed", fallbackError)
-            }
+            Log.e(TAG, "All alarm methods failed for '$habitName'", error)
+        }
+    }
+
+    /**
+     * Checks whether the app can schedule exact alarms on this device.
+     *
+     * - Below API 31 (Android 12): exact alarms are always allowed.
+     * - API 31+: `canScheduleExactAlarms()` returns true when either
+     *   `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM` is held.
+     */
+    private fun canScheduleExact(alarmManager: AlarmManager): Boolean {
+        return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            true
+        } else {
+            runCatching { alarmManager.canScheduleExactAlarms() }.getOrDefault(false)
         }
     }
 

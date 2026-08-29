@@ -103,22 +103,34 @@ export type Database = {
         Row: {
           created_at: string | null
           created_at_ms: number
+          duration_seconds: number | null
+          icon_id: string | null
           id: string
+          is_pinned: boolean
           name: string
+          reminder_minutes: number | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
           created_at_ms?: number
+          duration_seconds?: number | null
+          icon_id?: string | null
           id: string
+          is_pinned?: boolean
           name: string
+          reminder_minutes?: number | null
           user_id: string
         }
         Update: {
           created_at?: string | null
           created_at_ms?: number
+          duration_seconds?: number | null
+          icon_id?: string | null
           id?: string
+          is_pinned?: boolean
           name?: string
+          reminder_minutes?: number | null
           user_id?: string
         }
         Relationships: [
