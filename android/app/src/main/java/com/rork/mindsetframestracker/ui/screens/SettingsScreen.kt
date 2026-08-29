@@ -471,33 +471,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 },
                 onDisconnect = { viewModel.disconnectStrava() },
             )
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
-            // ── Health Connect (Android / Google) ──
-            val healthConnectConnected = settings.healthConnectConnected
-            IntegrationConnectorRow(
-                icon = Icons.Outlined.MonitorHeart,
-                title = "Health Connect",
-                connected = healthConnectConnected,
-                lastSyncMs = settings.healthConnectLastSyncMs,
-                autoSync = settings.healthConnectAutoSync,
-                onAutoSyncChange = { viewModel.setHealthConnectAutoSync(it) },
-                freeLabel = if (!hasAccess) "Premium" else null,
-                description = if (healthConnectConnected) {
-                    "Steps and sleep data flow into your habits."
-                } else {
-                    "Android's Health Connect — steps and sleep from Samsung Health, Fitbit, and more."
-                },
-                onConnect = {
-                    if (!hasAccess) showPremiumSheet = true
-                    else viewModel.setHealthConnectConnected(true)
-                },
-                onDisconnect = { viewModel.disconnectHealthConnect() },
-            )
         }
 
         // ── Activity Report ─────────────────────────────────────────
