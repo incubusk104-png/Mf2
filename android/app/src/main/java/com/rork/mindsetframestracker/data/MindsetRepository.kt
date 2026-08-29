@@ -34,7 +34,7 @@ class MindsetRepository(context: Context) {
         }
     }
 
-    /** Appends one ActivityRecord and persists — used by Huawei Health / Strava sync. */
+    /** Appends one ActivityRecord and persists — used by Fitbit / Polar / Health Connect / Strava sync. */
     fun saveActivityRecord(record: ActivityRecord) {
         val current = load()
         val updated = current.copy(activityRecords = current.activityRecords + record)

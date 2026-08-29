@@ -17,9 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Speed
@@ -66,7 +68,7 @@ fun ActivityInsightSheet(
 
 /**
  * Activity Report Sheet — full summary of synced fitness data from
- * Strava, Huawei Health Kit, and Health Connect.
+ * Strava, Fitbit, Polar, and Google Health Connect.
  *
  * Shows:
  *  - Summary stats (total activities, distance, duration, calories)
@@ -250,7 +252,7 @@ private fun EmptyReportCard() {
                 modifier = Modifier.padding(top = 12.dp),
             )
             Text(
-                text = "Connect Strava, Huawei Health, or Health Connect in Settings to start syncing your workouts.",
+                text = "Connect Fitbit, Polar, Health Connect, or Strava in Settings to start syncing your workouts.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -308,13 +310,15 @@ private fun SourceBreakdownRow(
 ) {
     val displayName = when (source) {
         "strava" -> "Strava"
-        "huawei_health" -> "Huawei Health"
+        "fitbit" -> "Fitbit"
+        "polar" -> "Polar"
         "health_connect" -> "Health Connect"
         else -> source.replaceFirstChar { it.uppercase() }
     }
     val displayIcon = when (source) {
         "strava" -> Icons.AutoMirrored.Outlined.DirectionsRun
-        "huawei_health" -> Icons.Outlined.MonitorHeart
+        "fitbit" -> Icons.Outlined.Watch
+        "polar" -> Icons.Outlined.FavoriteBorder
         else -> Icons.Outlined.MonitorHeart
     }
     Row(

@@ -15,7 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,10 +34,12 @@ import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.billing.Entitlements
 import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.billing.SubscriptionTier
-import com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+import com.rork.mindsetframestracker.integrations.FitbitClient
+import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
+import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 
-enum class ActivitySource { HUAWEI_HEALTH, STRAVA }
+enum class ActivitySource { FITBIT, POLAR, HEALTH_CONNECT, STRAVA }
 
 data class ActivitySourceOption(
     val source: ActivitySource,
@@ -116,12 +121,15 @@ private val STRAVA_TRACKABLE_IDS: Set<String> = setOf(
 
 /**
  * Returns true when the given icon id represents an activity that can
- * be tracked via an external source (Strava or Huawei Health).
+ * be tracked via an external source (Fitbit, Polar, Health Connect, or Strava).
  * Used by HabitsScreen to decide whether to show the source picker
  * when the user taps an activity-type icon.
  */
 fun isActivityTrackableIcon(iconId: String): Boolean =
-    iconId in STRAVA_TRACKABLE_IDS || HuaweiHealthKitClient.isActivitySupported(iconId)
+    iconId in STRAVA_TRACKABLE_IDS
+        || FitbitClient.isActivitySupported(iconId)
+        || PolarClient.isActivitySupported(iconId)
+        || MindsetHealthConnectClient.isActivitySupported(iconId)
 
 /**
  * Returns the Strava activity type string to use when fetching activities
@@ -191,17 +199,18 @@ fun stravaActivityTypeFor(iconId: String): String = when (iconId) {
 
 /**
  * Called when a habit icon whose id matches a known activity type is tapped.
- * Shows available tracking sources:
+ * Shows available tracking sources — all free except Strava (Premium):
  *
- * - **Huawei Health** — free for all users, shown when the icon's activity
- *   is supported by Health Kit (steps-based activities).
+ * - **Google Health Connect** — free, on-device step/sleep data (Android 14+
+ *   built-in, or install from Play Store on older versions).
+ * - **Fitbit** — free, OAuth Web API for step count.
+ * - **Polar** — free, AccessLink API for step/activity data.
  * - **Strava** — shown for ALL activity icons (Strava tracks every sport),
  *   locked when the user isn't on the REGULAR subscription tier so they see
  *   the upsell rather than the option silently vanishing.
  *
- * When only one source is available (e.g. a strava_alpine_ski icon with
- * no Huawei Health support), it's still shown so the user understands the
- * tracking flow. When no sources are available, the sheet auto-dismisses.
+ * When only one source is available, it's still shown so the user understands
+ * the tracking flow. When no sources are available, the sheet auto-dismisses.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -214,13 +223,37 @@ fun ActivitySourcePickerSheet(
     val sheetState = rememberModalBottomSheetState()
 
     val options = buildList {
-        // Huawei Health — free for everyone, but only for step-trackable activities
-        if (HuaweiHealthKitClient.isActivitySupported(habitIconId)) {
+        // Google Health Connect — free for everyone
+        if (MindsetHealthConnectClient.isActivitySupported(habitIconId)) {
             add(
                 ActivitySourceOption(
-                    source = ActivitySource.HUAWEI_HEALTH,
-                    label = "Huawei Health",
-                    subtitle = "Sync steps & activity data (free)",
+                    source = ActivitySource.HEALTH_CONNECT,
+                    label = "Google Health Connect",
+                    subtitle = "Sync steps from your phone & wearables (free)",
+                    isLocked = false,
+                )
+            )
+        }
+
+        // Fitbit — free for everyone
+        if (FitbitClient.isActivitySupported(habitIconId)) {
+            add(
+                ActivitySourceOption(
+                    source = ActivitySource.FITBIT,
+                    label = "Fitbit",
+                    subtitle = "Sync steps & activity from Fitbit (free)",
+                    isLocked = false,
+                )
+            )
+        }
+
+        // Polar — free for everyone
+        if (PolarClient.isActivitySupported(habitIconId)) {
+            add(
+                ActivitySourceOption(
+                    source = ActivitySource.POLAR,
+                    label = "Polar",
+                    subtitle = "Sync activity data from Polar (free)",
                     isLocked = false,
                 )
             )
@@ -277,7 +310,9 @@ fun ActivitySourcePickerSheet(
                     // Source icon
                     Icon(
                         imageVector = when (option.source) {
-                            ActivitySource.HUAWEI_HEALTH -> Icons.Filled.FitnessCenter
+                            ActivitySource.HEALTH_CONNECT -> Icons.Filled.MonitorHeart
+                            ActivitySource.FITBIT -> Icons.Filled.Watch
+                            ActivitySource.POLAR -> Icons.Filled.Favorite
                             ActivitySource.STRAVA -> Icons.Filled.DirectionsRun
                         },
                         contentDescription = null,

@@ -80,7 +80,9 @@ import com.rork.mindsetframestracker.BuildConfig
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -145,7 +147,8 @@ import com.rork.mindsetframestracker.billing.Entitlements
 import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.subscriptionTier
-import com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+import com.rork.mindsetframestracker.integrations.FitbitClient
+import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.SyncUiState
@@ -410,30 +413,94 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 
-            // ── Huawei Health Kit ──
-            val healthConnected = settings.healthKitConnected
+            // ── Google Health Connect ──
+            val hcConnected = settings.healthConnectConnected
             IntegrationConnectorRow(
                 icon = Icons.Outlined.MonitorHeart,
-                title = "Huawei Health",
-                connected = healthConnected,
-                lastSyncMs = settings.healthKitLastSyncMs,
-                autoSync = settings.healthKitAutoSync,
-                onAutoSyncChange = { viewModel.setHealthKitAutoSync(it) },
+                title = "Google Health Connect",
+                connected = hcConnected,
+                lastSyncMs = settings.healthConnectLastSyncMs,
+                autoSync = settings.healthConnectAutoSync,
+                onAutoSyncChange = { viewModel.setHealthConnectAutoSync(it) },
                 freeLabel = "Free",
-                description = if (healthConnected) {
-                    "Steps, calories, and distance sync to your activity habits."
+                description = if (hcConnected) {
+                    "Steps and sleep sync from your phone & wearables."
                 } else {
-                    "Connect to complete activity habits from your daily steps. Free for everyone."
+                    "Sync steps from your phone and connected wearables. Free for everyone."
                 },
                 onConnect = {
-                    val act = activity
-                    if (act == null || !HuaweiHealthKitClient.requestAuthorization(act)) {
-                        viewModel.onStravaConnectFailed(
-                            "Huawei Health isn't available on this device yet.",
-                        )
+                    // Health Connect uses the permission launcher registered in the Activity
+                    viewModel.setHealthConnectConnected(true)
+                },
+                onDisconnect = { viewModel.disconnectHealthConnect() },
+            )
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+
+            // ── Fitbit ──
+            val fitbitConnected = viewModel.isFitbitConnected()
+            IntegrationConnectorRow(
+                icon = Icons.Outlined.Watch,
+                title = "Fitbit",
+                connected = fitbitConnected,
+                lastSyncMs = settings.fitbitLastSyncMs,
+                autoSync = settings.fitbitAutoSync,
+                onAutoSyncChange = { viewModel.setFitbitAutoSync(it) },
+                freeLabel = "Free",
+                description = if (fitbitConnected) {
+                    "Steps and activity data sync from your Fitbit account."
+                } else {
+                    "Link your Fitbit account to import steps and activity. Free for everyone."
+                },
+                onConnect = {
+                    if (!FitbitClient.isConfigured) {
+                        viewModel.onStravaConnectFailed("Fitbit isn't configured for this build yet.")
+                    } else {
+                        runCatching {
+                            context.startActivity(FitbitClient.buildAuthIntent())
+                        }.onFailure {
+                            viewModel.onStravaConnectFailed("No browser available to open Fitbit.")
+                        }
                     }
                 },
-                onDisconnect = { viewModel.disconnectHealthKit() },
+                onDisconnect = { viewModel.disconnectFitbit() },
+            )
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+
+            // ── Polar ──
+            val polarConnected = viewModel.isPolarConnected()
+            IntegrationConnectorRow(
+                icon = Icons.Outlined.FavoriteBorder,
+                title = "Polar",
+                connected = polarConnected,
+                lastSyncMs = settings.polarLastSyncMs,
+                autoSync = settings.polarAutoSync,
+                onAutoSyncChange = { viewModel.setPolarAutoSync(it) },
+                freeLabel = "Free",
+                description = if (polarConnected) {
+                    "Steps and activity data sync from your Polar account."
+                } else {
+                    "Link your Polar account to import activity data. Free for everyone."
+                },
+                onConnect = {
+                    if (!PolarClient.isConfigured) {
+                        viewModel.onStravaConnectFailed("Polar isn't configured for this build yet.")
+                    } else {
+                        runCatching {
+                            context.startActivity(PolarClient.buildAuthIntent())
+                        }.onFailure {
+                            viewModel.onStravaConnectFailed("No browser available to open Polar.")
+                        }
+                    }
+                },
+                onDisconnect = { viewModel.disconnectPolar() },
             )
 
             HorizontalDivider(
@@ -475,7 +542,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
         // ── Activity Report ─────────────────────────────────────────
         val hasAnyActivity = data.activityRecords.isNotEmpty()
-        if (hasAnyActivity || settings.healthKitConnected || viewModel.isStravaConnected()) {
+        if (hasAnyActivity || viewModel.isFitbitConnected() || viewModel.isPolarConnected() || settings.healthConnectConnected || viewModel.isStravaConnected()) {
             SettingsCard(title = "Activity report") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(

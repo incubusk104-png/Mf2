@@ -30,7 +30,7 @@ data class Habit(
 data class ActivityRecord(
     val id: String,
     val habitId: String,
-    val source: String,          // "huawei_health" | "strava"
+    val source: String,          // "fitbit" | "polar" | "health_connect" | "strava"
     val activityType: String,    // "walking", "running", "cycling", etc.
     val timestamp: Long,
     val durationMinutes: Int? = null,
@@ -93,12 +93,20 @@ data class AppSettings(
      * was granted through a legacy path.
      */
     val subscriptionProductId: String? = null,
-    /** True once Huawei Health Kit authorization has been granted. */
-    val healthKitConnected: Boolean = false,
-    /** Epoch millis of the last successful Health Kit sync (0 = never). */
-    val healthKitLastSyncMs: Long = 0,
-    /** Auto-sync Health Kit data when opening the app. */
-    val healthKitAutoSync: Boolean = true,
+    /** Fitbit OAuth access token — held only on-device. */
+    val fitbitAccessToken: String? = null,
+    /** Fitbit OAuth refresh token — held only on-device. */
+    val fitbitRefreshToken: String? = null,
+    /** Epoch millis of the last successful Fitbit sync (0 = never). */
+    val fitbitLastSyncMs: Long = 0,
+    /** Auto-sync Fitbit data when opening the app. */
+    val fitbitAutoSync: Boolean = true,
+    /** Polar AccessLink access token — held only on-device. */
+    val polarAccessToken: String? = null,
+    /** Epoch millis of the last successful Polar sync (0 = never). */
+    val polarLastSyncMs: Long = 0,
+    /** Auto-sync Polar data when opening the app. */
+    val polarAutoSync: Boolean = true,
     /** Strava OAuth tokens — held only on-device; exchange/refresh happens
      *  through the strava-token-exchange Edge Function (secret never ships). */
     val stravaAccessToken: String? = null,

@@ -200,7 +200,7 @@ fun PremiumSheet(
                     ComparisonRow("PDF reports", blocked = true, premium = "Full export")
                     ComparisonRow("AI suggestions", blocked = true, premium = "Gemini-powered")
                     ComparisonRow("Strava sync", blocked = true, premium = "Auto-import")
-                    ComparisonRow("Huawei Health", free = "Included", premium = "Included")
+                    ComparisonRow("Fitbit / Polar / Health Connect", free = "Included", premium = "Included")
                     ComparisonRow("Cloud backup", free = "Included", premium = "Included")
                     ComparisonRow("Ads", free = "None", premium = "None")
                 }
@@ -347,7 +347,7 @@ fun PremiumSheet(
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                     Text(
-                        text = "Core tracker, Huawei Health sync, cloud backup, daily reminders, streak protection, companion studio, and grounding exercises are free forever. No ads anywhere.",
+                        text = "Core tracker, Fitbit & Polar & Health Connect sync, cloud backup, daily reminders, streak protection, companion studio, and grounding exercises are free forever. No ads anywhere.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(top = 4.dp),
