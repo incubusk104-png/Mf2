@@ -65,11 +65,43 @@ object HuaweiAuthClient {
     /** Account Kit status code: app not authorized in AppGallery Connect. */
     private const val STATUS_SCOPE_UNAUTHORIZED = 2002
 
-    /** True when HMS Core is installed and up to date on this device. */
-    fun isHmsAvailable(context: Context): Boolean = runCatching {
-        HuaweiApiAvailability.getInstance()
-            .isHuaweiMobileServicesAvailable(context) == ConnectionResult.SUCCESS
-    }.getOrDefault(false)
+    /**
+     * True when HMS Core is installed and usable on this device.
+     *
+     * **The 'code 1' fix**: [HuaweiApiAvailability.isHuaweiMobileServicesAvailable]
+     * returns [ConnectionResult.SUCCESS] (0) on native Huawei/Honor devices.
+     * On non-Huawei devices that sideloaded HMS Core the call often returns
+     * code **1** (`SERVICE_MISSING`), even though HMS Core IS installed and
+     * Account Kit works fine — because the check looks for the pre-installed
+     * system-level HMS Core package that only ships on Huawei ROMs.
+     *
+     * The old check (`== SUCCESS`) blocked every sideloaded-HMS device.
+     * The new logic:
+     *  1. Accept SUCCESS (native Huawei).
+     *  2. On any other code, fall back to a **package-manager probe**: if the
+     *     HMS Core APK (`com.huawei.hwid` or `com.huawei.hms.core`) is
+     *     actually installed, treat the device as HMS-capable and let Account
+     *     Kit try. Worst case, the sign-in intent fails gracefully.
+     *  3. Only return false when HMS Core truly isn't installed at all.
+     */
+    fun isHmsAvailable(context: Context): Boolean {
+        // Fast path: official API check
+        val code = hmsConnectionResult(context)
+        if (code == ConnectionResult.SUCCESS) return true
+
+        // Fallback: probe for HMS Core packages directly. Code 1
+        // (SERVICE_MISSING) fires on non-Huawei ROMs even when the user
+        // sideloaded HMS Core, so a package check is the reliable signal.
+        return isHmsCorePackageInstalled(context).also { found ->
+            if (found) {
+                Log.i(
+                    TAG,
+                    "HMS availability API returned code $code but HMS Core " +
+                        "package IS installed — treating as available",
+                )
+            }
+        }
+    }
 
     /**
      * Same check as [isHmsAvailable] but returns the raw HMS connection
@@ -89,6 +121,27 @@ object HuaweiAuthClient {
             Log.e(TAG, "HMS availability check threw: ${it::class.qualifiedName}: ${it.message}", it)
         }
         return result.getOrDefault(ConnectionResult.SERVICE_MISSING)
+    }
+
+    /**
+     * Checks whether any known HMS Core package is actually installed on
+     * the device, regardless of what the HMS availability API reports.
+     * This catches the common "code 1 on non-Huawei ROM" false negative.
+     */
+    private fun isHmsCorePackageInstalled(context: Context): Boolean {
+        val hmsCorePackages = listOf(
+            "com.huawei.hwid",           // Huawei ID (Account Kit)
+            "com.huawei.hms.core",       // HMS Core framework
+            "com.huawei.appmarket",      // AppGallery (ships with HMS)
+        )
+        val pm = context.packageManager
+        return hmsCorePackages.any { pkg ->
+            runCatching {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(pkg, 0)
+                true
+            }.getOrDefault(false)
+        }
     }
 
     /**

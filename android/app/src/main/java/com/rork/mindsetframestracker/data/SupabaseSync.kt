@@ -416,7 +416,12 @@ class SupabaseSync(context: Context) {
         }
 
     @Serializable
-    private data class HabitRecommendBody(val existing_habits: List<String>)
+    private data class HabitRecommendBody(
+        val existing_habits: List<String>,
+        val mood: String? = null,
+        val activity_summary: String? = null,
+        val context_type: String? = null,
+    )
 
     @Serializable
     data class RemoteHabitSuggestion(val name: String, val reason: String)
@@ -431,14 +436,24 @@ class SupabaseSync(context: Context) {
      * — so the caller can fall back to the on-device HabitRecommender
      * without ever surfacing an error to the user.
      */
-    suspend fun getAiHabitSuggestions(existingHabitNames: List<String>): List<RemoteHabitSuggestion>? {
+    suspend fun getAiHabitSuggestions(
+        existingHabitNames: List<String>,
+        mood: String? = null,
+        activitySummary: String? = null,
+        contextType: String? = null,
+    ): List<RemoteHabitSuggestion>? {
         if (!isConfigured || accessToken == null) return null
         return try {
             val response = client.post("$baseUrl/functions/v1/habit-recommend") {
                 header("apikey", anonKey)
                 header(HttpHeaders.Authorization, "Bearer $accessToken")
                 contentType(ContentType.Application.Json)
-                setBody(HabitRecommendBody(existingHabitNames))
+                setBody(HabitRecommendBody(
+                    existing_habits = existingHabitNames,
+                    mood = mood,
+                    activity_summary = activitySummary,
+                    context_type = contextType,
+                ))
             }
             if (!response.status.isSuccess()) {
                 Log.i(TAG, "AI habit recommend unavailable: ${response.status}")

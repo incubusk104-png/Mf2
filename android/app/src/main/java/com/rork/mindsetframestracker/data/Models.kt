@@ -95,12 +95,26 @@ data class AppSettings(
     val subscriptionProductId: String? = null,
     /** True once Huawei Health Kit authorization has been granted. */
     val healthKitConnected: Boolean = false,
+    /** Epoch millis of the last successful Health Kit sync (0 = never). */
+    val healthKitLastSyncMs: Long = 0,
+    /** Auto-sync Health Kit data when opening the app. */
+    val healthKitAutoSync: Boolean = true,
     /** Strava OAuth tokens — held only on-device; exchange/refresh happens
      *  through the strava-token-exchange Edge Function (secret never ships). */
     val stravaAccessToken: String? = null,
     val stravaRefreshToken: String? = null,
     /** Strava access-token expiry, epoch SECONDS (Strava's own unit). */
     val stravaExpiresAt: Long = 0,
+    /** Epoch millis of the last successful Strava sync (0 = never). */
+    val stravaLastSyncMs: Long = 0,
+    /** Auto-sync Strava activities when opening the app. */
+    val stravaAutoSync: Boolean = true,
+    /** Android Health Connect (Google) connected state. */
+    val healthConnectConnected: Boolean = false,
+    /** Epoch millis of last Health Connect sync. */
+    val healthConnectLastSyncMs: Long = 0,
+    /** Auto-sync Health Connect data when opening the app. */
+    val healthConnectAutoSync: Boolean = true,
     /**
      * App display language. English (US/UK) is free everywhere, one regional
      * language ([freeRegionalLanguage]) is free for this install; all other
