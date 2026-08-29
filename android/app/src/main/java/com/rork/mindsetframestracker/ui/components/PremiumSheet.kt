@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -19,14 +22,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -85,9 +92,8 @@ object AppGalleryLink {
 }
 
 /**
- * Premium upgrade sheet — lists everything included in Mindset Frames
- * Premium and starts the native Huawei IAP subscription purchase directly
- * (works for update builds and sandbox testers before the public listing).
+ * Premium upgrade sheet — polished with a clear Free vs Premium comparison
+ * table, feature breakdown by tier, and native Huawei IAP purchase buttons.
  *
  * [onPurchaseStarted] must record the product id in the ViewModel so
  * MainActivity.onActivityResult can attribute the purchase result;
@@ -116,6 +122,7 @@ fun PremiumSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 28.dp),
         ) {
+            // ── Header ──────────────────────────────────────────────
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth(),
@@ -150,36 +157,95 @@ fun PremiumSheet(
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // ── Free vs Premium comparison ──────────────────────────
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Feature",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1.4f),
+                        )
+                        Text(
+                            text = "Free",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(0.8f),
+                        )
+                        Text(
+                            text = "Premium",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(0.8f),
+                        )
+                    }
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    ComparisonRow("Habits", "Up to 5", "Unlimited")
+                    ComparisonRow("Daily prompts", "Basic", "Extended packs")
+                    ComparisonRow("Quote library", "Limited", "Full curated")
+                    ComparisonRow("Weekly insights", "Simple", "Advanced stats")
+                    ComparisonRow("Accent themes", "1 (Terracotta)", "All 13")
+                    ComparisonRow("Languages", "2", "All 26")
+                    ComparisonRow("PDF reports", blocked = true, premium = "Full export")
+                    ComparisonRow("AI suggestions", blocked = true, premium = "Gemini-powered")
+                    ComparisonRow("Strava sync", blocked = true, premium = "Auto-import")
+                    ComparisonRow("Health Connect", blocked = true, premium = "Steps & sleep")
+                    ComparisonRow("Huawei Health", free = "Included", premium = "Included")
+                    ComparisonRow("Cloud backup", free = "Included", premium = "Included")
+                    ComparisonRow("Ads", free = "None", premium = "None")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ── Feature highlights ──────────────────────────────────
+            Text(
+                text = "Everything in Premium",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                PremiumBenefitRow(
+                    icon = Icons.Outlined.AutoAwesome,
+                    title = "Unlimited habits & exclusive quotes",
+                    description = "Track as many habits as you like. The full curated quote collection, hand-picked for each mindset frame.",
+                )
                 PremiumBenefitRow(
                     icon = Icons.Outlined.Psychology,
                     title = "Extended prompt packs",
                     description = "Deeper daily reflective prompts beyond the free pack, tuned to your mood.",
                 )
                 PremiumBenefitRow(
-                    icon = Icons.Outlined.AutoAwesome,
-                    title = "Exclusive quote library",
-                    description = "The full curated quote collection, hand-picked for each mindset frame.",
-                )
-                PremiumBenefitRow(
                     icon = Icons.Outlined.Insights,
                     title = "Advanced weekly insights",
-                    description = "Completion rate, best day, and most consistent habit in your weekly review.",
+                    description = "Completion rate, best day, most consistent habit, and trend analysis in your weekly review.",
+                )
+                PremiumBenefitRow(
+                    icon = Icons.Outlined.SmartToy,
+                    title = "AI-powered suggestions",
+                    description = "Gemini AI suggests habits and daily to-dos based on your mood, existing routine, and fitness data.",
+                )
+                PremiumBenefitRow(
+                    icon = Icons.Outlined.FitnessCenter,
+                    title = "Strava & Health Connect sync",
+                    description = "Auto-import runs, rides, and walks from Strava. Steps and sleep from Health Connect.",
                 )
                 PremiumBenefitRow(
                     icon = Icons.Outlined.Palette,
-                    title = "12 exclusive accent themes",
-                    description = "Sunrise, Forest, Lullaby, Sakura, Ocean, Lavender, Honey, Berry, Mint Candy, Peach, Midnight, and Rosewood.",
-                )
-                PremiumBenefitRow(
-                    icon = Icons.Outlined.Translate,
-                    title = "All 26 languages",
-                    description = "Unlock every world language beyond your two free ones — English (US & UK) plus your region's language.",
-                )
-                PremiumBenefitRow(
-                    icon = Icons.Filled.CheckCircle,
-                    title = "Unlimited habits",
-                    description = "Track as many habits as you like — the 5-habit free cap disappears.",
+                    title = "13 accent themes & all 26 languages",
+                    description = "Sunrise, Forest, Sakura, Ocean, and 9 more. Every world language unlocked.",
                 )
                 PremiumBenefitRow(
                     icon = Icons.Outlined.PictureAsPdf,
@@ -188,8 +254,9 @@ fun PremiumSheet(
                 )
             }
 
-            // Direct Huawei IAP subscription purchase — sandbox test accounts
-            // see the sandbox payment sheet and are never charged.
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Purchase buttons ────────────────────────────────────
             Button(
                 onClick = {
                     val act = activity ?: return@Button
@@ -205,14 +272,15 @@ fun PremiumSheet(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 24.dp)
                     .defaultMinSize(minHeight = 52.dp),
             ) {
-                Text(
-                    text = "Go Premium — Monthly",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Go Premium — Monthly",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
             Button(
                 onClick = {
@@ -228,11 +296,17 @@ fun PremiumSheet(
                     .padding(top = 10.dp)
                     .defaultMinSize(minHeight = 52.dp),
             ) {
-                Text(
-                    text = "Go Premium — Yearly (best value)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Go Premium — Yearly",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Best value — save over 40%",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
 
             purchaseError?.let { message ->
@@ -258,12 +332,36 @@ fun PremiumSheet(
                     .padding(top = 10.dp),
             )
 
+            // ── Always-free callout ─────────────────────────────────
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Always free, always yours",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    Text(
+                        text = "Core tracker, Huawei Health sync, cloud backup, daily reminders, streak protection, companion studio, and grounding exercises are free forever. No ads anywhere.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+
             if (onRestore != null) {
                 TextButton(
                     onClick = onRestore,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 2.dp)
+                        .padding(top = 6.dp)
                         .defaultMinSize(minHeight = 44.dp),
                 ) { Text("Restore purchase") }
             }
@@ -274,6 +372,66 @@ fun PremiumSheet(
                     .padding(top = 4.dp)
                     .defaultMinSize(minHeight = 48.dp),
             ) { Text("Maybe later") }
+        }
+    }
+}
+
+/** One comparison row in the Free vs Premium table. */
+@Composable
+private fun ComparisonRow(
+    feature: String,
+    free: String? = null,
+    premium: String,
+    blocked: Boolean = false,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+    ) {
+        Text(
+            text = feature,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1.4f),
+        )
+        if (blocked) {
+            Icon(
+                imageVector = Icons.Outlined.Block,
+                contentDescription = "Not included",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier
+                    .weight(0.8f)
+                    .size(16.dp),
+            )
+        } else {
+            Text(
+                text = free ?: "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(0.8f),
+            )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.weight(0.8f),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(12.dp),
+            )
+            Text(
+                text = premium,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 3.dp),
+                maxLines = 1,
+            )
         }
     }
 }

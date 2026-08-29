@@ -401,46 +401,63 @@ fun SettingsScreen(viewModel: AppViewModel) {
         }
 
         // ── Activity integrations ─────────────────────────────────────
-        SettingsCard(title = "Activity sync") {
+        SettingsCard(title = "Activity sync", animateSize = !settings.reducedMotion) {
+            Text(
+                text = "Connect fitness services to automatically complete activity habits from your real workouts.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            // ── Huawei Health Kit ──
             val healthConnected = settings.healthKitConnected
-            WellbeingRow(
+            IntegrationConnectorRow(
                 icon = Icons.Outlined.MonitorHeart,
                 title = "Huawei Health",
+                connected = healthConnected,
+                lastSyncMs = settings.healthKitLastSyncMs,
+                autoSync = settings.healthKitAutoSync,
+                onAutoSyncChange = { viewModel.setHealthKitAutoSync(it) },
+                freeLabel = "Free",
                 description = if (healthConnected) {
-                    "Connected — steps can complete your walking and running habits."
+                    "Steps, calories, and distance sync to your activity habits."
                 } else {
                     "Connect to complete activity habits from your daily steps. Free for everyone."
                 },
-                actionLabel = if (healthConnected) null else "Connect",
-                onClick = if (healthConnected) null else {
-                    {
-                        val act = activity
-                        if (act == null || !HuaweiHealthKitClient.requestAuthorization(act)) {
-                            viewModel.onStravaConnectFailed(
-                                "Huawei Health isn't available on this device yet.",
-                            )
-                        }
+                onConnect = {
+                    val act = activity
+                    if (act == null || !HuaweiHealthKitClient.requestAuthorization(act)) {
+                        viewModel.onStravaConnectFailed(
+                            "Huawei Health isn't available on this device yet.",
+                        )
                     }
                 },
+                onDisconnect = { viewModel.disconnectHealthKit() },
             )
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+
+            // ── Strava ──
             val stravaConnected = viewModel.isStravaConnected()
             val stravaEntitled = Entitlements.hasAccess(settings.subscriptionTier(), Feature.STRAVA)
-            WellbeingRow(
+            IntegrationConnectorRow(
                 icon = Icons.AutoMirrored.Outlined.DirectionsRun,
                 title = "Strava",
+                connected = stravaConnected,
+                lastSyncMs = settings.stravaLastSyncMs,
+                autoSync = settings.stravaAutoSync,
+                onAutoSyncChange = { viewModel.setStravaAutoSync(it) },
+                freeLabel = if (!stravaEntitled) "Premium" else null,
                 description = when {
-                    stravaConnected -> "Connected — recent activities sync to your habits."
+                    stravaConnected -> "Runs, rides, and walks auto-import to your habits."
                     stravaEntitled -> "Link your Strava account to import runs, rides, and walks."
                     else -> "Included with Premium — link Strava to import runs, rides, and walks."
                 },
-                actionLabel = when {
-                    stravaConnected -> "Disconnect"
-                    stravaEntitled -> "Connect"
-                    else -> "Premium"
-                },
-                onClick = {
+                onConnect = {
                     when {
-                        stravaConnected -> viewModel.disconnectStrava()
                         stravaEntitled && !StravaAuthClient.isConfigured ->
                             viewModel.onStravaConnectFailed("Strava isn't configured for this build yet.")
                         stravaEntitled -> runCatching {
@@ -451,8 +468,84 @@ fun SettingsScreen(viewModel: AppViewModel) {
                         else -> showPremiumSheet = true
                     }
                 },
-                modifier = Modifier.padding(top = 6.dp),
+                onDisconnect = { viewModel.disconnectStrava() },
             )
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+
+            // ── Health Connect (Android / Google) ──
+            val healthConnectConnected = settings.healthConnectConnected
+            IntegrationConnectorRow(
+                icon = Icons.Outlined.MonitorHeart,
+                title = "Health Connect",
+                connected = healthConnectConnected,
+                lastSyncMs = settings.healthConnectLastSyncMs,
+                autoSync = settings.healthConnectAutoSync,
+                onAutoSyncChange = { viewModel.setHealthConnectAutoSync(it) },
+                freeLabel = if (!hasAccess) "Premium" else null,
+                description = if (healthConnectConnected) {
+                    "Steps and sleep data flow into your habits."
+                } else {
+                    "Android's Health Connect — steps and sleep from Samsung Health, Fitbit, and more."
+                },
+                onConnect = {
+                    if (!hasAccess) showPremiumSheet = true
+                    else viewModel.setHealthConnectConnected(true)
+                },
+                onDisconnect = { viewModel.disconnectHealthConnect() },
+            )
+        }
+
+        // ── Activity Report ─────────────────────────────────────────
+        var showActivityReport by remember { mutableStateOf(false) }
+        val hasAnyActivity = data.activityRecords.isNotEmpty()
+        if (hasAnyActivity || settings.healthKitConnected || viewModel.isStravaConnected()) {
+            SettingsCard(title = "Activity report") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Insights,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)) {
+                        Text("View synced activity data", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = if (hasAnyActivity) {
+                                "${data.activityRecords.size} activities from ${
+                                    data.activityRecords.map { it.source }.distinct().joinToString(" & ") {
+                                        it.replace("_", " ").replaceFirstChar { c -> c.uppercase() }
+                                    }
+                                }"
+                            } else {
+                                "Once you sync, your fitness summary appears here."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showActivityReport = true },
+                    enabled = hasAnyActivity,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .defaultMinSize(minHeight = 48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Insights,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Open report", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
         }
 
         SettingsCard(title = s.settingsAds) {
@@ -1360,6 +1453,13 @@ fun SettingsScreen(viewModel: AppViewModel) {
         )
     }
 
+    if (showActivityReport) {
+        com.rork.mindsetframestracker.ui.components.ActivityReportSheet(
+            records = data.activityRecords,
+            onDismiss = { showActivityReport = false },
+        )
+    }
+
     if (showCompanionStudio) {
         com.rork.mindsetframestracker.ui.avatar.CompanionStudioSheet(
             viewModel = viewModel,
@@ -1888,6 +1988,156 @@ private fun WellbeingRow(
             TextButton(onClick = onClick) { Text(actionLabel) }
         }
     }
+}
+
+/**
+ * Rich connector row for fitness integrations: shows status badge,
+ * last-sync time, auto-sync toggle, and connect/disconnect button.
+ */
+@Composable
+private fun IntegrationConnectorRow(
+    icon: ImageVector,
+    title: String,
+    connected: Boolean,
+    lastSyncMs: Long,
+    autoSync: Boolean,
+    onAutoSyncChange: (Boolean) -> Unit,
+    freeLabel: String?,
+    description: String,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (connected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (connected) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(start = 8.dp),
+                        ) {
+                            Text(
+                                text = "Connected",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                    if (freeLabel != null && !connected) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(start = 8.dp),
+                        ) {
+                            Text(
+                                text = freeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        if (connected) {
+            // Last sync time
+            if (lastSyncMs > 0L) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 34.dp, top = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AccessTime,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = "Last sync: ${formatIntegrationSyncTime(lastSyncMs)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+            // Auto-sync toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(start = 34.dp, top = 4.dp)
+                    .fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Auto-sync on app open",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = autoSync,
+                    onCheckedChange = onAutoSyncChange,
+                )
+            }
+            // Disconnect button
+            TextButton(
+                onClick = onDisconnect,
+                modifier = Modifier.padding(start = 22.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Block,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = "Disconnect",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+        } else {
+            // Connect button
+            OutlinedButton(
+                onClick = onConnect,
+                modifier = Modifier
+                    .padding(start = 34.dp, top = 8.dp)
+                    .defaultMinSize(minHeight = 40.dp),
+            ) {
+                Text("Connect")
+            }
+        }
+    }
+}
+
+private fun formatIntegrationSyncTime(lastSyncAtMs: Long): String {
+    val elapsed = System.currentTimeMillis() - lastSyncAtMs
+    return if (elapsed < 60_000L) "Just now"
+    else DateUtils.getRelativeTimeSpanString(lastSyncAtMs).toString()
 }
 
 private fun formatBackupTime(lastSyncAtMs: Long): String {

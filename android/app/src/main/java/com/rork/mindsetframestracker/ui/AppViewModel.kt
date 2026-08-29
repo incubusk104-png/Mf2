@@ -301,6 +301,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (fresh != current) saveStravaTokens(fresh)
             StravaAuthClient.fetchRecentActivities(getApplication(), fresh.accessToken, habitId, activityType)
                 .onSuccess { count ->
+                    update { it.copy(settings = it.settings.copy(stravaLastSyncMs = System.currentTimeMillis())) }
                     _stravaMessage.value =
                         if (count > 0) "Imported $count Strava activities." else "No new Strava activities yet."
                 }
@@ -338,9 +339,72 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val ok = com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
                 .syncTodayToHabit(getApplication(), habitId, activityType)
+            if (ok) {
+                update { it.copy(settings = it.settings.copy(healthKitLastSyncMs = System.currentTimeMillis())) }
+            }
             _stravaMessage.value =
                 if (ok) "Today's steps synced from Huawei Health."
                 else "No step data available yet — check Huawei Health permissions."
+        }
+    }
+
+    // ── Integration auto-sync toggles ───────────────────────────────
+
+    fun setHealthKitAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(healthKitAutoSync = enabled)) }
+    }
+
+    fun setStravaAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(stravaAutoSync = enabled)) }
+    }
+
+    fun setHealthConnectAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(healthConnectAutoSync = enabled)) }
+    }
+
+    fun disconnectHealthKit() {
+        update {
+            it.copy(settings = it.settings.copy(
+                healthKitConnected = false,
+                healthKitLastSyncMs = 0,
+            ))
+        }
+        _stravaMessage.value = "Huawei Health disconnected."
+    }
+
+    fun setHealthConnectConnected(connected: Boolean) {
+        update { it.copy(settings = it.settings.copy(healthConnectConnected = connected)) }
+        _stravaMessage.value = if (connected) "Health Connect connected." else "Health Connect disconnected."
+    }
+
+    fun disconnectHealthConnect() {
+        update {
+            it.copy(settings = it.settings.copy(
+                healthConnectConnected = false,
+                healthConnectLastSyncMs = 0,
+            ))
+        }
+        _stravaMessage.value = "Health Connect disconnected."
+    }
+
+    /**
+     * Auto-sync trigger: called once after app start to silently pull
+     * latest data from all connected integrations that have auto-sync on.
+     */
+    fun runAutoSync() {
+        val s = _state.value.settings
+        val habits = _state.value.habits
+        val firstFitnessHabit = habits.firstOrNull { habit ->
+            habit.iconId != null && com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+                .isActivitySupported(habit.iconId!!)
+        }
+        // Auto-sync Huawei Health Kit
+        if (s.healthKitConnected && s.healthKitAutoSync && firstFitnessHabit != null) {
+            syncHealthKitToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
+        }
+        // Auto-sync Strava
+        if (!s.stravaRefreshToken.isNullOrBlank() && s.stravaAutoSync && firstFitnessHabit != null) {
+            syncStravaActivities(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "running")
         }
     }
 
@@ -985,14 +1049,48 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * AI-powered suggestions when signed in and the free-tier proxy responds;
      * falls back to the zero-cost on-device HabitRecommender on any failure
      * (signed out, network, daily quota hit) so the user always gets a list.
+     *
+     * Now passes the user's current mood and a brief activity summary so
+     * Gemini can tailor suggestions to today's state — overwhelmed users
+     * get lighter tasks, motivated users get stretch goals.
      */
-    suspend fun getSuggestions(): List<HabitSuggestion> {
-        val habitNames = _state.value.habits.map { it.name }
-        val remote = supabaseSync.getAiHabitSuggestions(habitNames)
+    suspend fun getSuggestions(contextType: String? = null): List<HabitSuggestion> {
+        val data = _state.value
+        val habitNames = data.habits.map { it.name }
+        val currentMood = data.moodHistory[Dates.todayKey()]?.name?.lowercase()
+        val activitySummary = buildActivitySummary(data)
+        val remote = supabaseSync.getAiHabitSuggestions(
+            habitNames,
+            mood = currentMood,
+            activitySummary = activitySummary,
+            contextType = contextType,
+        )
         return if (remote != null && remote.isNotEmpty()) {
             remote.map { HabitSuggestion(name = it.name, category = HabitCategory.HEALTH, reason = it.reason) }
         } else {
             HabitRecommender.suggest(habitNames)
+        }
+    }
+
+    /**
+     * AI-powered daily to-do suggestions — mood-aware, activity-aware
+     * actionable items for today. Premium feature (AI_INSIGHTS).
+     */
+    suspend fun getTodoSuggestions(): List<HabitSuggestion> {
+        return getSuggestions(contextType = "todos")
+    }
+
+    /** Builds a short activity summary string to give Gemini context. */
+    private fun buildActivitySummary(data: AppData): String? {
+        val records = data.activityRecords.takeIf { it.isNotEmpty() } ?: return null
+        val totalActivities = records.size
+        val sources = records.map { it.source }.distinct().joinToString(", ")
+        val totalSteps = records.mapNotNull { it.steps }.sum()
+        val totalMinutes = records.mapNotNull { it.durationMinutes }.sum()
+        return buildString {
+            append("$totalActivities activities from $sources")
+            if (totalSteps > 0) append(", $totalSteps steps total")
+            if (totalMinutes > 0) append(", ${totalMinutes}min total exercise")
         }
     }
 
