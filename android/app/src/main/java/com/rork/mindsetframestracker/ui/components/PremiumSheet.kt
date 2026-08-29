@@ -29,7 +29,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.Translate
+
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -200,7 +200,6 @@ fun PremiumSheet(
                     ComparisonRow("PDF reports", blocked = true, premium = "Full export")
                     ComparisonRow("AI suggestions", blocked = true, premium = "Gemini-powered")
                     ComparisonRow("Strava sync", blocked = true, premium = "Auto-import")
-                    ComparisonRow("Health Connect", blocked = true, premium = "Steps & sleep")
                     ComparisonRow("Huawei Health", free = "Included", premium = "Included")
                     ComparisonRow("Cloud backup", free = "Included", premium = "Included")
                     ComparisonRow("Ads", free = "None", premium = "None")
@@ -239,8 +238,8 @@ fun PremiumSheet(
                 )
                 PremiumBenefitRow(
                     icon = Icons.Outlined.FitnessCenter,
-                    title = "Strava & Health Connect sync",
-                    description = "Auto-import runs, rides, and walks from Strava. Steps and sleep from Health Connect.",
+                    title = "Strava sync",
+                    description = "Auto-import runs, rides, and walks from Strava to automatically complete activity habits.",
                 )
                 PremiumBenefitRow(
                     icon = Icons.Outlined.Palette,
@@ -261,8 +260,8 @@ fun PremiumSheet(
                 onClick = {
                     val act = activity ?: return@Button
                     purchaseError = null
-                    onPurchaseStarted("mindset_premium_monthly")
-                    SubscriptionBilling.purchase(act, "mindset_premium_monthly") { message ->
+                    onPurchaseStarted("mindset_premium_yearly")
+                    SubscriptionBilling.purchase(act, "mindset_premium_yearly") { message ->
                         purchaseError = message
                     }
                 },
@@ -276,9 +275,13 @@ fun PremiumSheet(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Go Premium — Monthly",
+                        text = "Go Premium — Yearly",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Best value — save over 40%",
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }
@@ -286,8 +289,8 @@ fun PremiumSheet(
                 onClick = {
                     val act = activity ?: return@Button
                     purchaseError = null
-                    onPurchaseStarted("mindset_premium_yearly")
-                    SubscriptionBilling.purchase(act, "mindset_premium_yearly") { message ->
+                    onPurchaseStarted("mindset_premium_monthly")
+                    SubscriptionBilling.purchase(act, "mindset_premium_monthly") { message ->
                         purchaseError = message
                     }
                 },
@@ -298,13 +301,9 @@ fun PremiumSheet(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Go Premium — Yearly",
+                        text = "Go Premium — Monthly",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "Best value — save over 40%",
-                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }
