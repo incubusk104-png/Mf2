@@ -45,10 +45,16 @@
          Core here, HuaweiApiAvailability.isHuaweiMobileServicesAvailable()
          can't see HMS Core is installed even when it genuinely is, and
          always reports SERVICE_MISSING (code 1) — this is what was
-         blocking Huawei sign-in on devices that DO have HMS Core. -->
+         blocking Huawei sign-in on devices that DO have HMS Core.
+
+         com.huawei.health is the Huawei Health app that Health Kit
+         launches for user authorization (step-read consent screen).
+         Without it here, the Health Kit authorization intent may fail
+         to resolve on Android 11+ devices. -->
     <queries>
         <package android:name="com.huawei.hwid" />
         <package android:name="com.huawei.appmarket" />
+        <package android:name="com.huawei.health" />
         <intent>
             <action android:name="com.huawei.hms.core.aidlservice" />
         </intent>
