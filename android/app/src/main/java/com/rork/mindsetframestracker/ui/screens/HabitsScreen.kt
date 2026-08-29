@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.subscriptionTier
@@ -91,6 +92,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
     var showTodoDialog by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
 
+    // Alarm picker state: when the user taps any non-TodoList icon, we show
+    // a time picker pre-filled with the icon's default alarm time.
+    var alarmPickerIcon by remember { mutableStateOf<HabitIcon?>(null) }
+
     // Activity source picker state: when the user taps an activity-trackable
     // icon, we store the newly created habit info here and show the sheet.
     var activityPickerHabitId by remember { mutableStateOf<String?>(null) }
@@ -128,32 +133,11 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     )
                 }
             },
-            onHabitAdded = { habit ->
-                if (viewModel.addHabitObject(habit)) {
-                    // ── ARM THE ALARM ──
-                    HabitAlarmScheduler.schedule(context, habit)
-
-                    // ── SYNC TO CLOUD ──
-                    viewModel.queueSync()
-
-                    val timeStr = formatAlarmTime(habit.reminderMinutes)
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            "Added ${habit.name} — alarm set for $timeStr",
-                        )
-                    }
-
-                    // ── OFFER ACTIVITY SOURCE PICKER ──
-                    // If this icon represents a physical activity (running,
-                    // strava_yoga, gym, etc.), immediately show the source
-                    // picker so the user can connect Strava or Huawei Health.
-                    val iconId = habit.iconId
-                    if (iconId != null && isActivityTrackableIcon(iconId)) {
-                        activityPickerHabitId = habit.id
-                        activityPickerIconId = iconId
-                    }
+            onIconTapped = { icon ->
+                // Check free-tier cap before showing the time picker.
+                if (viewModel.canAddHabit()) {
+                    alarmPickerIcon = icon
                 } else {
-                    // Cap reached on the free tier.
                     scope.launch {
                         val result = snackbarHostState.showSnackbar(
                             message = "Free limit is $MAX_FREE_HABITS habits — remove one or go Premium.",
@@ -177,6 +161,45 @@ fun HabitsScreen(viewModel: AppViewModel) {
             onTodoListTapped = {
                 if (viewModel.canAddHabit()) showTodoDialog = true
                 else showPremiumSheet = true
+            },
+        )
+    }
+
+    // ── Alarm time picker for any habit icon ───────────────────────────
+    // Shown when the user taps any non-TodoList icon. Pre-filled with the
+    // icon's default alarm time so they can customise it before adding.
+    if (alarmPickerIcon != null) {
+        val icon = alarmPickerIcon!!
+        AlarmPickerDialog(
+            habitName = icon.label,
+            defaultMinutes = icon.defaultReminderMinutes,
+            onDismiss = { alarmPickerIcon = null },
+            onConfirm = { chosenMinutes ->
+                alarmPickerIcon = null
+                val habit = Habit(
+                    id = UUID.randomUUID().toString(),
+                    name = icon.label,
+                    createdAt = System.currentTimeMillis(),
+                    reminderMinutes = chosenMinutes,
+                    iconId = icon.id,
+                )
+                if (viewModel.addHabitObject(habit)) {
+                    HabitAlarmScheduler.schedule(context, habit)
+                    viewModel.queueSync()
+                    val timeStr = formatAlarmTime(chosenMinutes)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "Added ${habit.name} — alarm set for $timeStr",
+                        )
+                    }
+                    // Offer activity source picker for physical-activity icons
+                    if (isActivityTrackableIcon(icon.id)) {
+                        activityPickerHabitId = habit.id
+                        activityPickerIconId = icon.id
+                    }
+                } else {
+                    showPremiumSheet = true
+                }
             },
         )
     }
@@ -333,6 +356,62 @@ private fun formatAlarmTime(minutes: Int?): String {
         else -> h
     }
     return "$h12:${m.toString().padStart(2, '0')} $period"
+}
+
+/**
+ * Alarm time picker dialog — shown when the user taps any habit icon.
+ * Pre-filled with the icon's default alarm time; the user can adjust
+ * the time before confirming to add the habit.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlarmPickerDialog(
+    habitName: String,
+    defaultMinutes: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (reminderMinutes: Int) -> Unit,
+) {
+    val defaultHour = defaultMinutes / 60
+    val defaultMinute = defaultMinutes % 60
+    val timeState = rememberTimePickerState(
+        initialHour = defaultHour,
+        initialMinute = defaultMinute,
+        is24Hour = false,
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set alarm for $habitName") },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Choose when you'd like to be reminded.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                TimePicker(state = timeState)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(timeState.hour * 60 + timeState.minute) },
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+            ) { Text("Add with alarm") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 /**
