@@ -241,16 +241,6 @@ private fun WelcomePage() {
             body = s.onbWelcomeBody,
         )
         Text(
-            text = s.onbFoundingMember,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .padding(top = 16.dp),
-        )
-        Text(
             text = s.onbSwipeToSee,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
