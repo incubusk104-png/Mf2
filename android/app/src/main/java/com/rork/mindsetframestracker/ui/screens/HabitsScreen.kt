@@ -1,10 +1,13 @@
 package com.rork.mindsetframestracker.ui.screens
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -35,31 +38,64 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.hasFeatureAccess
+import com.rork.mindsetframestracker.data.subscriptionTier
+import com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
+import com.rork.mindsetframestracker.ui.components.ActivitySource
+import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
 import com.rork.mindsetframestracker.ui.components.HabitPickerGrid
 import com.rork.mindsetframestracker.ui.components.PremiumSheet
+import com.rork.mindsetframestracker.ui.components.isActivityTrackableIcon
+import com.rork.mindsetframestracker.ui.components.stravaActivityTypeFor
 import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * Habits tab: a grid of icons. There is no "add habit" dialog — tapping an
- * icon instantly creates that habit and schedules its alarm at the icon's
- * default time. Tapping the same icon again removes it.
+ * Habits tab: a grid of large card-style icons. Tapping an icon instantly
+ * creates that habit and schedules its alarm at the icon's default time.
+ * Tapping the same icon again removes it.
  *
- * The special "To-Do List" icon replaces the old add flow: it opens a dialog to
- * name your own item and pick the alarm time you want.
+ * The special "To-Do List" icon opens a dialog to name your own custom
+ * item and pick the alarm time you want.
+ *
+ * ## How alarm scheduling works
+ *
+ * 1. **Tap icon** -> `onHabitAdded` creates a [Habit] with `reminderMinutes`
+ *    and `iconId`, calls [AppViewModel.addHabitObject] to persist it, then
+ *    [HabitAlarmScheduler.schedule] to arm the AlarmManager alarm, and finally
+ *    [AppViewModel.queueSync] to push the change to the cloud.
+ *
+ * 2. **Activity-trackable icons** -> After adding the habit, the
+ *    [ActivitySourcePickerSheet] is shown so the user can connect Strava
+ *    or Huawei Health to automatically log activity data for that habit.
+ *
+ * 3. **To-Do List** -> [TodoListDialog] lets the user type a name and pick a
+ *    time, then does the same create -> schedule -> sync flow.
+ *
+ * 4. **Remove** -> cancels the alarm, deletes the habit, syncs.
+ *
+ * 5. **Reboot/Update** -> [BootReceiver] calls [HabitAlarmScheduler.rescheduleAll]
+ *    to re-arm every alarm from the persisted data.
  */
 @Composable
 fun HabitsScreen(viewModel: AppViewModel) {
     val data by viewModel.state.collectAsStateWithLifecycle()
     val hasAccess = data.settings.hasFeatureAccess()
+    val currentTier = data.settings.subscriptionTier()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     var showTodoDialog by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
+
+    // Activity source picker state: when the user taps an activity-trackable
+    // icon, we store the newly created habit info here and show the sheet.
+    var activityPickerHabitId by remember { mutableStateOf<String?>(null) }
+    var activityPickerIconId by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
     // Which catalog icons already have a habit (so the grid can show the check badge).
@@ -94,12 +130,30 @@ fun HabitsScreen(viewModel: AppViewModel) {
             },
             onHabitAdded = { habit ->
                 if (viewModel.addHabitObject(habit)) {
-                    // Only arm the alarm once the habit was actually added.
+                    // ── ARM THE ALARM ──
                     HabitAlarmScheduler.schedule(context, habit)
-                    scope.launch { snackbarHostState.showSnackbar("Added ${habit.name} with a reminder") }
+
+                    // ── SYNC TO CLOUD ──
+                    viewModel.queueSync()
+
+                    val timeStr = formatAlarmTime(habit.reminderMinutes)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "Added ${habit.name} — alarm set for $timeStr",
+                        )
+                    }
+
+                    // ── OFFER ACTIVITY SOURCE PICKER ──
+                    // If this icon represents a physical activity (running,
+                    // strava_yoga, gym, etc.), immediately show the source
+                    // picker so the user can connect Strava or Huawei Health.
+                    val iconId = habit.iconId
+                    if (iconId != null && isActivityTrackableIcon(iconId)) {
+                        activityPickerHabitId = habit.id
+                        activityPickerIconId = iconId
+                    }
                 } else {
-                    // Cap reached on the free tier — make it obvious instead of
-                    // the tap looking like it did nothing.
+                    // Cap reached on the free tier.
                     scope.launch {
                         val result = snackbarHostState.showSnackbar(
                             message = "Free limit is $MAX_FREE_HABITS habits — remove one or go Premium.",
@@ -113,8 +167,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
             onHabitRemoved = { iconId ->
                 val existing = data.habits.firstOrNull { it.iconId == iconId }
                 if (existing != null) {
+                    // Cancel the alarm BEFORE deleting the habit data.
                     HabitAlarmScheduler.cancel(context, existing)
                     viewModel.deleteHabit(existing.id)
+                    // deleteHabit already calls queueSync internally.
                     scope.launch { snackbarHostState.showSnackbar("Removed ${existing.name}") }
                 }
             },
@@ -125,6 +181,103 @@ fun HabitsScreen(viewModel: AppViewModel) {
         )
     }
 
+    // ── Activity Source Picker ──────────────────────────────────────────
+    // Shown after the user taps an activity-trackable icon (running, gym,
+    // strava_yoga, strava_swim, etc.). Lets them pick Strava or Huawei Health
+    // to auto-track activity data for that habit.
+    if (activityPickerIconId != null && activityPickerHabitId != null) {
+        ActivitySourcePickerSheet(
+            habitIconId = activityPickerIconId!!,
+            currentTier = currentTier,
+            onSourceChosen = { source ->
+                val habitId = activityPickerHabitId!!
+                val iconId = activityPickerIconId!!
+
+                when (source) {
+                    ActivitySource.STRAVA -> {
+                        if (viewModel.isStravaConnected()) {
+                            // Already connected — sync activities immediately
+                            val activityType = stravaActivityTypeFor(iconId)
+                            viewModel.syncStravaActivities(habitId, activityType)
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Syncing Strava activities...",
+                                )
+                            }
+                        } else if (StravaAuthClient.isConfigured) {
+                            // Not connected yet — launch Strava OAuth flow
+                            // The callback lands in MainActivity.handleAuthIntent
+                            val authIntent = StravaAuthClient.buildAuthIntent()
+                            context.startActivity(authIntent)
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Connect your Strava account to sync activities.",
+                                )
+                            }
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Strava is not configured. Please contact support.",
+                                )
+                            }
+                        }
+                    }
+
+                    ActivitySource.HUAWEI_HEALTH -> {
+                        if (data.settings.healthKitConnected) {
+                            // Already connected — sync immediately
+                            val activityType = stravaActivityTypeFor(iconId)
+                            viewModel.syncHealthKitToHabit(habitId, activityType)
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Syncing from Huawei Health...",
+                                )
+                            }
+                        } else {
+                            // Not connected — launch Health Kit authorization
+                            val activity = context as? Activity
+                            if (activity != null) {
+                                val launched = HuaweiHealthKitClient.requestAuthorization(activity)
+                                if (!launched) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "Huawei Health Kit is not available on this device. " +
+                                                "Make sure HMS Core is installed.",
+                                        )
+                                    }
+                                } else {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "Authorize Huawei Health to sync activity data.",
+                                        )
+                                    }
+                                }
+                            } else {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "Could not open Health Kit authorization.",
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Clear picker state
+                activityPickerHabitId = null
+                activityPickerIconId = null
+            },
+            onDismiss = {
+                // User dismissed without choosing — that's fine, habit is
+                // already added with its alarm. They can connect later via
+                // Settings > Activity sync.
+                activityPickerHabitId = null
+                activityPickerIconId = null
+            },
+        )
+    }
+
+    // ── To-Do List creation dialog ──
     if (showTodoDialog) {
         TodoListDialog(
             onDismiss = { showTodoDialog = false },
@@ -137,8 +290,18 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     iconId = "todoList",
                 )
                 if (viewModel.addHabitObject(habit)) {
+                    // ── ARM THE ALARM ──
                     HabitAlarmScheduler.schedule(context, habit)
-                    scope.launch { snackbarHostState.showSnackbar("Added ${habit.name} with a reminder") }
+
+                    // ── SYNC TO CLOUD ──
+                    viewModel.queueSync()
+
+                    val timeStr = formatAlarmTime(reminderMinutes)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "Added ${habit.name} — alarm set for $timeStr",
+                        )
+                    }
                 } else {
                     showPremiumSheet = true
                 }
@@ -156,9 +319,25 @@ fun HabitsScreen(viewModel: AppViewModel) {
     }
 }
 
+// ── Alarm time formatting ───────────────────────────────────────────────────
+
+/** Converts minutes-from-midnight to "7:00 AM" / "9:30 PM" format. */
+private fun formatAlarmTime(minutes: Int?): String {
+    if (minutes == null) return "no alarm"
+    val h = minutes / 60
+    val m = minutes % 60
+    val period = if (h >= 12) "PM" else "AM"
+    val h12 = when {
+        h == 0 -> 12
+        h > 12 -> h - 12
+        else -> h
+    }
+    return "$h12:${m.toString().padStart(2, '0')} $period"
+}
+
 /**
- * The "To-Do List" creation dialog — the replacement for the old add-habit
- * flow. You type your own item and pick the alarm time you want it to fire.
+ * The "To-Do List" creation dialog — lets the user name a custom habit
+ * and pick the alarm time they want it to fire.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,7 +350,7 @@ private fun TodoListDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add a to-do") },
+        title = { Text("Create custom habit") },
         text = {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -181,18 +360,25 @@ private fun TodoListDialog(
                     value = name,
                     onValueChange = { name = it.take(MAX_HABIT_NAME_LENGTH) },
                     placeholder = { Text("e.g. Call the dentist") },
+                    label = { Text("Habit name") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp),
                 )
                 Text(
-                    text = "Set the alarm for when you want to do it.",
+                    text = "Pick the time for your daily reminder alarm.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
                 TimePicker(state = timeState)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         },
         confirmButton = {
@@ -200,7 +386,7 @@ private fun TodoListDialog(
                 onClick = { onConfirm(name.trim(), timeState.hour * 60 + timeState.minute) },
                 enabled = name.trim().isNotEmpty(),
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-            ) { Text("Add") }
+            ) { Text("Add with alarm") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

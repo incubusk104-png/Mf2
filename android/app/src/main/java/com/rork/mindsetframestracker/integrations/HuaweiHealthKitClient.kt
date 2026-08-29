@@ -40,7 +40,69 @@ object HuaweiHealthKitClient {
     /** Request code for the Health Kit authorization intent — handled in MainActivity.onActivityResult. */
     const val HEALTH_AUTH_REQUEST_CODE = 8891
 
-    val supportedActivityIconIds = setOf("walking", "running", "walk2", "basketball", "gym")
+    /**
+     * All icon IDs whose activity data can be tracked via Huawei Health Kit.
+     * Health Kit provides step/calorie/distance data for a wide range of
+     * physical activities, not just walking/running. This set includes:
+     *
+     * - The app's own fitness icons (walking, running, gym, etc.)
+     * - Strava-prefixed icons for activities that Health Kit can track
+     *   (any activity that burns calories / involves movement).
+     *
+     * Activities that Huawei Health Kit tracks beyond steps:
+     * calories, distance, heart rate, cycling metrics, swimming laps, etc.
+     */
+    val supportedActivityIconIds = setOf(
+        // App's own fitness icons
+        "walking",
+        "running",
+        "walk2",
+        "basketball",
+        "gym",
+        "stretch",
+        // Strava-prefixed icons that involve physical movement trackable by Health Kit
+        "strava_badminton",
+        "strava_crossfit",
+        "strava_dance",
+        "strava_elliptical",
+        "strava_football",
+        "strava_hiit",
+        "strava_hike",
+        "strava_inline_skate",
+        "strava_pilates",
+        "strava_racquetball",
+        "strava_ride",
+        "strava_rock_climb",
+        "strava_rowing",
+        "strava_squash",
+        "strava_stair_stepper",
+        "strava_swim",
+        "strava_tennis",
+        "strava_trail_run",
+        "strava_volleyball",
+        "strava_weight_training",
+        "strava_workout",
+        "strava_yoga",
+        "strava_mountain_bike_ride",
+        "strava_gravel_ride",
+        "strava_ebike_ride",
+        "strava_emtb_ride",
+        "strava_virtual_ride",
+        "strava_virtual_run",
+        "strava_virtual_rowing",
+        "strava_pickleball",
+        "strava_padel",
+        "strava_cricket",
+        "strava_skateboarding",
+        "strava_ice_skate",
+        "strava_snowboard",
+        "strava_snowshoe",
+        "strava_alpine_ski",
+        "strava_backcountry_ski",
+        "strava_nordic_ski",
+        "strava_roller_ski",
+        "table_tennis",
+    )
 
     fun isActivitySupported(iconId: String): Boolean = iconId in supportedActivityIconIds
 

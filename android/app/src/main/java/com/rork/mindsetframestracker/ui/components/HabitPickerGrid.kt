@@ -3,17 +3,19 @@ package com.rork.mindsetframestracker.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -23,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,7 +37,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,17 +47,16 @@ import com.rork.mindsetframestracker.data.HabitIconCatalog
 import java.util.UUID
 
 /**
- * The habit picker: a 2-column grid of large card-style icons. Each card has a
- * unique pastel background color derived from the habit's category and its own
- * [HabitIcon.colorHex]. Tapping any icon instantly creates that habit and
- * schedules its alarm at the icon's default time. Tapping the special "To-Do
- * List" icon instead opens a flow to create your own custom item and pick the
- * alarm time you want.
+ * Habit picker grid — 2-column layout of large card tiles.
  *
- * A green check badge marks icons whose habit is already added. The icon
- * artwork is rendered large (96 dp) inside a rounded card tile with the
- * category-tinted background — similar to the "Meditate / Running" cards in
- * popular habit trackers.
+ * Each card features:
+ *  - A **120 dp** icon (much bigger than the previous 56/96 dp)
+ *  - Unique pastel background per category (dark-mode aware)
+ *  - Habit name top-left, alarm time below name, icon artwork bottom-right
+ *  - Green check badge when the habit is already added
+ *
+ * Tapping any icon instantly creates the habit + schedules its alarm.
+ * Tapping "To-Do List" opens the custom-habit creation dialog.
  */
 @Composable
 fun HabitPickerGrid(
@@ -67,6 +68,8 @@ fun HabitPickerGrid(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     header: (@Composable () -> Unit)? = null,
 ) {
+    val isDark = isSystemInDarkTheme()
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -83,6 +86,7 @@ fun HabitPickerGrid(
             HabitCardTile(
                 icon = icon,
                 isSelected = isSelected,
+                isDark = isDark,
                 onClick = {
                     when {
                         icon.isTodoList -> onTodoListTapped()
@@ -105,58 +109,87 @@ fun HabitPickerGrid(
 }
 
 /**
- * A single habit card tile — big rounded card with a pastel background,
- * the habit name in the top-left corner, and the large icon artwork
- * bottom-right, just like the reference design ("Meditate", "Running" cards).
+ * A single big habit card. Layout:
+ * ┌─────────────────────────────┐
+ * │ Habit Name           [check]│
+ * │ ⏰ 7:00 AM                  │
+ * │                             │
+ * │                    ┌───────┐│
+ * │                    │ 120dp ││
+ * │                    │ icon  ││
+ * │                    └───────┘│
+ * └─────────────────────────────┘
  */
 @Composable
 private fun HabitCardTile(
     icon: HabitIcon,
     isSelected: Boolean,
+    isDark: Boolean,
     onClick: () -> Unit,
 ) {
-    val tileBg = tileBackground(icon)
-    val labelColor = tileLabelColor(icon)
+    val tileBg = tileBackground(icon, isDark)
+    val labelColor = tileLabelColor(icon, isDark)
+    val subtitleColor = labelColor.copy(alpha = 0.7f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.85f) // slightly taller than wide for card feel
-            .clip(RoundedCornerShape(20.dp))
+            .aspectRatio(0.75f) // taller card to fit the bigger icon
+            .clip(RoundedCornerShape(22.dp))
             .background(tileBg)
             .clickable(onClick = onClick),
     ) {
-        // Habit name — top-left
-        Text(
-            text = icon.label,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
-            color = labelColor,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+        // ── Top-left: name + alarm time ──
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 14.dp, top = 14.dp, end = 40.dp),
-        )
+                .padding(start = 14.dp, top = 14.dp, end = 44.dp),
+        ) {
+            Text(
+                text = icon.label,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = labelColor,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            // Alarm time badge
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Alarm,
+                    contentDescription = null,
+                    tint = subtitleColor,
+                    modifier = Modifier.size(13.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = formatTime(icon.defaultReminderMinutes),
+                    fontSize = 12.sp,
+                    color = subtitleColor,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
 
-        // Large icon artwork — bottom-right, overflowing a little for style
+        // ── Bottom-right: BIG icon artwork ──
         Image(
             painter = painterResource(id = icon.drawableRes),
             contentDescription = icon.label,
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .size(96.dp)
+                .size(120.dp)
                 .align(Alignment.BottomEnd)
-                .offset(x = 4.dp, y = 4.dp),
+                .offset(x = 6.dp, y = 6.dp),
         )
 
-        // Green check badge — top-right corner
+        // ── Top-right: green check badge ──
         if (isSelected && !icon.isTodoList) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp)
-                    .size(24.dp)
+                    .size(26.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF4CAF50)),
                 contentAlignment = Alignment.Center,
@@ -165,43 +198,68 @@ private fun HabitCardTile(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "Added",
                     tint = Color.White,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(17.dp),
                 )
             }
         }
     }
 }
 
-// ── Per-category & per-icon background palette ──────────────────────────────
+// ── Alarm time formatting ───────────────────────────────────────────────────
+
+/** Converts minutes-from-midnight to "7:00 AM" / "9:30 PM" format. */
+private fun formatTime(minutesFromMidnight: Int): String {
+    val h = minutesFromMidnight / 60
+    val m = minutesFromMidnight % 60
+    val period = if (h >= 12) "PM" else "AM"
+    val h12 = when {
+        h == 0 -> 12
+        h > 12 -> h - 12
+        else -> h
+    }
+    return "$h12:${m.toString().padStart(2, '0')} $period"
+}
+
+// ── Per-category background palette (light + dark mode aware) ───────────────
 
 /**
- * Returns a distinct soft pastel background [Color] for each habit icon.
- * Icons within the same [HabitCategory] share a colour family but each
- * individual icon gets its own unique shade derived from its [HabitIcon.colorHex].
+ * Returns a distinct pastel background for each icon, respecting dark mode.
+ * Light mode: soft tinted white. Dark mode: deep tinted dark.
  */
-private fun tileBackground(icon: HabitIcon): Color {
-    // Use the icon's own accent as a base, then lighten it to a soft pastel
+private fun tileBackground(icon: HabitIcon, isDark: Boolean): Color {
     val base = Color(icon.colorHex)
-    return base.copy(alpha = 0.18f).compositeOver(Color.White).copy(alpha = 1f)
+    return if (isDark) {
+        // Dark mode: desaturated dark version of the accent
+        base.copy(alpha = 0.20f).compositeOver(Color(0xFF1C1C1E))
+    } else {
+        // Light mode: soft pastel on white
+        base.copy(alpha = 0.18f).compositeOver(Color.White)
+    }
 }
 
 /**
- * A readable label color that contrasts well with the pastel tile background.
- * Darker variant of the category accent.
+ * Label color that contrasts with the pastel background, mode-aware.
  */
-private fun tileLabelColor(icon: HabitIcon): Color = when (icon.category) {
-    HabitCategory.HEALTH -> Color(0xFF1B5E20)       // deep green
-    HabitCategory.MIND -> Color(0xFF4A148C)          // deep purple
-    HabitCategory.PRODUCTIVITY -> Color(0xFF37474F)  // blue-grey dark
-    HabitCategory.SOCIAL -> Color(0xFFAD1457)        // deep pink
-    HabitCategory.FINANCE -> Color(0xFF1B5E20)       // deep green
+private fun tileLabelColor(icon: HabitIcon, isDark: Boolean): Color {
+    if (isDark) {
+        return when (icon.category) {
+            HabitCategory.HEALTH -> Color(0xFFA5D6A7)
+            HabitCategory.MIND -> Color(0xFFCE93D8)
+            HabitCategory.PRODUCTIVITY -> Color(0xFF90A4AE)
+            HabitCategory.SOCIAL -> Color(0xFFF48FB1)
+            HabitCategory.FINANCE -> Color(0xFFA5D6A7)
+        }
+    }
+    return when (icon.category) {
+        HabitCategory.HEALTH -> Color(0xFF1B5E20)
+        HabitCategory.MIND -> Color(0xFF4A148C)
+        HabitCategory.PRODUCTIVITY -> Color(0xFF37474F)
+        HabitCategory.SOCIAL -> Color(0xFFAD1457)
+        HabitCategory.FINANCE -> Color(0xFF1B5E20)
+    }
 }
 
-/**
- * Manual alpha compositing: layer [this] colour (with its alpha) over [bg].
- * This replicates what the GPU does when you put a translucent colour on top
- * of an opaque one.
- */
+/** Alpha-composites [this] colour over [bg]. */
 private fun Color.compositeOver(bg: Color): Color {
     val a = this.alpha
     return Color(
