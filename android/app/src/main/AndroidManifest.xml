@@ -23,6 +23,13 @@
          falls back to an inexact windowed alarm when it isn't granted, so the
          app never crashes and reminders still fire. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- USE_EXACT_ALARM is auto-granted on API 33+ for alarm/reminder apps.
+         Unlike SCHEDULE_EXACT_ALARM it doesn't require the user to visit
+         Settings > Alarms & Reminders. Both are declared so the scheduler
+         can use whichever is available. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Vibration for habit reminder notifications. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Needed for usage stats tracking features -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"

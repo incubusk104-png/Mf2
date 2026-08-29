@@ -521,6 +521,10 @@ class SupabaseSync(context: Context) {
         val user_id: String? = null,
         val name: String,
         val created_at_ms: Long = 0L,
+        val icon_id: String? = null,
+        val reminder_minutes: Int? = null,
+        val is_pinned: Boolean = false,
+        val duration_seconds: Int? = null,
     )
 
     @Serializable
@@ -555,7 +559,16 @@ class SupabaseSync(context: Context) {
         if (accessToken == null) return "Sign in first to back up your data"
         return try {
             val habits = data.habits.map {
-                HabitRow(id = it.id, user_id = uid, name = it.name, created_at_ms = it.createdAt)
+                HabitRow(
+                    id = it.id,
+                    user_id = uid,
+                    name = it.name,
+                    created_at_ms = it.createdAt,
+                    icon_id = it.iconId,
+                    reminder_minutes = it.reminderMinutes,
+                    is_pinned = it.isPinned,
+                    duration_seconds = it.durationSeconds,
+                )
             }
             val checkins = data.checkIns.flatMap { (habitId, days) ->
                 days.map { day -> CheckinRow(user_id = uid, habit_id = habitId, day = day) }
@@ -593,7 +606,17 @@ class SupabaseSync(context: Context) {
             val checkins = select<CheckinRow>("checkins") ?: return null to PULL_ERROR
             val moods = select<MoodLogRow>("mood_log") ?: return null to PULL_ERROR
             val snapshot = RemoteSnapshot(
-                habits = habits.map { Habit(id = it.id, name = it.name, createdAt = it.created_at_ms) },
+                habits = habits.map {
+                    Habit(
+                        id = it.id,
+                        name = it.name,
+                        createdAt = it.created_at_ms,
+                        iconId = it.icon_id,
+                        reminderMinutes = it.reminder_minutes,
+                        isPinned = it.is_pinned,
+                        durationSeconds = it.duration_seconds,
+                    )
+                },
                 checkIns = checkins.groupBy({ it.habit_id }, { it.day }),
                 moodHistory = moods.mapNotNull { row ->
                     runCatching { row.day to MoodMode.valueOf(row.mode) }.getOrNull()
