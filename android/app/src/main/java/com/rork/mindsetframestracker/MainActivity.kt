@@ -204,6 +204,8 @@ class MainActivity : ComponentActivity() {
                 when (outcome) {
                     is com.rork.mindsetframestracker.billing.TipPurchaseResult.Success -> {
                         appViewModel.onTipPurchaseResult("Thank you for the tip! 💜")
+                        // Server-side record + verification (fire-and-forget).
+                        appViewModel.recordTipPurchase(outcome.purchaseData, outcome.signature)
                     }
                     is com.rork.mindsetframestracker.billing.TipPurchaseResult.Cancelled -> {
                         appViewModel.onTipPurchaseResult(null)

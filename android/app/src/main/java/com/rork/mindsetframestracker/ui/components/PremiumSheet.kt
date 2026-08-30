@@ -308,6 +308,61 @@ fun PremiumSheet(
                 }
             }
 
+            // ── Founding Member plans ───────────────────────────────
+            // Matches the live AppGallery products mindset_premium_founding_
+            // monthly / _yearly (first 100 members, locked-in lower price).
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Founding Member — first 100 only",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                    Text(
+                        text = "Lock in a lower price forever as an early supporter. " +
+                            "Includes everything in Premium except Strava sync.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                    )
+                    Button(
+                        onClick = {
+                            val act = activity ?: return@Button
+                            purchaseError = null
+                            onPurchaseStarted("mindset_premium_founding_yearly")
+                            SubscriptionBilling.purchase(act, "mindset_premium_founding_yearly") { message ->
+                                purchaseError = message
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 48.dp),
+                    ) { Text("Founding Member — Yearly") }
+                    Button(
+                        onClick = {
+                            val act = activity ?: return@Button
+                            purchaseError = null
+                            onPurchaseStarted("mindset_premium_founding_monthly")
+                            SubscriptionBilling.purchase(act, "mindset_premium_founding_monthly") { message ->
+                                purchaseError = message
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .defaultMinSize(minHeight = 48.dp),
+                    ) { Text("Founding Member — Monthly") }
+                }
+            }
+
             purchaseError?.let { message ->
                 Text(
                     text = message,

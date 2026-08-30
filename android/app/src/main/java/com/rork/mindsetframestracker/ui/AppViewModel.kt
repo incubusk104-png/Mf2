@@ -139,6 +139,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }.onFailure {
             if (BuildConfig.DEBUG) Log.e("AppViewModel", "Tip consume cleanup failed: ${it.message}", it)
         }
+        // Screen-time habits: settle yesterday + refresh today's live status
+        // from UsageStats on every app start. No-op without Usage Access.
+        runCatching { evaluateScreenTimeHabits() }.onFailure {
+            if (BuildConfig.DEBUG) Log.e("AppViewModel", "Screen-time evaluation failed: ${it.message}", it)
+        }
     }
 
     // ── Premium subscription (Huawei IAP) ─────────────────────────────
@@ -262,6 +267,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onStravaConnectFailed(message: String) {
         _stravaMessage.value = message
+    }
+
+    /**
+     * Opens the Strava OAuth consent page. Resolves the PUBLIC client id
+     * at runtime when it wasn't baked into this build (Edge Function
+     * discovery) — so "isn't configured for this build" can only happen
+     * when the server truly has no Strava credentials either.
+     *
+     * Call ONLY after the user accepted the privacy consent dialog.
+     */
+    fun connectStrava() {
+        viewModelScope.launch {
+            val clientId = StravaAuthClient.resolveClientId()
+            if (clientId.isNullOrBlank()) {
+                _stravaMessage.value = "Strava isn't configured for this build yet."
+                return@launch
+            }
+            runCatching {
+                val intent = StravaAuthClient.buildAuthIntent(clientId)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                getApplication<Application>().startActivity(intent)
+            }.onFailure {
+                _stravaMessage.value = "No browser available to open Strava."
+            }
+        }
+    }
+
+    /**
+     * Opens the Polar Flow OAuth consent page. Resolves the PUBLIC client id
+     * at runtime when it wasn't baked into this build (Edge Function
+     * discovery). Call ONLY after the user accepted the privacy consent
+     * dialog.
+     */
+    fun connectPolar() {
+        viewModelScope.launch {
+            val clientId = com.rork.mindsetframestracker.integrations.PolarClient.resolveClientId()
+            if (clientId.isNullOrBlank()) {
+                _stravaMessage.value = "Polar isn't configured for this build yet."
+                return@launch
+            }
+            runCatching {
+                val intent = com.rork.mindsetframestracker.integrations.PolarClient
+                    .buildAuthIntent(clientId)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                getApplication<Application>().startActivity(intent)
+            }.onFailure {
+                _stravaMessage.value = "No browser available to open Polar."
+            }
+        }
     }
 
     /** Handles the Polar OAuth callback code — exchanges it for tokens and registers the user. */
@@ -391,6 +445,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _stravaMessage.value =
                 if (ok) "Today's steps synced from Polar."
                 else "No new step data from Polar yet — sync your Polar device with Polar Flow first, then try again."
+        }
+    }
+
+    // ── Screen-time habits (UsageStats) ──────────────────────────────
+
+    /**
+     * Evaluates every screen-time habit against today's measured app usage:
+     * a habit auto-completes for today while the monitored app's foreground
+     * time is at or under its budget, and un-completes when the limit is
+     * blown. Yesterday is also settled (its full-day usage is final).
+     *
+     * Called on app start / resume and after a screen-time habit is added.
+     * No-op when the Usage Access permission is missing.
+     */
+    fun evaluateScreenTimeHabits() {
+        val app = getApplication<Application>()
+        val monitor = com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
+        if (!monitor.hasPermission(app)) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val data = _state.value
+            val screenHabits = data.habits.filter {
+                it.monitoredPackage != null && it.screenTimeLimitMinutes != null
+            }
+            if (screenHabits.isEmpty()) return@launch
+            val todayKey = Dates.todayKey()
+            val yesterdayKey = Dates.key(java.time.LocalDate.now().minusDays(1))
+            var changed = false
+            var updatedCheckIns = data.checkIns
+
+            for (habit in screenHabits) {
+                val pkg = habit.monitoredPackage ?: continue
+                val limit = habit.screenTimeLimitMinutes ?: continue
+
+                // Today: live status — done while under the limit.
+                monitor.usedMinutesToday(app, pkg)?.let { used ->
+                    val underLimit = used <= limit
+                    val days = updatedCheckIns[habit.id].orEmpty().toMutableSet()
+                    val isChecked = todayKey in days
+                    if (underLimit && !isChecked) {
+                        days.add(todayKey); changed = true
+                    } else if (!underLimit && isChecked) {
+                        days.remove(todayKey); changed = true
+                    }
+                    updatedCheckIns = updatedCheckIns + (habit.id to days.toList())
+                }
+
+                // Yesterday: final settlement (only ever marks success — a
+                // blown day just stays unchecked).
+                monitor.usedMinutesYesterday(app, pkg)?.let { used ->
+                    if (used <= limit) {
+                        val days = updatedCheckIns[habit.id].orEmpty().toMutableSet()
+                        if (yesterdayKey !in days) {
+                            days.add(yesterdayKey); changed = true
+                            updatedCheckIns = updatedCheckIns + (habit.id to days.toList())
+                        }
+                    }
+                }
+            }
+
+            if (changed) {
+                val finalCheckIns = updatedCheckIns
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    update { it.copy(checkIns = finalCheckIns) }
+                    refreshCompanionUnlocks()
+                    queueSync()
+                }
+            }
         }
     }
 
@@ -659,6 +780,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Called from MainActivity.onActivityResult with a user-facing result message, or null for a silent cancel. */
     fun onTipPurchaseResult(message: String?) {
         _tipMessage.value = message
+    }
+
+    /**
+     * Fire-and-forget server-side record of a successful tip: the signed
+     * purchase payload is sent to the tip-purchase Edge Function, which
+     * verifies it with Huawei's Order Service and stores it in
+     * tip_purchases. A failure here never affects the user-facing flow —
+     * Huawei already completed the payment on-device.
+     */
+    fun recordTipPurchase(purchaseData: String, signature: String?) {
+        if (purchaseData.isBlank()) return
+        viewModelScope.launch {
+            runCatching { supabaseSync.recordTipPurchase(purchaseData, signature) }
+                .onFailure {
+                    if (BuildConfig.DEBUG) Log.w("AppViewModel", "Tip record failed: ${it.message}")
+                }
+        }
     }
 
     /** Call after the message has been shown once, so it doesn't reappear on rotation/recomposition. */

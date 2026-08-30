@@ -8,6 +8,8 @@ import android.os.Build
 import android.util.Log
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.MindsetRepository
+import com.rork.mindsetframestracker.data.REPEAT_DAILY
+import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import java.util.Calendar
 
 /**
@@ -40,7 +42,7 @@ object HabitAlarmScheduler {
 
     fun schedule(context: Context, habit: Habit) {
         val minutes = habit.reminderMinutes ?: return
-        setAlarm(context, habit.id, habit.name, minutes)
+        setAlarm(context, habit.id, habit.name, minutes, habit.repeatDaysMask)
     }
 
     fun cancel(context: Context, habit: Habit) {
@@ -61,18 +63,33 @@ object HabitAlarmScheduler {
         Log.i(TAG, "Rescheduled $count habit alarm(s)")
     }
 
-    /** Called by HabitCheckInNotifier right after firing, to re-arm tomorrow. */
+    /**
+     * Called by HabitCheckInNotifier right after firing, to re-arm the next
+     * occurrence. A repeat mask of [REPEAT_ONCE] means the alarm was a
+     * one-shot — it is NOT re-armed (mirrors the system Clock's
+     * "Repeat: Once" behaviour).
+     */
     fun scheduleNext(context: Context, habitId: String, habitName: String) {
         val repo = MindsetRepository(context)
         val habit = repo.load().habits.find { it.id == habitId } ?: return
         val minutes = habit.reminderMinutes ?: return
-        setAlarm(context, habitId, habitName, minutes)
+        if (habit.repeatDaysMask == REPEAT_ONCE) {
+            Log.d(TAG, "'${habit.name}' repeats Once — not re-arming")
+            return
+        }
+        setAlarm(context, habitId, habitName, minutes, habit.repeatDaysMask)
     }
 
-    private fun setAlarm(context: Context, habitId: String, habitName: String, minutes: Int) {
+    private fun setAlarm(
+        context: Context,
+        habitId: String,
+        habitName: String,
+        minutes: Int,
+        repeatDaysMask: Int = REPEAT_DAILY,
+    ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = buildPendingIntent(context, habitId, habitName)
-        val triggerTime = nextTriggerMillis(minutes)
+        val triggerTime = nextTriggerMillis(minutes, repeatDaysMask)
 
         // Determine the best alarm type we can use:
         //   1. Exact (setExactAndAllowWhileIdle) — most reliable, needs permission
@@ -146,7 +163,13 @@ object HabitAlarmScheduler {
         )
     }
 
-    private fun nextTriggerMillis(minutesFromMidnight: Int): Long {
+    /**
+     * Next trigger time honouring the repeat day mask (bit 0 = Monday …
+     * bit 6 = Sunday). [REPEAT_ONCE] (mask 0) behaves like "next occurrence
+     * of this time" — today if still ahead, otherwise tomorrow — and the
+     * alarm simply isn't re-armed after it fires.
+     */
+    private fun nextTriggerMillis(minutesFromMidnight: Int, repeatDaysMask: Int = REPEAT_DAILY): Long {
         val cal = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, minutesFromMidnight / 60)
             set(Calendar.MINUTE, minutesFromMidnight % 60)
@@ -156,6 +179,24 @@ object HabitAlarmScheduler {
         if (cal.timeInMillis <= System.currentTimeMillis()) {
             cal.add(Calendar.DAY_OF_YEAR, 1)
         }
-        return cal.timeInMillis
+        if (repeatDaysMask == REPEAT_ONCE || repeatDaysMask == REPEAT_DAILY) {
+            return cal.timeInMillis
+        }
+        // Walk forward (max 7 days) to the next enabled day-of-week.
+        repeat(7) {
+            // Calendar: SUNDAY=1..SATURDAY=7 → our mask bit: Monday=0..Sunday=6
+            val bit = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 0
+                Calendar.TUESDAY -> 1
+                Calendar.WEDNESDAY -> 2
+                Calendar.THURSDAY -> 3
+                Calendar.FRIDAY -> 4
+                Calendar.SATURDAY -> 5
+                else -> 6 // SUNDAY
+            }
+            if (repeatDaysMask and (1 shl bit) != 0) return cal.timeInMillis
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        return cal.timeInMillis // unreachable for any non-zero mask
     }
 }

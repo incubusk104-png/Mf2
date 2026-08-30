@@ -1,17 +1,22 @@
 package com.rork.mindsetframestracker.ui.screens
 
 import android.app.Activity
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -38,9 +43,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
+import com.rork.mindsetframestracker.data.REPEAT_DAILY
+import com.rork.mindsetframestracker.data.REPEAT_ONCE
+import com.rork.mindsetframestracker.data.REPEAT_WEEKDAYS
+import com.rork.mindsetframestracker.data.REPEAT_WEEKENDS
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.integrations.PolarClient
+import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
 import com.rork.mindsetframestracker.ui.AppViewModel
@@ -48,7 +58,10 @@ import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
 import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
 import com.rork.mindsetframestracker.ui.components.HabitPickerGrid
+import com.rork.mindsetframestracker.ui.components.IntegrationConsent
+import com.rork.mindsetframestracker.ui.components.IntegrationConsentDialog
 import com.rork.mindsetframestracker.ui.components.PremiumSheet
+import com.rork.mindsetframestracker.ui.components.ScreenTimeHabitSheet
 import com.rork.mindsetframestracker.ui.components.isActivityTrackableIcon
 import com.rork.mindsetframestracker.ui.components.stravaActivityTypeFor
 import kotlinx.coroutines.launch
@@ -91,6 +104,15 @@ fun HabitsScreen(viewModel: AppViewModel) {
 
     var showTodoDialog by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
+
+    // Screen-time habit flow: privacy consent → app + limit picker → add.
+    var showScreenTimeConsent by remember { mutableStateOf(false) }
+    var showScreenTimeSheet by remember { mutableStateOf(false) }
+
+    // Privacy consent gate for activity-source connects launched from the
+    // picker sheet. Holds the pending connect action until the user agrees.
+    var pendingSourceConsent by remember { mutableStateOf<IntegrationConsent?>(null) }
+    var pendingSourceAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // Alarm picker state: when the user taps any non-TodoList icon, we show
     // a time picker pre-filled with the icon's default alarm time.
@@ -136,7 +158,13 @@ fun HabitsScreen(viewModel: AppViewModel) {
             onIconTapped = { icon ->
                 // Check free-tier cap before showing the time picker.
                 if (viewModel.canAddHabit()) {
-                    alarmPickerIcon = icon
+                    if (icon.isScreenTime) {
+                        // Screen-time habits go through the privacy consent +
+                        // app-picker flow instead of the plain alarm picker.
+                        showScreenTimeConsent = true
+                    } else {
+                        alarmPickerIcon = icon
+                    }
                 } else {
                     scope.launch {
                         val result = snackbarHostState.showSnackbar(
@@ -174,7 +202,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
             habitName = icon.label,
             defaultMinutes = icon.defaultReminderMinutes,
             onDismiss = { alarmPickerIcon = null },
-            onConfirm = { chosenMinutes ->
+            onConfirm = { chosenMinutes, repeatMask ->
                 alarmPickerIcon = null
                 val habit = Habit(
                     id = UUID.randomUUID().toString(),
@@ -182,6 +210,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     createdAt = System.currentTimeMillis(),
                     reminderMinutes = chosenMinutes,
                     iconId = icon.id,
+                    repeatDaysMask = repeatMask,
                 )
                 if (viewModel.addHabitObject(habit)) {
                     HabitAlarmScheduler.schedule(context, habit)
@@ -189,7 +218,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     val timeStr = formatAlarmTime(chosenMinutes)
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            "Added ${habit.name} — alarm set for $timeStr",
+                            "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at $timeStr",
                         )
                     }
                     // Offer activity source picker for physical-activity icons
@@ -226,14 +255,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
                                     "Syncing Strava activities...",
                                 )
                             }
-                        } else if (StravaAuthClient.isConfigured) {
-                            val authIntent = StravaAuthClient.buildAuthIntent()
-                            context.startActivity(authIntent)
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    "Connect your Strava account to sync activities.",
-                                )
-                            }
+                        } else if (StravaAuthClient.canAttemptConnect) {
+                            // Privacy consent BEFORE the OAuth page opens.
+                            pendingSourceConsent = IntegrationConsent.STRAVA
+                            pendingSourceAction = { viewModel.connectStrava() }
                         } else {
                             scope.launch {
                                 snackbarHostState.showSnackbar(
@@ -251,14 +276,9 @@ fun HabitsScreen(viewModel: AppViewModel) {
                                 snackbarHostState.showSnackbar("Syncing from Health Connect...")
                             }
                         } else {
-                            // Launch the Health Connect permission dialog — the
-                            // user must grant permissions before we connect.
-                            viewModel.requestHealthConnectPermissions()
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    "Grant Health Connect permissions to sync activity data.",
-                                )
-                            }
+                            // Privacy consent BEFORE the permission dialog.
+                            pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
+                            pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
                         }
                     }
 
@@ -269,13 +289,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
                             scope.launch {
                                 snackbarHostState.showSnackbar("Syncing from Polar...")
                             }
-                        } else if (PolarClient.isConfigured) {
-                            context.startActivity(PolarClient.buildAuthIntent())
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    "Connect your Polar account to sync activities.",
-                                )
-                            }
+                        } else if (PolarClient.canAttemptConnect) {
+                            // Privacy consent BEFORE the OAuth page opens.
+                            pendingSourceConsent = IntegrationConsent.POLAR
+                            pendingSourceAction = { viewModel.connectPolar() }
                         } else {
                             scope.launch {
                                 snackbarHostState.showSnackbar(
@@ -300,17 +317,88 @@ fun HabitsScreen(viewModel: AppViewModel) {
         )
     }
 
+    // ── Privacy consent gate for activity-source connects ──
+    if (pendingSourceConsent != null) {
+        IntegrationConsentDialog(
+            consent = pendingSourceConsent!!,
+            onAgree = {
+                val action = pendingSourceAction
+                pendingSourceConsent = null
+                pendingSourceAction = null
+                action?.invoke()
+            },
+            onDismiss = {
+                pendingSourceConsent = null
+                pendingSourceAction = null
+            },
+        )
+    }
+
+    // ── Screen-time habit: consent → app picker → add ──
+    if (showScreenTimeConsent) {
+        IntegrationConsentDialog(
+            consent = IntegrationConsent.SCREEN_TIME,
+            onAgree = {
+                showScreenTimeConsent = false
+                showScreenTimeSheet = true
+            },
+            onDismiss = { showScreenTimeConsent = false },
+        )
+    }
+    if (showScreenTimeSheet) {
+        ScreenTimeHabitSheet(
+            onDismiss = { showScreenTimeSheet = false },
+            onConfirm = { packageName, appLabel, limitMinutes ->
+                showScreenTimeSheet = false
+                val habit = Habit(
+                    id = UUID.randomUUID().toString(),
+                    name = "$appLabel under ${formatLimitLabel(limitMinutes)}",
+                    createdAt = System.currentTimeMillis(),
+                    iconId = "screenTime",
+                    monitoredPackage = packageName,
+                    screenTimeLimitMinutes = limitMinutes,
+                    monitoredAppLabel = appLabel,
+                )
+                if (viewModel.addHabitObject(habit)) {
+                    viewModel.queueSync()
+                    if (!ScreenTimeMonitor.hasPermission(context)) {
+                        // Send the user to the system Usage Access switch —
+                        // Android never auto-grants this special permission.
+                        runCatching {
+                            context.startActivity(ScreenTimeMonitor.buildSettingsIntent(context))
+                        }
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Turn on Usage access for Mindset Frames to track $appLabel time.",
+                            )
+                        }
+                    } else {
+                        viewModel.evaluateScreenTimeHabits()
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Added — $appLabel is now monitored (limit ${formatLimitLabel(limitMinutes)}/day).",
+                            )
+                        }
+                    }
+                } else {
+                    showPremiumSheet = true
+                }
+            },
+        )
+    }
+
     // ── To-Do List creation dialog ──
     if (showTodoDialog) {
         TodoListDialog(
             onDismiss = { showTodoDialog = false },
-            onConfirm = { name, reminderMinutes ->
+            onConfirm = { name, reminderMinutes, repeatMask ->
                 val habit = Habit(
                     id = UUID.randomUUID().toString(),
                     name = name,
                     createdAt = System.currentTimeMillis(),
                     reminderMinutes = reminderMinutes,
                     iconId = "todoList",
+                    repeatDaysMask = repeatMask,
                 )
                 if (viewModel.addHabitObject(habit)) {
                     // ── ARM THE ALARM ──
@@ -322,7 +410,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     val timeStr = formatAlarmTime(reminderMinutes)
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            "Added ${habit.name} — alarm set for $timeStr",
+                            "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at $timeStr",
                         )
                     }
                 } else {
@@ -343,6 +431,22 @@ fun HabitsScreen(viewModel: AppViewModel) {
 }
 
 // ── Alarm time formatting ───────────────────────────────────────────────────
+
+/** "2h" / "1h 30m" / "45m" formatting for a screen-time limit. */
+private fun formatLimitLabel(minutes: Int): String = when {
+    minutes % 60 == 0 && minutes >= 60 -> "${minutes / 60}h"
+    minutes > 60 -> "${minutes / 60}h ${minutes % 60}m"
+    else -> "${minutes}m"
+}
+
+/** Human summary of a repeat mask for snackbars. */
+private fun formatRepeat(mask: Int): String = when (mask) {
+    REPEAT_ONCE -> "once"
+    REPEAT_DAILY -> "daily"
+    REPEAT_WEEKDAYS -> "on weekdays"
+    REPEAT_WEEKENDS -> "on weekends"
+    else -> "on custom days"
+}
 
 /** Converts minutes-from-midnight to "7:00 AM" / "9:30 PM" format. */
 private fun formatAlarmTime(minutes: Int?): String {
@@ -369,7 +473,7 @@ private fun AlarmPickerDialog(
     habitName: String,
     defaultMinutes: Int,
     onDismiss: () -> Unit,
-    onConfirm: (reminderMinutes: Int) -> Unit,
+    onConfirm: (reminderMinutes: Int, repeatMask: Int) -> Unit,
 ) {
     val defaultHour = defaultMinutes / 60
     val defaultMinute = defaultMinutes % 60
@@ -378,6 +482,7 @@ private fun AlarmPickerDialog(
         initialMinute = defaultMinute,
         is24Hour = false,
     )
+    var repeatMask by remember { mutableStateOf(REPEAT_DAILY) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -395,8 +500,10 @@ private fun AlarmPickerDialog(
                 )
                 TimePicker(state = timeState)
                 Spacer(Modifier.height(8.dp))
+                RepeatSelector(mask = repeatMask, onMaskChange = { repeatMask = it })
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)}",
+                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)} · ${formatRepeat(repeatMask)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -404,7 +511,7 @@ private fun AlarmPickerDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(timeState.hour * 60 + timeState.minute) },
+                onClick = { onConfirm(timeState.hour * 60 + timeState.minute, repeatMask) },
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) { Text("Add with alarm") }
         },
@@ -415,6 +522,58 @@ private fun AlarmPickerDialog(
 }
 
 /**
+ * Repeat schedule selector — mirrors the system Clock app's "Repeat" row:
+ * Once / Daily / Weekdays / Weekends presets plus per-day custom chips.
+ */
+@Composable
+private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Repeat",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+        ) {
+            listOf(
+                "Once" to REPEAT_ONCE,
+                "Daily" to REPEAT_DAILY,
+                "Weekdays" to REPEAT_WEEKDAYS,
+                "Weekends" to REPEAT_WEEKENDS,
+            ).forEach { (label, preset) ->
+                FilterChip(
+                    selected = mask == preset,
+                    onClick = { onMaskChange(preset) },
+                    label = { Text(label) },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        // Per-day custom chips (Mon..Sun → bits 0..6).
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
+            dayLabels.forEachIndexed { index, label ->
+                val bit = 1 shl index
+                val selected = mask and bit != 0
+                FilterChip(
+                    selected = selected,
+                    onClick = { onMaskChange(mask xor bit) },
+                    label = { Text(label) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/**
  * The "To-Do List" creation dialog — lets the user name a custom habit
  * and pick the alarm time they want it to fire.
  */
@@ -422,9 +581,10 @@ private fun AlarmPickerDialog(
 @Composable
 private fun TodoListDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, reminderMinutes: Int) -> Unit,
+    onConfirm: (name: String, reminderMinutes: Int, repeatMask: Int) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
+    var repeatMask by remember { mutableStateOf(REPEAT_DAILY) }
     val timeState = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = false)
 
     AlertDialog(
@@ -453,8 +613,10 @@ private fun TodoListDialog(
                 )
                 TimePicker(state = timeState)
                 Spacer(Modifier.height(8.dp))
+                RepeatSelector(mask = repeatMask, onMaskChange = { repeatMask = it })
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)}",
+                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)} · ${formatRepeat(repeatMask)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -462,7 +624,7 @@ private fun TodoListDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name.trim(), timeState.hour * 60 + timeState.minute) },
+                onClick = { onConfirm(name.trim(), timeState.hour * 60 + timeState.minute, repeatMask) },
                 enabled = name.trim().isNotEmpty(),
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) { Text("Add with alarm") }

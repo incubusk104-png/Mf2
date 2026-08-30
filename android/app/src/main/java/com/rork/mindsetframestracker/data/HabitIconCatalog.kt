@@ -16,6 +16,12 @@ data class HabitIcon(
      * a catalog habit with an alarm.
      */
     val isTodoList: Boolean = false,
+    /**
+     * The Screen Time icon opens the app-limit creation flow (pick a phone
+     * app + daily minutes budget, monitored via UsageStats) instead of the
+     * plain alarm picker.
+     */
+    val isScreenTime: Boolean = false,
 )
 
 object HabitIconCatalog {
@@ -28,6 +34,7 @@ object HabitIconCatalog {
         HabitIcon("journal", R.drawable.ic_mind_notebook, "Journal", HabitCategory.MIND, 0xFFFFB74D, 21 * 60),
         HabitIcon("gratitude", R.drawable.ic_mind_gratitude, "Gratitude", HabitCategory.MIND, 0xFFFFD54F, 21 * 60 + 30),
         HabitIcon("noPhone", R.drawable.ic_mind_phone_noslash, "No Phone Morning", HabitCategory.MIND, 0xFF9575CD, 7 * 60),
+        HabitIcon("screenTime", R.drawable.ic_mind_phone_noslash, "Screen Time Limit", HabitCategory.MIND, 0xFF64B5F6, 21 * 60, isScreenTime = true),
         HabitIcon("read", R.drawable.ic_productivity_book, "Read", HabitCategory.PRODUCTIVITY, 0xFF90A4AE, 20 * 60),
         HabitIcon("plan", R.drawable.ic_productivity_calendar, "Plan Tomorrow", HabitCategory.PRODUCTIVITY, 0xFF80CBC4, 21 * 60),
         HabitIcon("tidy", R.drawable.ic_productivity_broom, "Tidy Up", HabitCategory.PRODUCTIVITY, 0xFFA1887F, 18 * 60),

@@ -590,6 +590,46 @@ class SupabaseSync(context: Context) {
         }
     }
 
+    // ── Tip purchases (server-side record + verification) ───────────
+
+    @Serializable
+    private data class TipPurchaseBody(
+        val purchaseData: String,
+        val signature: String? = null,
+        val userId: String? = null,
+    )
+
+    /**
+     * Reports a completed Huawei IAP tip purchase to the tip-purchase Edge
+     * Function, which verifies it with Huawei's Order Service (when the
+     * server credentials are configured) and records it in tip_purchases.
+     * Fire-and-forget: a network failure never blocks the on-device thank-you
+     * flow — the purchase itself already succeeded through Huawei.
+     */
+    suspend fun recordTipPurchase(purchaseData: String, signature: String?): Boolean {
+        if (!isConfigured || purchaseData.isBlank()) return false
+        return try {
+            val response = client.post("$baseUrl/functions/v1/tip-purchase") {
+                header("apikey", anonKey)
+                header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TipPurchaseBody(
+                        purchaseData = purchaseData,
+                        signature = signature,
+                        userId = sessionUserId ?: deviceId,
+                    ),
+                )
+            }
+            response.status.isSuccess().also { ok ->
+                if (!ok) Log.i(TAG, "tip-purchase record failed: ${response.status}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "tip-purchase record error: ${e.message}")
+            false
+        }
+    }
+
     // ── Data sync ────────────────────────────────────────────────────
 
     @Serializable
@@ -602,6 +642,10 @@ class SupabaseSync(context: Context) {
         val reminder_minutes: Int? = null,
         val is_pinned: Boolean = false,
         val duration_seconds: Int? = null,
+        val repeat_days_mask: Int = REPEAT_DAILY,
+        val monitored_package: String? = null,
+        val screen_time_limit_minutes: Int? = null,
+        val monitored_app_label: String? = null,
     )
 
     @Serializable
@@ -645,6 +689,10 @@ class SupabaseSync(context: Context) {
                     reminder_minutes = it.reminderMinutes,
                     is_pinned = it.isPinned,
                     duration_seconds = it.durationSeconds,
+                    repeat_days_mask = it.repeatDaysMask,
+                    monitored_package = it.monitoredPackage,
+                    screen_time_limit_minutes = it.screenTimeLimitMinutes,
+                    monitored_app_label = it.monitoredAppLabel,
                 )
             }
             val checkins = data.checkIns.flatMap { (habitId, days) ->
@@ -692,6 +740,10 @@ class SupabaseSync(context: Context) {
                         reminderMinutes = it.reminder_minutes,
                         isPinned = it.is_pinned,
                         durationSeconds = it.duration_seconds,
+                        repeatDaysMask = it.repeat_days_mask,
+                        monitoredPackage = it.monitored_package,
+                        screenTimeLimitMinutes = it.screen_time_limit_minutes,
+                        monitoredAppLabel = it.monitored_app_label,
                     )
                 },
                 checkIns = checkins.groupBy({ it.habit_id }, { it.day }),
