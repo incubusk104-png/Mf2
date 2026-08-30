@@ -26,6 +26,31 @@ name: Build
 #     -keyalg RSA -keysize 2048 -validity 10000
 # Keep release.keystore safe and NEVER commit it.
 # ─────────────────────────────────────────────────────────────────────────
+#
+# OPTIONAL (activity-sync integrations): to have Strava/Polar "Connect"
+# actually work in APKs built by this workflow, also add:
+#   STRAVA_CLIENT_ID          Strava API app's public Client ID
+#   POLAR_CLIENT_ID           Polar AccessLink API client id
+#   POLAR_CLIENT_SECRET_KEY   Polar AccessLink API client secret
+# (Same values already stored as Supabase Edge Function secrets. Without
+# these, the app still builds fine, but the Strava/Polar Connect buttons
+# will show "isn't configured for this build yet." instead of opening
+# the OAuth consent screen. Google Health Connect does not need any of
+# these — it uses an on-device permission dialog, no client id.)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# HUAWEI SIGN-IN ("opens then instantly closes" with no error): this almost
+# always means the SHA-256 certificate fingerprint of the APK THIS workflow
+# just signed isn't registered against the app in AppGallery Connect
+# (Console -> your project -> your app -> App information -> SHA-256
+# certificate fingerprint). The "Print release signing SHA-256" step below
+# prints the exact fingerprint of the keystore this run used, straight into
+# the Actions log — copy it from there and paste it into AppGallery Connect.
+# Also double-check Account Kit is turned ON for this app under
+# AppGallery Connect -> Build -> Account Kit; without that toggle, sign-in
+# is rejected server-side the same "instant close" way even with a
+# correctly registered fingerprint.
+# ─────────────────────────────────────────────────────────────────────────
 
 on:
   push:
@@ -97,6 +122,27 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: echo "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
 
+      - name: Print release signing SHA-256 (for AppGallery Connect / Huawei sign-in)
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        # This is the exact fingerprint AppGallery Connect must have on file
+        # for "Sign in with HUAWEI ID" to work in the APK this run produces.
+        # It is not secret — it's meant to be public/registered — so it's
+        # safe to print in the log. keytool ships with the JDK set up above.
+        # Grep case-insensitively for "sha256" instead of matching an exact
+        # header line: keytool's -list -v output wording has changed across
+        # JDK versions, but the "SHA256:"/"SHA-256:" fingerprint line itself
+        # has stayed put.
+        run: |
+          echo "Copy the SHA-256 value below into AppGallery Connect ->"
+          echo "your app -> App information -> SHA-256 certificate fingerprint:"
+          keytool -list -v \
+            -keystore app/release.keystore \
+            -alias "$KEY_ALIAS" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            | grep -i "sha256"
+
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
@@ -106,6 +152,18 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # Activity-sync OAuth client identifiers — read by build.gradle.kts
+          # (resolveRorkValue) and baked into BuildConfig. Without these the
+          # Strava/Polar "Connect" buttons compile fine but silently no-op
+          # (PolarClient.isConfigured / Strava's equivalent check is false),
+          # because CLIENT_ID/CLIENT_SECRET fall back to blank strings.
+          # Add STRAVA_CLIENT_ID, POLAR_CLIENT_ID and POLAR_CLIENT_SECRET_KEY
+          # as repository secrets (Settings -> Secrets and variables ->
+          # Actions) to enable these integrations in CI-built APKs — same
+          # values as the Supabase Edge Function secrets of the same name.
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          POLAR_CLIENT_ID: ${{ secrets.POLAR_CLIENT_ID }}
+          POLAR_CLIENT_SECRET_KEY: ${{ secrets.POLAR_CLIENT_SECRET_KEY }}
         # CI-only overrides (GitHub runners have ~7 GB): cap the Gradle JVM and
         # turn off the configuration cache to avoid flaky CI failures. This does
         # NOT change any committed files.
