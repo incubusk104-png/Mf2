@@ -57,14 +57,16 @@ data class TrendPoint(
     val moodName: String?,
     val isToday: Boolean,
     val showAxisLabel: Boolean,
-    /** Total steps synced from Huawei Health / Strava that day, null if none. */
+    /** Total steps synced from Fitbit / Polar / Health Connect / Strava that day, null if none. */
     val activitySteps: Long? = null,
-    /** Distinct sources that synced activity that day ("huawei_health", "strava"). */
+    /** Distinct sources that synced activity that day ("fitbit", "polar", "health_connect", "strava"). */
     val activitySources: List<String> = emptyList(),
 )
 
 private fun trendSourceLabel(source: String): String = when (source) {
-    "huawei_health" -> "Huawei Health"
+    "fitbit" -> "Fitbit"
+    "polar" -> "Polar"
+    "health_connect" -> "Health Connect"
     "strava" -> "Strava"
     else -> source.replace("_", " ").replaceFirstChar { it.uppercase() }
 }

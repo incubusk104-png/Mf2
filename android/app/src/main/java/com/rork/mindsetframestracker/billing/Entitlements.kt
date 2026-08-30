@@ -10,10 +10,11 @@ enum class Feature {
     UNLIMITED_HABITS,
     ALL_LANGUAGES,
     PDF_EXPORTS,
-    HUAWEI_HEALTH_KIT,
+    FITBIT,
+    POLAR,
     HEALTH_CONNECT,
     STRAVA,
-    AI_INSIGHTS,  // NEW
+    AI_INSIGHTS,
 }
 
 object Entitlements {
@@ -30,9 +31,10 @@ object Entitlements {
         Feature.UNLIMITED_HABITS,
         Feature.ALL_LANGUAGES,
         Feature.PDF_EXPORTS,
-        Feature.HEALTH_CONNECT,
         Feature.AI_INSIGHTS -> tier != SubscriptionTier.NONE
-        Feature.HUAWEI_HEALTH_KIT -> true  // free for everyone, no tier check
+        Feature.FITBIT,
+        Feature.POLAR,
+        Feature.HEALTH_CONNECT -> true  // free for everyone, no tier check
         Feature.STRAVA -> tier == SubscriptionTier.REGULAR
     }
 }

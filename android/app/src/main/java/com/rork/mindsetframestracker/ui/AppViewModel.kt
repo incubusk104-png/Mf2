@@ -264,6 +264,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _stravaMessage.value = message
     }
 
+    /** Handles the Fitbit OAuth callback code — exchanges it for tokens. */
+    fun handleFitbitAuthCode(code: String) {
+        viewModelScope.launch {
+            val tokens = com.rork.mindsetframestracker.integrations.FitbitClient
+                .exchangeCodeForTokens(code)
+            if (tokens != null) {
+                onFitbitTokensReceived(tokens)
+            } else {
+                _stravaMessage.value = "Fitbit connection failed. Please try again."
+            }
+        }
+    }
+
+    /** Handles the Polar OAuth callback code — exchanges it for tokens and registers the user. */
+    fun handlePolarAuthCode(code: String) {
+        viewModelScope.launch {
+            val tokens = com.rork.mindsetframestracker.integrations.PolarClient
+                .exchangeCodeForTokens(code)
+            if (tokens != null) {
+                // Register user with Polar AccessLink (required before pulling data)
+                com.rork.mindsetframestracker.integrations.PolarClient
+                    .registerUser(tokens.accessToken)
+                onPolarTokensReceived(tokens)
+            } else {
+                _stravaMessage.value = "Polar connection failed. Please try again."
+            }
+        }
+    }
+
     fun disconnectStrava() {
         update {
             it.copy(
@@ -321,60 +350,117 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Huawei Health Kit connection ─────────────────────────────────
+    // ── Fitbit connection ──────────────────────────────────────────────
 
-    /** Called from MainActivity.onActivityResult for HEALTH_AUTH_REQUEST_CODE. */
-    fun onHealthKitAuthResult(granted: Boolean) {
-        update { it.copy(settings = it.settings.copy(healthKitConnected = granted)) }
-        _stravaMessage.value =
-            if (granted) "Huawei Health connected." else "Huawei Health authorization was not granted."
+    fun isFitbitConnected(): Boolean = !_state.value.settings.fitbitAccessToken.isNullOrBlank()
+
+    /** Called after Fitbit OAuth callback delivers tokens. */
+    fun onFitbitTokensReceived(tokens: com.rork.mindsetframestracker.integrations.FitbitTokens) {
+        update {
+            it.copy(settings = it.settings.copy(
+                fitbitAccessToken = tokens.accessToken,
+                fitbitRefreshToken = tokens.refreshToken,
+            ))
+        }
+        _stravaMessage.value = "Fitbit connected."
     }
 
-    /** Books today's Health Kit steps onto [habitId] as an activity record. */
-    fun syncHealthKitToHabit(habitId: String, activityType: String) {
-        if (!_state.value.settings.healthKitConnected) {
-            _stravaMessage.value = "Connect Huawei Health first (Settings > Activity sync)."
+    /** Syncs today's Fitbit steps onto [habitId]. */
+    fun syncFitbitToHabit(habitId: String, activityType: String) {
+        val token = _state.value.settings.fitbitAccessToken
+        if (token.isNullOrBlank()) {
+            _stravaMessage.value = "Connect Fitbit first (Settings > Activity sync)."
             return
         }
         viewModelScope.launch {
-            val ok = com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
-                .syncTodayToHabit(getApplication(), habitId, activityType)
+            val ok = com.rork.mindsetframestracker.integrations.FitbitClient
+                .syncTodayToHabit(getApplication(), token, habitId, activityType)
             if (ok) {
-                update { it.copy(settings = it.settings.copy(healthKitLastSyncMs = System.currentTimeMillis())) }
+                update { it.copy(settings = it.settings.copy(fitbitLastSyncMs = System.currentTimeMillis())) }
             }
             _stravaMessage.value =
-                if (ok) "Today's steps synced from Huawei Health."
-                else "No step data available yet — check Huawei Health permissions."
+                if (ok) "Today's steps synced from Fitbit."
+                else "No step data from Fitbit yet — check your Fitbit account."
         }
     }
 
-    // ── Integration auto-sync toggles ───────────────────────────────
-
-    fun setHealthKitAutoSync(enabled: Boolean) {
-        update { it.copy(settings = it.settings.copy(healthKitAutoSync = enabled)) }
-    }
-
-    fun setStravaAutoSync(enabled: Boolean) {
-        update { it.copy(settings = it.settings.copy(stravaAutoSync = enabled)) }
-    }
-
-    fun setHealthConnectAutoSync(enabled: Boolean) {
-        update { it.copy(settings = it.settings.copy(healthConnectAutoSync = enabled)) }
-    }
-
-    fun disconnectHealthKit() {
+    fun disconnectFitbit() {
         update {
             it.copy(settings = it.settings.copy(
-                healthKitConnected = false,
-                healthKitLastSyncMs = 0,
+                fitbitAccessToken = null,
+                fitbitRefreshToken = null,
+                fitbitLastSyncMs = 0,
             ))
         }
-        _stravaMessage.value = "Huawei Health disconnected."
+        _stravaMessage.value = "Fitbit disconnected."
     }
+
+    // ── Polar connection ────────────────────────────────────────────
+
+    fun isPolarConnected(): Boolean = !_state.value.settings.polarAccessToken.isNullOrBlank()
+
+    /** Called after Polar OAuth callback delivers tokens. */
+    fun onPolarTokensReceived(tokens: com.rork.mindsetframestracker.integrations.PolarTokens) {
+        update {
+            it.copy(settings = it.settings.copy(
+                polarAccessToken = tokens.accessToken,
+            ))
+        }
+        _stravaMessage.value = "Polar connected."
+    }
+
+    /** Syncs today's Polar steps onto [habitId]. */
+    fun syncPolarToHabit(habitId: String, activityType: String) {
+        val token = _state.value.settings.polarAccessToken
+        if (token.isNullOrBlank()) {
+            _stravaMessage.value = "Connect Polar first (Settings > Activity sync)."
+            return
+        }
+        viewModelScope.launch {
+            val ok = com.rork.mindsetframestracker.integrations.PolarClient
+                .syncTodayToHabit(getApplication(), token, habitId, activityType)
+            if (ok) {
+                update { it.copy(settings = it.settings.copy(polarLastSyncMs = System.currentTimeMillis())) }
+            }
+            _stravaMessage.value =
+                if (ok) "Today's steps synced from Polar."
+                else "No step data from Polar yet — check your Polar account."
+        }
+    }
+
+    fun disconnectPolar() {
+        update {
+            it.copy(settings = it.settings.copy(
+                polarAccessToken = null,
+                polarLastSyncMs = 0,
+            ))
+        }
+        _stravaMessage.value = "Polar disconnected."
+    }
+
+    // ── Health Connect (Google) connection ───────────────────────────
 
     fun setHealthConnectConnected(connected: Boolean) {
         update { it.copy(settings = it.settings.copy(healthConnectConnected = connected)) }
         _stravaMessage.value = if (connected) "Health Connect connected." else "Health Connect disconnected."
+    }
+
+    /** Syncs today's Health Connect steps onto [habitId]. */
+    fun syncHealthConnectToHabit(habitId: String, activityType: String) {
+        if (!_state.value.settings.healthConnectConnected) {
+            _stravaMessage.value = "Connect Health Connect first (Settings > Activity sync)."
+            return
+        }
+        viewModelScope.launch {
+            val ok = com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
+                .syncTodayToHabit(getApplication(), habitId, activityType)
+            if (ok) {
+                update { it.copy(settings = it.settings.copy(healthConnectLastSyncMs = System.currentTimeMillis())) }
+            }
+            _stravaMessage.value =
+                if (ok) "Today's steps synced from Health Connect."
+                else "No step data from Health Connect yet — open Health Connect and check permissions."
+        }
     }
 
     fun disconnectHealthConnect() {
@@ -387,6 +473,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _stravaMessage.value = "Health Connect disconnected."
     }
 
+    // ── Integration auto-sync toggles ───────────────────────────────
+
+    fun setFitbitAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(fitbitAutoSync = enabled)) }
+    }
+
+    fun setPolarAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(polarAutoSync = enabled)) }
+    }
+
+    fun setHealthConnectAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(healthConnectAutoSync = enabled)) }
+    }
+
+    fun setStravaAutoSync(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(stravaAutoSync = enabled)) }
+    }
+
     /**
      * Auto-sync trigger: called once after app start to silently pull
      * latest data from all connected integrations that have auto-sync on.
@@ -395,12 +499,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val s = _state.value.settings
         val habits = _state.value.habits
         val firstFitnessHabit = habits.firstOrNull { habit ->
-            habit.iconId != null && com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+            habit.iconId != null && com.rork.mindsetframestracker.integrations.FitbitClient
                 .isActivitySupported(habit.iconId!!)
         }
-        // Auto-sync Huawei Health Kit
-        if (s.healthKitConnected && s.healthKitAutoSync && firstFitnessHabit != null) {
-            syncHealthKitToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
+        // Auto-sync Fitbit
+        if (isFitbitConnected() && s.fitbitAutoSync && firstFitnessHabit != null) {
+            syncFitbitToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
+        }
+        // Auto-sync Polar
+        if (isPolarConnected() && s.polarAutoSync && firstFitnessHabit != null) {
+            syncPolarToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
+        }
+        // Auto-sync Health Connect
+        if (s.healthConnectConnected && s.healthConnectAutoSync && firstFitnessHabit != null) {
+            syncHealthConnectToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
         }
         // Auto-sync Strava
         if (!s.stravaRefreshToken.isNullOrBlank() && s.stravaAutoSync && firstFitnessHabit != null) {

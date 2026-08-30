@@ -148,6 +148,27 @@ class MainActivity : ComponentActivity() {
                 )
             }
             intent.data = null
+            return
+        }
+        // Fitbit OAuth return leg: mindsetframes://fitbit-callback?code=...
+        val isFitbitCallback = uri.scheme == "mindsetframes" && uri.host == "fitbit-callback"
+        if (isFitbitCallback) {
+            val code = uri.getQueryParameter("code")
+            if (!code.isNullOrBlank()) {
+                appViewModel.handleFitbitAuthCode(code)
+            }
+            intent.data = null
+            return
+        }
+        // Polar OAuth return leg: mindsetframes://polar-callback?code=...
+        val isPolarCallback = uri.scheme == "mindsetframes" && uri.host == "polar-callback"
+        if (isPolarCallback) {
+            val code = uri.getQueryParameter("code")
+            if (!code.isNullOrBlank()) {
+                appViewModel.handlePolarAuthCode(code)
+            }
+            intent.data = null
+            return
         }
     }
 
@@ -180,9 +201,6 @@ class MainActivity : ComponentActivity() {
             ) { outcome ->
                 appViewModel.onSubscriptionPurchaseResult(outcome)
             }
-        } else if (requestCode == com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient.HEALTH_AUTH_REQUEST_CODE) {
-            val granted = com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient.parseAuthResult(this, data)
-            appViewModel.onHealthKitAuthResult(granted)
         } else if (requestCode == com.rork.mindsetframestracker.billing.TipBilling.PURCHASE_REQUEST_CODE) {
             com.rork.mindsetframestracker.billing.TipBilling.handlePurchaseResult(this, data) { outcome ->
                 when (outcome) {

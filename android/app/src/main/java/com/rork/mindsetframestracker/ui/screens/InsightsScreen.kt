@@ -112,7 +112,7 @@ private fun moodScore(mode: MoodMode): Float = when (mode) {
 }
 
 /**
- * One pass over synced [ActivityRecord]s (Huawei Health / Strava), indexed
+ * One pass over synced [ActivityRecord]s (Fitbit / Polar / Health Connect / Strava), indexed
  * by day for O(1) lookups everywhere the Insights screen needs them:
  * which habits a day's sync satisfies, plus the raw steps/sources for the
  * chart tooltip. Built once and shared by every stat below instead of
@@ -150,7 +150,7 @@ private fun buildActivityDayIndex(records: List<ActivityRecord>): ActivityDayInd
 
 /**
  * Habits done on [dayKey]: manually checked in, OR satisfied by a synced
- * Huawei Health / Strava activity for that habit that day — a logged run
+ * Fitbit / Polar / Health Connect / Strava activity for that habit that day — a logged run
  * shouldn't need a duplicate manual tap to count toward completion.
  * Kept local to this screen (rather than changing the shared
  * `AppData.completedCountOn`) so streaks and badge tiers elsewhere keep
@@ -211,7 +211,7 @@ fun InsightsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val s = appStrings()
     var rangeDays by rememberSaveable { mutableIntStateOf(7) }
 
-    // Synced Huawei Health / Strava activity, indexed once per data change
+    // Synced Fitbit / Polar / Health Connect / Strava activity, indexed once per data change
     // and shared by the trend chart, completion rate, momentum, and the
     // per-mood breakdown below.
     val activityIndex: ActivityDayIndex = remember(data.activityRecords) {

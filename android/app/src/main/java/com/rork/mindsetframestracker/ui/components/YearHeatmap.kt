@@ -67,9 +67,9 @@ data class HeatmapDay(
     val level: Int,
     val moodName: String?,
     val isToday: Boolean,
-    /** Total steps synced from Huawei Health / Strava that day, null if none. */
+    /** Total steps synced from Fitbit / Polar / Health Connect / Strava that day, null if none. */
     val activitySteps: Long? = null,
-    /** Distinct sources that synced activity that day ("huawei_health", "strava"). */
+    /** Distinct sources that synced activity that day ("fitbit", "polar", "health_connect", "strava"). */
     val activitySources: List<String> = emptyList(),
 )
 
@@ -89,14 +89,16 @@ private fun heatmapMoodTitle(mode: MoodMode): String =
     mode.name.lowercase().replaceFirstChar { it.uppercase() }
 
 private fun sourceLabel(source: String): String = when (source) {
-    "huawei_health" -> "Huawei Health"
+    "fitbit" -> "Fitbit"
+    "polar" -> "Polar"
+    "health_connect" -> "Health Connect"
     "strava" -> "Strava"
     else -> source.replace("_", " ").replaceFirstChar { it.uppercase() }
 }
 
 /**
  * Builds the past-12-months contribution grid from raw check-in data plus
- * synced ActivityRecord data (Huawei Health / Strava), in one pass over
+ * synced ActivityRecord data (Fitbit / Polar / Health Connect / Strava), in one pass over
  * both maps.
  */
 fun buildYearHeatmapData(data: AppData): YearHeatmapData {

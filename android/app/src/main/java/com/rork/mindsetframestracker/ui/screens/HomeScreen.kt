@@ -200,7 +200,7 @@ fun HomeScreen(
         viewModel.consumeSubscriptionMessage()
     }
 
-    // Strava / Huawei Health connection outcome (deep-link + auth results).
+    // Strava / Fitbit / Polar / Health Connect connection outcome (deep-link + auth results).
     val stravaMessage by viewModel.stravaMessage.collectAsStateWithLifecycle()
     LaunchedEffect(stravaMessage) {
         val message = stravaMessage ?: return@LaunchedEffect

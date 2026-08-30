@@ -40,7 +40,8 @@ import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.subscriptionTier
-import com.rork.mindsetframestracker.integrations.HuaweiHealthKitClient
+import com.rork.mindsetframestracker.integrations.FitbitClient
+import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
 import com.rork.mindsetframestracker.ui.AppViewModel
@@ -71,7 +72,7 @@ import java.util.UUID
  *
  * 2. **Activity-trackable icons** -> After adding the habit, the
  *    [ActivitySourcePickerSheet] is shown so the user can connect Strava
- *    or Huawei Health to automatically log activity data for that habit.
+ *    or Fitbit/Polar/Health Connect to automatically log activity data for that habit.
  *
  * 3. **To-Do List** -> [TodoListDialog] lets the user type a name and pick a
  *    time, then does the same create -> schedule -> sync flow.
@@ -206,8 +207,8 @@ fun HabitsScreen(viewModel: AppViewModel) {
 
     // ── Activity Source Picker ──────────────────────────────────────────
     // Shown after the user taps an activity-trackable icon (running, gym,
-    // strava_yoga, strava_swim, etc.). Lets them pick Strava or Huawei Health
-    // to auto-track activity data for that habit.
+    // strava_yoga, strava_swim, etc.). Lets them pick Fitbit, Polar,
+    // Health Connect, or Strava to auto-track activity data for that habit.
     if (activityPickerIconId != null && activityPickerHabitId != null) {
         ActivitySourcePickerSheet(
             habitIconId = activityPickerIconId!!,
@@ -219,7 +220,6 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 when (source) {
                     ActivitySource.STRAVA -> {
                         if (viewModel.isStravaConnected()) {
-                            // Already connected — sync activities immediately
                             val activityType = stravaActivityTypeFor(iconId)
                             viewModel.syncStravaActivities(habitId, activityType)
                             scope.launch {
@@ -228,8 +228,6 @@ fun HabitsScreen(viewModel: AppViewModel) {
                                 )
                             }
                         } else if (StravaAuthClient.isConfigured) {
-                            // Not connected yet — launch Strava OAuth flow
-                            // The callback lands in MainActivity.handleAuthIntent
                             val authIntent = StravaAuthClient.buildAuthIntent()
                             context.startActivity(authIntent)
                             scope.launch {
@@ -246,41 +244,65 @@ fun HabitsScreen(viewModel: AppViewModel) {
                         }
                     }
 
-                    ActivitySource.HUAWEI_HEALTH -> {
-                        if (data.settings.healthKitConnected) {
-                            // Already connected — sync immediately
+                    ActivitySource.HEALTH_CONNECT -> {
+                        if (data.settings.healthConnectConnected) {
                             val activityType = stravaActivityTypeFor(iconId)
-                            viewModel.syncHealthKitToHabit(habitId, activityType)
+                            viewModel.syncHealthConnectToHabit(habitId, activityType)
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Syncing from Health Connect...")
+                            }
+                        } else {
+                            viewModel.setHealthConnectConnected(true)
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    "Syncing from Huawei Health...",
+                                    "Open Settings > Activity sync to finish Health Connect setup.",
+                                )
+                            }
+                        }
+                    }
+
+                    ActivitySource.FITBIT -> {
+                        if (viewModel.isFitbitConnected()) {
+                            val activityType = stravaActivityTypeFor(iconId)
+                            viewModel.syncFitbitToHabit(habitId, activityType)
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Syncing from Fitbit...")
+                            }
+                        } else if (FitbitClient.isConfigured) {
+                            context.startActivity(FitbitClient.buildAuthIntent())
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Connect your Fitbit account to sync activities.",
                                 )
                             }
                         } else {
-                            // Not connected — launch Health Kit authorization
-                            val activity = context as? Activity
-                            if (activity != null) {
-                                val launched = HuaweiHealthKitClient.requestAuthorization(activity)
-                                if (!launched) {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            "Huawei Health Kit is not available on this device. " +
-                                                "Make sure HMS Core is installed.",
-                                        )
-                                    }
-                                } else {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            "Authorize Huawei Health to sync activity data.",
-                                        )
-                                    }
-                                }
-                            } else {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        "Could not open Health Kit authorization.",
-                                    )
-                                }
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Fitbit is not configured. Please contact support.",
+                                )
+                            }
+                        }
+                    }
+
+                    ActivitySource.POLAR -> {
+                        if (viewModel.isPolarConnected()) {
+                            val activityType = stravaActivityTypeFor(iconId)
+                            viewModel.syncPolarToHabit(habitId, activityType)
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Syncing from Polar...")
+                            }
+                        } else if (PolarClient.isConfigured) {
+                            context.startActivity(PolarClient.buildAuthIntent())
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Connect your Polar account to sync activities.",
+                                )
+                            }
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Polar is not configured. Please contact support.",
+                                )
                             }
                         }
                     }

@@ -153,9 +153,6 @@ dependencies {
     // Huawei App Update (JosApps / AppUpdateClient live here)
     implementation(libs.huawei.update)
 
-    // Huawei Health Kit
-    implementation("com.huawei.hms:health:6.11.0.300")
-
     // HMS Core modules
     implementation("com.huawei.hms:base:6.11.0.300")
     implementation("com.huawei.hms:iap:6.11.0.300")
