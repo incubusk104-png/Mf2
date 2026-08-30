@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MonitorHeart
-import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,12 +33,11 @@ import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.billing.Entitlements
 import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.billing.SubscriptionTier
-import com.rork.mindsetframestracker.integrations.FitbitClient
 import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 
-enum class ActivitySource { FITBIT, POLAR, HEALTH_CONNECT, STRAVA }
+enum class ActivitySource { POLAR, HEALTH_CONNECT, STRAVA }
 
 data class ActivitySourceOption(
     val source: ActivitySource,
@@ -121,13 +119,12 @@ private val STRAVA_TRACKABLE_IDS: Set<String> = setOf(
 
 /**
  * Returns true when the given icon id represents an activity that can
- * be tracked via an external source (Fitbit, Polar, Health Connect, or Strava).
+ * be tracked via an external source (Polar, Health Connect, or Strava).
  * Used by HabitsScreen to decide whether to show the source picker
  * when the user taps an activity-type icon.
  */
 fun isActivityTrackableIcon(iconId: String): Boolean =
     iconId in STRAVA_TRACKABLE_IDS
-        || FitbitClient.isActivitySupported(iconId)
         || PolarClient.isActivitySupported(iconId)
         || MindsetHealthConnectClient.isActivitySupported(iconId)
 
@@ -203,7 +200,6 @@ fun stravaActivityTypeFor(iconId: String): String = when (iconId) {
  *
  * - **Google Health Connect** — free, on-device step/sleep data (Android 14+
  *   built-in, or install from Play Store on older versions).
- * - **Fitbit** — free, OAuth Web API for step count.
  * - **Polar** — free, AccessLink API for step/activity data.
  * - **Strava** — shown for ALL activity icons (Strava tracks every sport),
  *   locked when the user isn't on the REGULAR subscription tier so they see
@@ -230,18 +226,6 @@ fun ActivitySourcePickerSheet(
                     source = ActivitySource.HEALTH_CONNECT,
                     label = "Google Health Connect",
                     subtitle = "Sync steps from your phone & wearables (free)",
-                    isLocked = false,
-                )
-            )
-        }
-
-        // Fitbit — free for everyone
-        if (FitbitClient.isActivitySupported(habitIconId)) {
-            add(
-                ActivitySourceOption(
-                    source = ActivitySource.FITBIT,
-                    label = "Fitbit",
-                    subtitle = "Sync steps & activity from Fitbit (free)",
                     isLocked = false,
                 )
             )
@@ -311,7 +295,6 @@ fun ActivitySourcePickerSheet(
                     Icon(
                         imageVector = when (option.source) {
                             ActivitySource.HEALTH_CONNECT -> Icons.Filled.MonitorHeart
-                            ActivitySource.FITBIT -> Icons.Filled.Watch
                             ActivitySource.POLAR -> Icons.Filled.Favorite
                             ActivitySource.STRAVA -> Icons.Filled.DirectionsRun
                         },

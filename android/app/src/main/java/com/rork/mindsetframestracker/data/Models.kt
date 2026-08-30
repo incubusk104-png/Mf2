@@ -30,7 +30,7 @@ data class Habit(
 data class ActivityRecord(
     val id: String,
     val habitId: String,
-    val source: String,          // "fitbit" | "polar" | "health_connect" | "strava"
+    val source: String,          // "polar" | "health_connect" | "strava"
     val activityType: String,    // "walking", "running", "cycling", etc.
     val timestamp: Long,
     val durationMinutes: Int? = null,
@@ -93,14 +93,6 @@ data class AppSettings(
      * was granted through a legacy path.
      */
     val subscriptionProductId: String? = null,
-    /** Fitbit OAuth access token — held only on-device. */
-    val fitbitAccessToken: String? = null,
-    /** Fitbit OAuth refresh token — held only on-device. */
-    val fitbitRefreshToken: String? = null,
-    /** Epoch millis of the last successful Fitbit sync (0 = never). */
-    val fitbitLastSyncMs: Long = 0,
-    /** Auto-sync Fitbit data when opening the app. */
-    val fitbitAutoSync: Boolean = true,
     /** Polar AccessLink access token — held only on-device. */
     val polarAccessToken: String? = null,
     /** Epoch millis of the last successful Polar sync (0 = never). */

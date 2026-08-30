@@ -264,19 +264,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _stravaMessage.value = message
     }
 
-    /** Handles the Fitbit OAuth callback code — exchanges it for tokens. */
-    fun handleFitbitAuthCode(code: String) {
-        viewModelScope.launch {
-            val tokens = com.rork.mindsetframestracker.integrations.FitbitClient
-                .exchangeCodeForTokens(code)
-            if (tokens != null) {
-                onFitbitTokensReceived(tokens)
-            } else {
-                _stravaMessage.value = "Fitbit connection failed. Please try again."
-            }
-        }
-    }
-
     /** Handles the Polar OAuth callback code — exchanges it for tokens and registers the user. */
     fun handlePolarAuthCode(code: String) {
         viewModelScope.launch {
@@ -348,51 +335,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ),
             )
         }
-    }
-
-    // ── Fitbit connection ──────────────────────────────────────────────
-
-    fun isFitbitConnected(): Boolean = !_state.value.settings.fitbitAccessToken.isNullOrBlank()
-
-    /** Called after Fitbit OAuth callback delivers tokens. */
-    fun onFitbitTokensReceived(tokens: com.rork.mindsetframestracker.integrations.FitbitTokens) {
-        update {
-            it.copy(settings = it.settings.copy(
-                fitbitAccessToken = tokens.accessToken,
-                fitbitRefreshToken = tokens.refreshToken,
-            ))
-        }
-        _stravaMessage.value = "Fitbit connected."
-    }
-
-    /** Syncs today's Fitbit steps onto [habitId]. */
-    fun syncFitbitToHabit(habitId: String, activityType: String) {
-        val token = _state.value.settings.fitbitAccessToken
-        if (token.isNullOrBlank()) {
-            _stravaMessage.value = "Connect Fitbit first (Settings > Activity sync)."
-            return
-        }
-        viewModelScope.launch {
-            val ok = com.rork.mindsetframestracker.integrations.FitbitClient
-                .syncTodayToHabit(getApplication(), token, habitId, activityType)
-            if (ok) {
-                update { it.copy(settings = it.settings.copy(fitbitLastSyncMs = System.currentTimeMillis())) }
-            }
-            _stravaMessage.value =
-                if (ok) "Today's steps synced from Fitbit."
-                else "No step data from Fitbit yet — check your Fitbit account."
-        }
-    }
-
-    fun disconnectFitbit() {
-        update {
-            it.copy(settings = it.settings.copy(
-                fitbitAccessToken = null,
-                fitbitRefreshToken = null,
-                fitbitLastSyncMs = 0,
-            ))
-        }
-        _stravaMessage.value = "Fitbit disconnected."
     }
 
     // ── Polar connection ────────────────────────────────────────────
@@ -475,10 +417,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Integration auto-sync toggles ───────────────────────────────
 
-    fun setFitbitAutoSync(enabled: Boolean) {
-        update { it.copy(settings = it.settings.copy(fitbitAutoSync = enabled)) }
-    }
-
     fun setPolarAutoSync(enabled: Boolean) {
         update { it.copy(settings = it.settings.copy(polarAutoSync = enabled)) }
     }
@@ -499,12 +437,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val s = _state.value.settings
         val habits = _state.value.habits
         val firstFitnessHabit = habits.firstOrNull { habit ->
-            habit.iconId != null && com.rork.mindsetframestracker.integrations.FitbitClient
+            habit.iconId != null && com.rork.mindsetframestracker.integrations.PolarClient
                 .isActivitySupported(habit.iconId!!)
-        }
-        // Auto-sync Fitbit
-        if (isFitbitConnected() && s.fitbitAutoSync && firstFitnessHabit != null) {
-            syncFitbitToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
         }
         // Auto-sync Polar
         if (isPolarConnected() && s.polarAutoSync && firstFitnessHabit != null) {

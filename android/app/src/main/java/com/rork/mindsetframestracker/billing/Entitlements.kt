@@ -10,7 +10,6 @@ enum class Feature {
     UNLIMITED_HABITS,
     ALL_LANGUAGES,
     PDF_EXPORTS,
-    FITBIT,
     POLAR,
     HEALTH_CONNECT,
     STRAVA,
@@ -32,7 +31,6 @@ object Entitlements {
         Feature.ALL_LANGUAGES,
         Feature.PDF_EXPORTS,
         Feature.AI_INSIGHTS -> tier != SubscriptionTier.NONE
-        Feature.FITBIT,
         Feature.POLAR,
         Feature.HEALTH_CONNECT -> true  // free for everyone, no tier check
         Feature.STRAVA -> tier == SubscriptionTier.REGULAR

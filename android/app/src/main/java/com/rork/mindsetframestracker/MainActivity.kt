@@ -150,16 +150,7 @@ class MainActivity : ComponentActivity() {
             intent.data = null
             return
         }
-        // Fitbit OAuth return leg: mindsetframes://fitbit-callback?code=...
-        val isFitbitCallback = uri.scheme == "mindsetframes" && uri.host == "fitbit-callback"
-        if (isFitbitCallback) {
-            val code = uri.getQueryParameter("code")
-            if (!code.isNullOrBlank()) {
-                appViewModel.handleFitbitAuthCode(code)
-            }
-            intent.data = null
-            return
-        }
+
         // Polar OAuth return leg: mindsetframes://polar-callback?code=...
         val isPolarCallback = uri.scheme == "mindsetframes" && uri.host == "polar-callback"
         if (isPolarCallback) {
