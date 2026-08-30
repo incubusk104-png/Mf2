@@ -169,6 +169,7 @@ object HuaweiAuthClient {
         if (!HuaweiServicesConfig.isConfigured) {
             Log.w(TAG, "Huawei sign-in blocked — agconnect-services.json not configured")
             val reason = HuaweiServicesConfig.lastError
+            HuaweiServicesConfig.logDiagnostic(activity, "startSignIn blocked: not configured ($reason)")
             return if (reason != null) {
                 "Huawei sign-in isn't set up yet ($reason). Use email sign-in instead."
             } else {
@@ -178,6 +179,7 @@ object HuaweiAuthClient {
         if (!isHmsAvailable(activity)) {
             val code = hmsConnectionResult(activity)
             Log.w(TAG, "Huawei sign-in blocked — HMS availability check returned code $code")
+            HuaweiServicesConfig.logDiagnostic(activity, "startSignIn blocked: HMS unavailable (code $code)")
             return when (code) {
                 ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED ->
                     "HUAWEI Mobile Services needs an update on this device. Update HMS Core from AppGallery, then try again."
@@ -203,10 +205,26 @@ object HuaweiAuthClient {
      * Parses the activity result from [startSignIn] into a [HuaweiSignInResult].
      * Call this from [Activity.onActivityResult] when requestCode == [SIGN_IN_REQUEST_CODE].
      */
-    fun parseResult(requestCode: Int, resultCode: Int, data: Intent?): HuaweiSignInResult {
+    fun parseResult(context: Context, requestCode: Int, resultCode: Int, data: Intent?): HuaweiSignInResult {
         if (requestCode != SIGN_IN_REQUEST_CODE) return HuaweiSignInResult.Cancelled
         if (resultCode != Activity.RESULT_OK || data == null) {
             Log.i(TAG, "Huawei sign-in cancelled or dismissed (resultCode=$resultCode)")
+            // resultCode != RESULT_OK covers BOTH a genuine user cancel (tapped
+            // back / dismissed the account picker) AND the sign-in activity
+            // being auto-rejected and closing itself instantly — most often
+            // because this build's signing certificate SHA-256 isn't
+            // registered for this app in AppGallery Connect. HMS gives no
+            // distinct status code for the second case, so this can't be
+            // told apart from a real cancel in-band; log it so a pattern of
+            // "always resultCode=$resultCode within ~1s of launch, never a
+            // real account picker seen" is at least visible afterwards.
+            HuaweiServicesConfig.logDiagnostic(
+                context,
+                "Huawei sign-in returned resultCode=$resultCode, data=${data == null}. " +
+                    "If this happens on every attempt with no account picker ever " +
+                    "shown, check the signing cert SHA-256 registered in AppGallery " +
+                    "Connect matches this build's — see HuaweiServicesConfig doc.",
+            )
             return HuaweiSignInResult.Cancelled
         }
         return try {
