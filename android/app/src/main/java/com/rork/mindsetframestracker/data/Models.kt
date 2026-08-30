@@ -95,6 +95,13 @@ data class AppSettings(
     val subscriptionProductId: String? = null,
     /** Polar AccessLink access token — held only on-device. */
     val polarAccessToken: String? = null,
+    /**
+     * Numeric Polar user id (x_user_id from the token exchange). Required by
+     * every AccessLink transaction endpoint (/users/{id}/activity-transactions)
+     * — without it no activity data can be pulled. 0 = unknown (legacy
+     * connection made before this field existed; user must reconnect).
+     */
+    val polarUserId: Long = 0,
     /** Epoch millis of the last successful Polar sync (0 = never). */
     val polarLastSyncMs: Long = 0,
     /** Auto-sync Polar data when opening the app. Defaults to false —

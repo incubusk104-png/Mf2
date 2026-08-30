@@ -25,6 +25,9 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.UUID
@@ -249,6 +252,19 @@ class SupabaseSync(context: Context) {
     /**
      * Creates an account. Returns null when the account is ready (session
      * active), or a message — either an error or "confirm your email" info.
+     *
+     * GoTrue's /signup response has TWO different shapes:
+     *  - Email confirmation DISABLED → a session envelope:
+     *    { "access_token": ..., "user": { "id": ..., "identities": [...] } }
+     *  - Email confirmation ENABLED  → the bare user object at the TOP level:
+     *    { "id": ..., "email": ..., "identities": [...] }  (no access_token)
+     *
+     * The previous implementation only understood the first shape, so with
+     * confirmations enabled every brand-new sign-up parsed as user == null
+     * and was wrongly reported as "already registered". Both shapes are now
+     * handled, and the real duplicate signal — GoTrue returning an obfuscated
+     * user whose "identities" array is EMPTY — is checked on whichever shape
+     * came back.
      */
     suspend fun signUp(email: String, password: String): String? {
         if (!isConfigured) return "Cloud sync is not configured"
@@ -259,23 +275,45 @@ class SupabaseSync(context: Context) {
                 contentType(ContentType.Application.Json)
                 setBody(AuthCredentials(email.trim(), password))
             }
-            if (!response.status.isSuccess()) return authError(response)
-            
-            val session = response.body<AuthSession>()
-            val user = session.user
-            val identities = user?.identities
+            if (!response.status.isSuccess()) {
+                // With confirmations disabled, a duplicate sign-up surfaces as
+                // a 400/422 "User already registered" error instead of the
+                // empty-identities marker — normalize it to the same message.
+                val error = authError(response)
+                val normalized = error.lowercase()
+                return if ("already registered" in normalized || "already exists" in normalized ||
+                    "user_already_exists" in normalized
+                ) {
+                    lastSignUpIdentitiesWasEmpty = true
+                    "This email is already registered. Please log in instead."
+                } else {
+                    error
+                }
+            }
 
-            val isDuplicate = user == null || user.id.isBlank() || (identities != null && identities.isEmpty())
+            val bodyText = response.bodyAsText()
+            val root = runCatching { json.parseToJsonElement(bodyText).jsonObject }.getOrNull()
+                ?: return "Sign-up failed — unexpected server response. Try again."
 
+            val accessToken = root["access_token"]?.jsonPrimitive?.contentOrNull
+            // The user object is nested when a session is returned, top-level otherwise.
+            val userObject = (root["user"] as? JsonObject) ?: root
+            val userId = userObject["id"]?.jsonPrimitive?.contentOrNull
+            val identities = userObject["identities"] as? JsonArray
+
+            // GoTrue signals "this email already has a CONFIRMED account" by
+            // returning an obfuscated user whose identities array is empty.
+            // (identities == null is NOT a duplicate — it simply wasn't selected.)
+            val isDuplicate = userId.isNullOrBlank() || (identities != null && identities.isEmpty())
             if (isDuplicate) {
                 lastSignUpIdentitiesWasEmpty = true
                 return "This email is already registered. Please log in instead."
             }
 
-            if (session.access_token.isNullOrBlank()) {
+            if (accessToken.isNullOrBlank()) {
                 "Account created — check $email to confirm, then sign in."
             } else {
-                saveSession(session, provider = "email")
+                saveSession(json.decodeFromString(AuthSession.serializer(), bodyText), provider = "email")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Sign-up failed: ${e.message}")
@@ -284,6 +322,30 @@ class SupabaseSync(context: Context) {
     }
 
     fun lastSignUpIdentitiesEmpty(): Boolean = lastSignUpIdentitiesWasEmpty
+
+    @Serializable
+    private data class ResendBody(val type: String, val email: String)
+
+    /**
+     * Re-sends the sign-up confirmation email for an unconfirmed account
+     * (GoTrue /resend). Returns null on success or an error message. Rate
+     * limited server-side, so repeated taps are safe.
+     */
+    suspend fun resendSignupConfirmation(email: String): String? {
+        if (!isConfigured) return "Cloud sync is not configured"
+        if (email.isBlank()) return "Enter your email first"
+        return try {
+            val response = client.post("$baseUrl/auth/v1/resend") {
+                header("apikey", anonKey)
+                contentType(ContentType.Application.Json)
+                setBody(ResendBody(type = "signup", email = email.trim()))
+            }
+            if (response.status.isSuccess()) null else authError(response)
+        } catch (e: Exception) {
+            Log.w(TAG, "Resend confirmation failed: ${e.message}")
+            "Couldn't reach the server. Check your connection and try again."
+        }
+    }
 
     /**
      * Completes the email-confirmation web-bridge: the site forwards the

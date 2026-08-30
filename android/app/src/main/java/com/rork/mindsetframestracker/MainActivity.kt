@@ -154,8 +154,16 @@ class MainActivity : ComponentActivity() {
         val isPolarCallback = uri.scheme == "mindsetframes" && uri.host == "polar-callback"
         if (isPolarCallback) {
             val code = uri.getQueryParameter("code")
-            if (!code.isNullOrBlank()) {
-                appViewModel.handlePolarAuthCode(code)
+            val error = uri.getQueryParameter("error")
+            when {
+                !code.isNullOrBlank() -> appViewModel.handlePolarAuthCode(code)
+                error != null -> appViewModel.onStravaConnectFailed(
+                    if (error == "access_denied") "Polar access was declined."
+                    else "Polar connection failed: $error",
+                )
+                else -> appViewModel.onStravaConnectFailed(
+                    "Polar connection failed — no sign-in code returned. Try again.",
+                )
             }
             intent.data = null
             return

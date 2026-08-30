@@ -145,7 +145,38 @@
                     android:scheme="mindsetframes"
                     android:host="polar-callback" />
             </intent-filter>
+
+            <!-- Google Health Connect REQUIREMENT (Android 13 and below):
+                 Health Connect only shows this app in its permission dialog
+                 when the app declares an activity that handles the
+                 privacy-policy rationale intent. WITHOUT this intent-filter
+                 the permission request activity opens and immediately returns
+                 an EMPTY granted set — the exact "Health Connect permissions
+                 were not granted" failure, even though the user never saw a
+                 dialog to approve. MainActivity handles the intent (it simply
+                 opens; the in-app privacy policy is available from Settings). -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
         </activity>
+
+        <!-- Google Health Connect REQUIREMENT (Android 14+, API 34+):
+             on Android 14 the rationale intent moved to the platform action
+             android.intent.action.VIEW_PERMISSION_USAGE with the
+             HEALTH_PERMISSIONS category, delivered through a permission-
+             protected alias. Without this alias, permission requests on
+             Android 14+ devices are silently rejected with an empty grant
+             set — same symptom as above but only on newer phones. -->
+        <activity-alias
+            android:name=".ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"
