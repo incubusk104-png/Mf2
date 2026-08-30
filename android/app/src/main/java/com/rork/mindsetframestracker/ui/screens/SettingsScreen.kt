@@ -27,6 +27,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -101,6 +102,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -264,6 +267,22 @@ fun SettingsScreen(viewModel: AppViewModel) {
     val view = LocalView.current
     val context = LocalContext.current
 
+    // Strava / Polar / Health Connect connection outcome (success + error
+    // toasts). This flow previously only had a listener wired up on
+    // HomeScreen's Snackbar host, so any message posted while the user was
+    // on the Settings tab (e.g. "Polar isn't configured for this build
+    // yet.", "Health Connect is not available on this device.", permission
+    // denied, disconnect confirmations) was silently dropped — the Connect
+    // buttons looked like they did nothing. Observing it here too fixes that.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val stravaMessage by viewModel.stravaMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(stravaMessage) {
+        val message = stravaMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeStravaMessage()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1753,6 +1772,14 @@ fun SettingsScreen(viewModel: AppViewModel) {
             },
         )
     }
+
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 16.dp),
+    )
+    } // Box
 }
 
 @Composable
