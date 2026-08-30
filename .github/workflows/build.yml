@@ -1,47 +1,17 @@
-name: Build
-
-# Builds a RELEASE APK on GitHub so you can review / install the result.
-# - Runs on every push and pull request.
-# - Can also be started manually: Actions tab -> "Build" -> "Run workflow".
-# - Produces a downloadable, SIGNED release APK artifact.
-#
-# The Gradle project lives in the android/ subfolder of this repo, so every
-# step runs with android/ as its working directory.
-#
-# ─────────────────────────────────────────────────────────────────────────
-# REQUIRED ONE-TIME SETUP (release builds must be signed):
-# Add these repository secrets under
-#   Settings -> Secrets and variables -> Actions -> New repository secret
-#
-#   KEYSTORE_BASE64   base64 of your release.keystore file
-#                       macOS/Linux : base64 -i release.keystore | pbcopy
-#                       Linux       : base64 -w0 release.keystore
-#                       Windows PS  : [Convert]::ToBase64String([IO.File]::ReadAllBytes("release.keystore"))
-#   KEYSTORE_PASSWORD keystore (store) password
-#   KEY_ALIAS         key alias inside the keystore
-#   KEY_PASSWORD      key (alias) password
-#
-# Don't have a keystore yet? Create one:
-#   keytool -genkeypair -v -keystore release.keystore -alias mindset \
-#     -keyalg RSA -keysize 2048 -validity 10000
-# Keep release.keystore safe and NEVER commit it.
-# ─────────────────────────────────────────────────────────────────────────
+name: Build Debug APK
 
 on:
-  push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
   workflow_dispatch: {}
+  push:
+    branches: [main, genspark_ai_developer]
 
-# Cancel older in-progress runs for the same branch/PR to save minutes.
 concurrency:
-  group: build-${{ github.ref }}
+  group: debug-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build release APK
+  debug:
+    name: Build debug APK
     runs-on: ubuntu-latest
 
     defaults:
@@ -53,7 +23,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        # AGP 8.13 requires JDK 17 to run Gradle.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -72,59 +41,27 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      - name: Check signing secrets are present
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          missing=""
-          [ -z "$KEYSTORE_BASE64" ] && missing="$missing KEYSTORE_BASE64"
-          [ -z "$KEYSTORE_PASSWORD" ] && missing="$missing KEYSTORE_PASSWORD"
-          [ -z "$KEY_ALIAS" ] && missing="$missing KEY_ALIAS"
-          [ -z "$KEY_PASSWORD" ] && missing="$missing KEY_PASSWORD"
-          if [ -n "$missing" ]; then
-            echo "::error::Missing required signing secret(s):$missing"
-            echo "Add them under Settings -> Secrets and variables -> Actions."
-            echo "See the setup notes at the top of .github/workflows/build.yml."
-            exit 1
-          fi
-          echo "All signing secrets present."
-
-      - name: Decode keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
-
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build release APK
+      - name: Build debug APK
         env:
-          # The app's signingConfig reads these three from the environment.
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        # CI-only overrides (GitHub runners have ~7 GB): cap the Gradle JVM and
-        # turn off the configuration cache to avoid flaky CI failures. This does
-        # NOT change any committed files.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          POLAR_CLIENT_ID: ${{ secrets.POLAR_CLIENT_ID }}
+          POLAR_CLIENT_SECRET_KEY: ${{ secrets.POLAR_CLIENT_SECRET_KEY }}
         run: >-
-          ./gradlew :app:assembleRelease --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon
           -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8"
           -Porg.gradle.configuration-cache=false
 
-      - name: Remove decoded keystore
-        # Never leave the keystore lying around on the runner.
-        if: always()
-        run: rm -f app/release.keystore
-
-      - name: Upload release APK
+      - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -132,7 +69,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-reports
+          name: debug-build-reports
           path: |
             android/app/build/reports/
             android/build/reports/
