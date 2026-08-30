@@ -58,6 +58,18 @@
         <intent>
             <action android:name="com.huawei.hms.core.aidlservice" />
         </intent>
+
+        <!-- Google Health Connect (Android 14+: platform module; older: standalone APK).
+             Without these entries, HealthConnectClient.getSdkStatus() cannot see the
+             Health Connect provider behind Android 11+ package-visibility filtering
+             and silently returns SDK_UNAVAILABLE — blocking the entire permission
+             flow even when Health Connect IS installed. The intent declaration lets
+             PermissionController.createRequestPermissionResultContract() resolve the
+             Health Connect permissions activity. -->
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
     </queries>
 
     <application
