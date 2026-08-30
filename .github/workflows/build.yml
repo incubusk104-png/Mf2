@@ -1,4 +1,3 @@
-
 name: Build
 
 # Builds a RELEASE APK on GitHub so you can review / install the result.
@@ -26,6 +25,18 @@ name: Build
 #   keytool -genkeypair -v -keystore release.keystore -alias mindset \
 #     -keyalg RSA -keysize 2048 -validity 10000
 # Keep release.keystore safe and NEVER commit it.
+# ─────────────────────────────────────────────────────────────────────────
+#
+# OPTIONAL (activity-sync integrations): to have Strava/Polar "Connect"
+# actually work in APKs built by this workflow, also add:
+#   STRAVA_CLIENT_ID          Strava API app's public Client ID
+#   POLAR_CLIENT_ID           Polar AccessLink API client id
+#   POLAR_CLIENT_SECRET_KEY   Polar AccessLink API client secret
+# (Same values already stored as Supabase Edge Function secrets. Without
+# these, the app still builds fine, but the Strava/Polar Connect buttons
+# will show "isn't configured for this build yet." instead of opening
+# the OAuth consent screen. Google Health Connect does not need any of
+# these — it uses an on-device permission dialog, no client id.)
 # ─────────────────────────────────────────────────────────────────────────
 
 on:
@@ -107,6 +118,18 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # Activity-sync OAuth client identifiers — read by build.gradle.kts
+          # (resolveRorkValue) and baked into BuildConfig. Without these the
+          # Strava/Polar "Connect" buttons compile fine but silently no-op
+          # (PolarClient.isConfigured / Strava's equivalent check is false),
+          # because CLIENT_ID/CLIENT_SECRET fall back to blank strings.
+          # Add STRAVA_CLIENT_ID, POLAR_CLIENT_ID and POLAR_CLIENT_SECRET_KEY
+          # as repository secrets (Settings -> Secrets and variables ->
+          # Actions) to enable these integrations in CI-built APKs — same
+          # values as the Supabase Edge Function secrets of the same name.
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          POLAR_CLIENT_ID: ${{ secrets.POLAR_CLIENT_ID }}
+          POLAR_CLIENT_SECRET_KEY: ${{ secrets.POLAR_CLIENT_SECRET_KEY }}
         # CI-only overrides (GitHub runners have ~7 GB): cap the Gradle JVM and
         # turn off the configuration cache to avoid flaky CI failures. This does
         # NOT change any committed files.
