@@ -272,7 +272,7 @@ fun ActivitySourcePickerSheet(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "Connect an external source to automatically log this habit.",
+                "Authenticate your account first, then connect to automatically log this habit.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

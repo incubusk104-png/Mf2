@@ -97,8 +97,9 @@ data class AppSettings(
     val polarAccessToken: String? = null,
     /** Epoch millis of the last successful Polar sync (0 = never). */
     val polarLastSyncMs: Long = 0,
-    /** Auto-sync Polar data when opening the app. */
-    val polarAutoSync: Boolean = true,
+    /** Auto-sync Polar data when opening the app. Defaults to false —
+     *  the user must explicitly opt in after authenticating their account. */
+    val polarAutoSync: Boolean = false,
     /** Strava OAuth tokens — held only on-device; exchange/refresh happens
      *  through the strava-token-exchange Edge Function (secret never ships). */
     val stravaAccessToken: String? = null,
@@ -107,14 +108,16 @@ data class AppSettings(
     val stravaExpiresAt: Long = 0,
     /** Epoch millis of the last successful Strava sync (0 = never). */
     val stravaLastSyncMs: Long = 0,
-    /** Auto-sync Strava activities when opening the app. */
-    val stravaAutoSync: Boolean = true,
+    /** Auto-sync Strava activities when opening the app. Defaults to false —
+     *  the user must explicitly opt in after authenticating their account. */
+    val stravaAutoSync: Boolean = false,
     /** Android Health Connect (Google) connected state. */
     val healthConnectConnected: Boolean = false,
     /** Epoch millis of last Health Connect sync. */
     val healthConnectLastSyncMs: Long = 0,
-    /** Auto-sync Health Connect data when opening the app. */
-    val healthConnectAutoSync: Boolean = true,
+    /** Auto-sync Health Connect data when opening the app. Defaults to false —
+     *  the user must explicitly opt in after authenticating their account. */
+    val healthConnectAutoSync: Boolean = false,
     /**
      * App display language. English (US/UK) is free everywhere, one regional
      * language ([freeRegionalLanguage]) is free for this install; all other

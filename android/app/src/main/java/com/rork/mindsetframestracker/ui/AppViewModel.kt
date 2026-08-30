@@ -251,7 +251,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             StravaAuthClient.exchangeCodeForToken(code)
                 .onSuccess { tokens ->
                     saveStravaTokens(tokens)
-                    _stravaMessage.value = "Strava connected — your activities can now complete habits."
+                    _stravaMessage.value = "Strava account authenticated and connected. You can enable auto-sync in Settings > Activity sync."
                 }
                 .onFailure {
                     _stravaMessage.value = "Strava connection failed. Please try again."
@@ -348,7 +348,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 polarAccessToken = tokens.accessToken,
             ))
         }
-        _stravaMessage.value = "Polar connected."
+        _stravaMessage.value = "Polar account authenticated and connected. You can enable auto-sync in Settings > Activity sync."
     }
 
     /** Syncs today's Polar steps onto [habitId]. */
@@ -382,9 +382,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Health Connect (Google) connection ───────────────────────────
 
+    /**
+     * One-shot flag: when set to true, AppNavigation picks it up and
+     * launches the Health Connect permission dialog. After the result
+     * comes back, [onHealthConnectPermissionResult] is called.
+     */
+    private val _healthConnectPermissionRequested = MutableStateFlow(false)
+    val healthConnectPermissionRequested: StateFlow<Boolean> =
+        _healthConnectPermissionRequested.asStateFlow()
+
+    /**
+     * Request the Health Connect permission dialog. The user MUST grant
+     * permissions before we mark Health Connect as connected.
+     */
+    fun requestHealthConnectPermissions() {
+        _healthConnectPermissionRequested.value = true
+    }
+
+    /** Called once the permission launcher has fired. */
+    fun consumeHealthConnectPermissionRequest() {
+        _healthConnectPermissionRequested.value = false
+    }
+
+    /**
+     * Called from the permission-result callback. Only marks Health
+     * Connect as connected when the required permissions were actually
+     * granted; shows an error message otherwise.
+     */
+    fun onHealthConnectPermissionResult(granted: Set<String>) {
+        val allGranted = com.rork.mindsetframestracker.integrations
+            .MindsetHealthConnectClient.requiredPermissions.all { it in granted }
+        if (allGranted) {
+            update { it.copy(settings = it.settings.copy(healthConnectConnected = true)) }
+            _stravaMessage.value = "Health Connect connected — permissions granted."
+        } else {
+            // Do NOT mark as connected — permissions are missing.
+            update { it.copy(settings = it.settings.copy(healthConnectConnected = false)) }
+            _stravaMessage.value = "Health Connect permissions were not granted. Please try again and allow access to steps and sleep data."
+        }
+    }
+
     fun setHealthConnectConnected(connected: Boolean) {
         update { it.copy(settings = it.settings.copy(healthConnectConnected = connected)) }
         _stravaMessage.value = if (connected) "Health Connect connected." else "Health Connect disconnected."
+    }
+
+    /**
+     * Verifies that Health Connect permissions are still valid before syncing.
+     * If permissions were revoked since the last session, marks as disconnected.
+     */
+    private suspend fun verifyHealthConnectPermissions(): Boolean {
+        val hasPerms = com.rork.mindsetframestracker.integrations
+            .MindsetHealthConnectClient.hasAllPermissions(getApplication())
+        if (!hasPerms && _state.value.settings.healthConnectConnected) {
+            update { it.copy(settings = it.settings.copy(healthConnectConnected = false)) }
+            _stravaMessage.value = "Health Connect permissions were revoked. Please reconnect."
+        }
+        return hasPerms
     }
 
     /** Syncs today's Health Connect steps onto [habitId]. */
@@ -394,6 +448,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
+            // Verify permissions are still valid before attempting a sync
+            if (!verifyHealthConnectPermissions()) return@launch
             val ok = com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
                 .syncTodayToHabit(getApplication(), habitId, activityType)
             if (ok) {
@@ -432,6 +488,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Auto-sync trigger: called once after app start to silently pull
      * latest data from all connected integrations that have auto-sync on.
+     *
+     * Each integration is only synced when:
+     *  1. The user has completed the authentication/authorisation flow
+     *     (not just "marked as connected" — actual tokens or permissions).
+     *  2. The user has explicitly enabled auto-sync for that integration.
+     *  3. There is at least one fitness habit to sync into.
      */
     fun runAutoSync() {
         val s = _state.value.settings
@@ -440,15 +502,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             habit.iconId != null && com.rork.mindsetframestracker.integrations.PolarClient
                 .isActivitySupported(habit.iconId!!)
         }
-        // Auto-sync Polar
+        // Auto-sync Polar — only when OAuth token is present AND auto-sync enabled
         if (isPolarConnected() && s.polarAutoSync && firstFitnessHabit != null) {
             syncPolarToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
         }
-        // Auto-sync Health Connect
+        // Auto-sync Health Connect — only when permissions are verified AND auto-sync enabled
         if (s.healthConnectConnected && s.healthConnectAutoSync && firstFitnessHabit != null) {
-            syncHealthConnectToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
+            viewModelScope.launch {
+                // Re-verify permissions haven't been revoked since last session
+                if (verifyHealthConnectPermissions()) {
+                    syncHealthConnectToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
+                }
+            }
         }
-        // Auto-sync Strava
+        // Auto-sync Strava — only when OAuth refresh token is present AND auto-sync enabled
         if (!s.stravaRefreshToken.isNullOrBlank() && s.stravaAutoSync && firstFitnessHabit != null) {
             syncStravaActivities(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "running")
         }
