@@ -10,6 +10,17 @@
     <uses-sdk tools:overrideLibrary="androidx.health.connect.client" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Google Health Connect: the OS-level permission grant screen for a
+         given HealthPermission (StepsRecord / SleepSessionRecord read access)
+         will only show that item — or grant anything at all — if the app has
+         ALSO declared the matching android.permission.health.* manifest
+         permission below. Without these two lines, PermissionController's
+         request activity opens with nothing it's allowed to show and
+         immediately finishes with an empty granted set: that's the
+         "permissions were not granted" result even though the user never
+         actually saw a dialog to approve or deny. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Offline detection for cloud backup — lets the app queue syncs instead of failing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
