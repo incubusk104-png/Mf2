@@ -159,10 +159,12 @@ fun AppNavigation(viewModel: AppViewModel) {
     val activity = LocalActivity.current
 
     // ── Health Connect permission launcher ────────────────────────────
-    // Registered here so it lives for the entire Activity lifecycle.
-    // When the ViewModel's healthConnectPermissionRequested flag goes
-    // true, we launch the system permission dialog; the result callback
-    // forwards the granted permission set back to the ViewModel.
+    // Registered here (top of the composable, before any conditional
+    // return) so it lives for the entire Activity lifecycle — a
+    // requirement of rememberLauncherForActivityResult. When the
+    // ViewModel's healthConnectPermissionRequested flag goes true we
+    // launch the system permission dialog; the result callback forwards
+    // the granted permission set back to the ViewModel.
     val hcPermissionLauncher = rememberLauncherForActivityResult(
         contract = MindsetHealthConnectClient.permissionRequestContract(),
     ) { granted ->
@@ -172,8 +174,21 @@ fun AppNavigation(viewModel: AppViewModel) {
         .collectAsStateWithLifecycle()
     LaunchedEffect(hcPermissionRequested) {
         if (hcPermissionRequested) {
+            // Consume the one-shot flag FIRST so rotation / recomposition
+            // can never replay the launch, then attempt the actual launch
+            // inside a try-catch. If the Health Connect provider is not
+            // resolvable (e.g. missing <queries> entry, HC uninstalled
+            // between the pre-check and now) the launch() call throws
+            // ActivityNotFoundException — we must not swallow that silently.
             viewModel.consumeHealthConnectPermissionRequest()
-            hcPermissionLauncher.launch(MindsetHealthConnectClient.requiredPermissions)
+            try {
+                hcPermissionLauncher.launch(MindsetHealthConnectClient.requiredPermissions)
+            } catch (e: Exception) {
+                // Could not resolve the Health Connect permission activity.
+                // Report the empty set so the ViewModel shows an error
+                // message instead of leaving the user without feedback.
+                viewModel.onHealthConnectPermissionResult(emptySet())
+            }
         }
     }
 

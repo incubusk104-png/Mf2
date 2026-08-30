@@ -407,7 +407,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             is com.rork.mindsetframestracker.integrations.HealthConnectStatus.NotInstalled -> {
                 _stravaMessage.value =
                     "Health Connect is not available on this device. " +
-                    "Please install or update the Health Connect app from your app store, then try again."
+                    "Please install the Health Connect app from the Google Play Store or your device's app store, then try again."
+            }
+            is com.rork.mindsetframestracker.integrations.HealthConnectStatus.UpdateRequired -> {
+                _stravaMessage.value =
+                    "Health Connect needs to be updated before it can be used. " +
+                    "Please update the Health Connect app in your app store, then try again."
             }
             else -> {
                 // SDK is available — request the runtime permissions.
