@@ -40,7 +40,6 @@ import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.subscriptionTier
-import com.rork.mindsetframestracker.integrations.FitbitClient
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
@@ -72,7 +71,7 @@ import java.util.UUID
  *
  * 2. **Activity-trackable icons** -> After adding the habit, the
  *    [ActivitySourcePickerSheet] is shown so the user can connect Strava
- *    or Fitbit/Polar/Health Connect to automatically log activity data for that habit.
+ *    or Polar/Health Connect to automatically log activity data for that habit.
  *
  * 3. **To-Do List** -> [TodoListDialog] lets the user type a name and pick a
  *    time, then does the same create -> schedule -> sync flow.
@@ -207,7 +206,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
 
     // ── Activity Source Picker ──────────────────────────────────────────
     // Shown after the user taps an activity-trackable icon (running, gym,
-    // strava_yoga, strava_swim, etc.). Lets them pick Fitbit, Polar,
+    // strava_yoga, strava_swim, etc.). Lets them pick Polar,
     // Health Connect, or Strava to auto-track activity data for that habit.
     if (activityPickerIconId != null && activityPickerHabitId != null) {
         ActivitySourcePickerSheet(
@@ -256,29 +255,6 @@ fun HabitsScreen(viewModel: AppViewModel) {
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     "Open Settings > Activity sync to finish Health Connect setup.",
-                                )
-                            }
-                        }
-                    }
-
-                    ActivitySource.FITBIT -> {
-                        if (viewModel.isFitbitConnected()) {
-                            val activityType = stravaActivityTypeFor(iconId)
-                            viewModel.syncFitbitToHabit(habitId, activityType)
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Syncing from Fitbit...")
-                            }
-                        } else if (FitbitClient.isConfigured) {
-                            context.startActivity(FitbitClient.buildAuthIntent())
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    "Connect your Fitbit account to sync activities.",
-                                )
-                            }
-                        } else {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    "Fitbit is not configured. Please contact support.",
                                 )
                             }
                         }

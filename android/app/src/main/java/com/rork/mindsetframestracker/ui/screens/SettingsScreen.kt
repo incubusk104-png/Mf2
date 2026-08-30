@@ -147,7 +147,6 @@ import com.rork.mindsetframestracker.billing.Entitlements
 import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.subscriptionTier
-import com.rork.mindsetframestracker.integrations.FitbitClient
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.ui.AppViewModel
@@ -440,40 +439,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 modifier = Modifier.padding(vertical = 8.dp),
             )
 
-            // ── Fitbit ──
-            val fitbitConnected = viewModel.isFitbitConnected()
-            IntegrationConnectorRow(
-                icon = Icons.Outlined.Watch,
-                title = "Fitbit",
-                connected = fitbitConnected,
-                lastSyncMs = settings.fitbitLastSyncMs,
-                autoSync = settings.fitbitAutoSync,
-                onAutoSyncChange = { viewModel.setFitbitAutoSync(it) },
-                freeLabel = "Free",
-                description = if (fitbitConnected) {
-                    "Steps and activity data sync from your Fitbit account."
-                } else {
-                    "Link your Fitbit account to import steps and activity. Free for everyone."
-                },
-                onConnect = {
-                    if (!FitbitClient.isConfigured) {
-                        viewModel.onStravaConnectFailed("Fitbit isn't configured for this build yet.")
-                    } else {
-                        runCatching {
-                            context.startActivity(FitbitClient.buildAuthIntent())
-                        }.onFailure {
-                            viewModel.onStravaConnectFailed("No browser available to open Fitbit.")
-                        }
-                    }
-                },
-                onDisconnect = { viewModel.disconnectFitbit() },
-            )
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
             // ── Polar ──
             val polarConnected = viewModel.isPolarConnected()
             IntegrationConnectorRow(
@@ -542,7 +507,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
         // ── Activity Report ─────────────────────────────────────────
         val hasAnyActivity = data.activityRecords.isNotEmpty()
-        if (hasAnyActivity || viewModel.isFitbitConnected() || viewModel.isPolarConnected() || settings.healthConnectConnected || viewModel.isStravaConnected()) {
+        if (hasAnyActivity || viewModel.isPolarConnected() || settings.healthConnectConnected || viewModel.isStravaConnected()) {
             SettingsCard(title = "Activity report") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(

@@ -68,7 +68,7 @@ fun ActivityInsightSheet(
 
 /**
  * Activity Report Sheet — full summary of synced fitness data from
- * Strava, Fitbit, Polar, and Google Health Connect.
+ * Strava, Polar, and Google Health Connect.
  *
  * Shows:
  *  - Summary stats (total activities, distance, duration, calories)
@@ -252,7 +252,7 @@ private fun EmptyReportCard() {
                 modifier = Modifier.padding(top = 12.dp),
             )
             Text(
-                text = "Connect Fitbit, Polar, Health Connect, or Strava in Settings to start syncing your workouts.",
+                text = "Connect Polar, Health Connect, or Strava in Settings to start syncing your workouts.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -310,14 +310,12 @@ private fun SourceBreakdownRow(
 ) {
     val displayName = when (source) {
         "strava" -> "Strava"
-        "fitbit" -> "Fitbit"
         "polar" -> "Polar"
         "health_connect" -> "Health Connect"
         else -> source.replaceFirstChar { it.uppercase() }
     }
     val displayIcon = when (source) {
         "strava" -> Icons.AutoMirrored.Outlined.DirectionsRun
-        "fitbit" -> Icons.Outlined.Watch
         "polar" -> Icons.Outlined.FavoriteBorder
         else -> Icons.Outlined.MonitorHeart
     }

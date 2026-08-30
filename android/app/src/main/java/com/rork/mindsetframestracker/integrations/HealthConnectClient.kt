@@ -46,7 +46,7 @@ object MindsetHealthConnectClient {
 
     /**
      * Set of icon IDs whose activity data can be tracked via Health Connect.
-     * Shares the same physical-movement set as Fitbit/Polar.
+     * Shares the same physical-movement set as Polar.
      */
     val supportedActivityIconIds = setOf(
         "walking", "running", "basketball", "gym", "stretch",

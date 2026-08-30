@@ -110,17 +110,7 @@
                     android:scheme="mindsetframes"
                     android:host="strava-callback" />
             </intent-filter>
-            <!-- Fitbit OAuth return leg: the browser redirects to
-                 mindsetframes://fitbit-callback?code=... after the user
-                 authorises step-reading access. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="mindsetframes"
-                    android:host="fitbit-callback" />
-            </intent-filter>
+
             <!-- Polar AccessLink OAuth return leg: the browser redirects to
                  mindsetframes://polar-callback?code=... after the user
                  authorises activity data access. -->
