@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import com.rork.mindsetframestracker.BuildConfig
 import com.rork.mindsetframestracker.data.ActivityRecord
 import com.rork.mindsetframestracker.data.MindsetRepository
 import kotlinx.serialization.json.Json
@@ -38,8 +39,19 @@ object PolarClient {
     private const val TAG = "PolarClient"
 
     // ── Configuration ────────────────────────────────────────────────
-    const val CLIENT_ID = ""     // TODO: set your Polar OAuth client ID
-    const val CLIENT_SECRET = "" // TODO: set your Polar OAuth client secret
+    /**
+     * Polar AccessLink OAuth client ID — injected at build time via the
+     * POLAR_CLIENT_ID env var / gradle property; see build.gradle.kts.
+     */
+    val CLIENT_ID: String = BuildConfig.POLAR_CLIENT_ID
+
+    /**
+     * Polar AccessLink OAuth client secret — needed client-side because
+     * Polar's token endpoint requires HTTP Basic auth (client_id:client_secret).
+     * Injected at build time via the POLAR_CLIENT_SECRET_KEY env var /
+     * gradle property; see build.gradle.kts.
+     */
+    val CLIENT_SECRET: String = BuildConfig.POLAR_CLIENT_SECRET
     private const val REDIRECT_URI = "mindsetframes://polar-callback"
     private const val AUTH_URL = "https://flow.polar.com/oauth2/authorization"
     private const val TOKEN_URL = "https://polarremote.com/v2/oauth2/token"

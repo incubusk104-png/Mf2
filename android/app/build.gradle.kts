@@ -66,12 +66,22 @@ android {
         // (the client secret lives ONLY in the strava-token-exchange Edge Function).
         val stravaClientId = resolveRorkValue("STRAVA_CLIENT_ID", "EXPO_PUBLIC_STRAVA_CLIENT_ID", "mindset.stravaClientId")
 
+        // Polar AccessLink OAuth credentials — both are needed client-side because
+        // Polar's token exchange uses HTTP Basic auth (client_id:client_secret).
+        // Unlike Strava (which proxies through an Edge Function), Polar's token
+        // endpoint is called directly from the app.
+        val polarClientId = resolveRorkValue("POLAR_CLIENT_ID", "EXPO_PUBLIC_POLAR_CLIENT_ID", "mindset.polarClientId")
+        val polarClientSecret = resolveRorkValue("POLAR_CLIENT_SECRET_KEY", "EXPO_PUBLIC_POLAR_CLIENT_SECRET", "mindset.polarClientSecret")
+
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
         buildConfigField("String", "STRAVA_CLIENT_ID", "\"$stravaClientId\"")
+        buildConfigField("String", "POLAR_CLIENT_ID", "\"$polarClientId\"")
+        buildConfigField("String", "POLAR_CLIENT_SECRET", "\"$polarClientSecret\"")
 
         println(
-            "Rork config — supabase: ${if (supabaseUrl.isBlank()) "missing (sync hidden)" else "resolved"}"
+            "Rork config — supabase: ${if (supabaseUrl.isBlank()) "missing (sync hidden)" else "resolved"}" +
+            ", polar: ${if (polarClientId.isBlank()) "missing" else "resolved"}"
         )
     }
 

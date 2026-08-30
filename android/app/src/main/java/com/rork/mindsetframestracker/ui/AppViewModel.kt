@@ -394,9 +394,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Request the Health Connect permission dialog. The user MUST grant
      * permissions before we mark Health Connect as connected.
+     *
+     * Pre-checks that the Health Connect SDK is actually installed /
+     * available on the device before requesting permissions. If HC
+     * isn't available the user gets an error message instead of a
+     * silently-ignored permission launch.
      */
     fun requestHealthConnectPermissions() {
-        _healthConnectPermissionRequested.value = true
+        val status = com.rork.mindsetframestracker.integrations
+            .MindsetHealthConnectClient.checkStatus(getApplication())
+        when (status) {
+            is com.rork.mindsetframestracker.integrations.HealthConnectStatus.NotInstalled -> {
+                _stravaMessage.value =
+                    "Health Connect is not available on this device. " +
+                    "Please install or update the Health Connect app from your app store, then try again."
+            }
+            else -> {
+                // SDK is available — request the runtime permissions.
+                _healthConnectPermissionRequested.value = true
+            }
+        }
     }
 
     /** Called once the permission launcher has fired. */
