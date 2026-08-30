@@ -53,6 +53,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.components.AuthPromptSheet
@@ -155,6 +157,25 @@ fun AppNavigation(viewModel: AppViewModel) {
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     val showAuthPrompt by viewModel.showAuthPrompt.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
+
+    // ── Health Connect permission launcher ────────────────────────────
+    // Registered here so it lives for the entire Activity lifecycle.
+    // When the ViewModel's healthConnectPermissionRequested flag goes
+    // true, we launch the system permission dialog; the result callback
+    // forwards the granted permission set back to the ViewModel.
+    val hcPermissionLauncher = rememberLauncherForActivityResult(
+        contract = MindsetHealthConnectClient.permissionRequestContract(),
+    ) { granted ->
+        viewModel.onHealthConnectPermissionResult(granted)
+    }
+    val hcPermissionRequested by viewModel.healthConnectPermissionRequested
+        .collectAsStateWithLifecycle()
+    LaunchedEffect(hcPermissionRequested) {
+        if (hcPermissionRequested) {
+            viewModel.consumeHealthConnectPermissionRequest()
+            hcPermissionLauncher.launch(MindsetHealthConnectClient.requiredPermissions)
+        }
+    }
 
     // Automatic sign-in / sign-up popup: slides up shortly after the user
     // first lands on Today — right after onboarding. Shown ONCE ever

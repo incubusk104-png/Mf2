@@ -428,8 +428,12 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     "Sync steps from your phone and connected wearables. Free for everyone."
                 },
                 onConnect = {
-                    // Health Connect uses the permission launcher registered in the Activity
-                    viewModel.setHealthConnectConnected(true)
+                    // Launch the Health Connect permission flow — the user must
+                    // explicitly grant step + sleep read access before we mark
+                    // the integration as connected. The ViewModel exposes a
+                    // pending-permission flag that AppNavigation observes and
+                    // feeds into the registered permission-result launcher.
+                    viewModel.requestHealthConnectPermissions()
                 },
                 onDisconnect = { viewModel.disconnectHealthConnect() },
             )

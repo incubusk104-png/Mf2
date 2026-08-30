@@ -42,6 +42,20 @@ object MindsetHealthConnectClient {
         }
     }
 
+    /**
+     * Checks whether all required Health Connect permissions have been granted.
+     * Returns true only when the user has explicitly authorised step + sleep
+     * read access through the Health Connect permission dialog.
+     */
+    suspend fun hasAllPermissions(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 26) return false
+        return runCatching {
+            val client = HealthConnectClient.getOrCreate(context)
+            val granted = client.permissionController.getGrantedPermissions()
+            requiredPermissions.all { it in granted }
+        }.getOrDefault(false)
+    }
+
     fun permissionRequestContract() = PermissionController.createRequestPermissionResultContract()
 
     /**

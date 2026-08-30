@@ -251,10 +251,12 @@ fun HabitsScreen(viewModel: AppViewModel) {
                                 snackbarHostState.showSnackbar("Syncing from Health Connect...")
                             }
                         } else {
-                            viewModel.setHealthConnectConnected(true)
+                            // Launch the Health Connect permission dialog — the
+                            // user must grant permissions before we connect.
+                            viewModel.requestHealthConnectPermissions()
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    "Open Settings > Activity sync to finish Health Connect setup.",
+                                    "Grant Health Connect permissions to sync activity data.",
                                 )
                             }
                         }
