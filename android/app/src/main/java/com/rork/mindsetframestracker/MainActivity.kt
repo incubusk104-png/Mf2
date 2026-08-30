@@ -1,4 +1,3 @@
-
 package com.rork.mindsetframestracker
 
 import android.Manifest
@@ -171,7 +170,7 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == HuaweiAuthClient.SIGN_IN_REQUEST_CODE) {
-            when (val result = HuaweiAuthClient.parseResult(requestCode, resultCode, data)) {
+            when (val result = HuaweiAuthClient.parseResult(this, requestCode, resultCode, data)) {
                 is HuaweiSignInResult.Success -> {
                     appViewModel.signInWithHuawei(result.idToken, result.email, result.displayName)
                 }
