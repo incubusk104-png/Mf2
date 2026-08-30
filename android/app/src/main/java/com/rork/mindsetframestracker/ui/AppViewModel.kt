@@ -266,17 +266,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Handles the Polar OAuth callback code — exchanges it for tokens and registers the user. */
     fun handlePolarAuthCode(code: String) {
+        _stravaMessage.value = "Connecting your Polar account…"
         viewModelScope.launch {
             val tokens = com.rork.mindsetframestracker.integrations.PolarClient
                 .exchangeCodeForTokens(code)
-            if (tokens != null) {
-                // Register user with Polar AccessLink (required before pulling data)
-                com.rork.mindsetframestracker.integrations.PolarClient
-                    .registerUser(tokens.accessToken)
-                onPolarTokensReceived(tokens)
-            } else {
-                _stravaMessage.value = "Polar connection failed. Please try again."
+            if (tokens == null) {
+                _stravaMessage.value =
+                    "Polar connection failed — couldn't exchange the sign-in code. " +
+                        "Check your connection and try again."
+                return@launch
             }
+            if (tokens.userId == null) {
+                _stravaMessage.value =
+                    "Polar connection failed — no user id returned. Try again."
+                return@launch
+            }
+            // Register user with Polar AccessLink (required before ANY data
+            // call works — an unregistered user gets 403 on every endpoint).
+            val registered = com.rork.mindsetframestracker.integrations.PolarClient
+                .registerUser(tokens.accessToken)
+            if (!registered) {
+                _stravaMessage.value =
+                    "Polar connected, but AccessLink registration failed. " +
+                        "Try disconnecting and connecting again."
+                return@launch
+            }
+            onPolarTokensReceived(tokens)
         }
     }
 
@@ -346,6 +361,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         update {
             it.copy(settings = it.settings.copy(
                 polarAccessToken = tokens.accessToken,
+                polarUserId = tokens.userId ?: 0,
             ))
         }
         _stravaMessage.value = "Polar account authenticated and connected. You can enable auto-sync in Settings > Activity sync."
@@ -353,20 +369,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Syncs today's Polar steps onto [habitId]. */
     fun syncPolarToHabit(habitId: String, activityType: String) {
-        val token = _state.value.settings.polarAccessToken
+        val settings = _state.value.settings
+        val token = settings.polarAccessToken
         if (token.isNullOrBlank()) {
             _stravaMessage.value = "Connect Polar first (Settings > Activity sync)."
             return
         }
+        if (settings.polarUserId == 0L) {
+            // Legacy connection made before the user id was captured — the
+            // transaction endpoints need it, so ask for a quick reconnect.
+            _stravaMessage.value =
+                "Please reconnect Polar (Settings > Activity sync) to finish upgrading the integration."
+            return
+        }
         viewModelScope.launch {
             val ok = com.rork.mindsetframestracker.integrations.PolarClient
-                .syncTodayToHabit(getApplication(), token, habitId, activityType)
+                .syncTodayToHabit(getApplication(), token, settings.polarUserId, habitId, activityType)
             if (ok) {
                 update { it.copy(settings = it.settings.copy(polarLastSyncMs = System.currentTimeMillis())) }
             }
             _stravaMessage.value =
                 if (ok) "Today's steps synced from Polar."
-                else "No step data from Polar yet — check your Polar account."
+                else "No new step data from Polar yet — sync your Polar device with Polar Flow first, then try again."
         }
     }
 
@@ -374,6 +398,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         update {
             it.copy(settings = it.settings.copy(
                 polarAccessToken = null,
+                polarUserId = 0,
                 polarLastSyncMs = 0,
             ))
         }
@@ -415,8 +440,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "Please update the Health Connect app in your app store, then try again."
             }
             else -> {
-                // SDK is available — request the runtime permissions.
-                _healthConnectPermissionRequested.value = true
+                viewModelScope.launch {
+                    // If every permission is ALREADY granted, Health Connect
+                    // will not show a dialog at all and the result contract
+                    // reports an empty set — which used to read as "not
+                    // granted". Detect that case up front and just connect.
+                    val alreadyGranted = com.rork.mindsetframestracker.integrations
+                        .MindsetHealthConnectClient.hasAllPermissions(getApplication())
+                    if (alreadyGranted) {
+                        update { it.copy(settings = it.settings.copy(healthConnectConnected = true)) }
+                        _stravaMessage.value = "Health Connect connected — permissions granted."
+                    } else {
+                        // SDK is available — request the runtime permissions.
+                        _healthConnectPermissionRequested.value = true
+                    }
+                }
             }
         }
     }
@@ -430,17 +468,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Called from the permission-result callback. Only marks Health
      * Connect as connected when the required permissions were actually
      * granted; shows an error message otherwise.
+     *
+     * The callback payload alone is NOT trusted: on several devices /
+     * Health Connect versions the result contract returns an EMPTY set
+     * even after the user tapped "Allow" (and always returns empty when
+     * the permissions were already granted on a previous attempt). The
+     * authoritative source is PermissionController.getGrantedPermissions(),
+     * so we re-query it before deciding.
      */
     fun onHealthConnectPermissionResult(granted: Set<String>) {
-        val allGranted = com.rork.mindsetframestracker.integrations
-            .MindsetHealthConnectClient.requiredPermissions.all { it in granted }
-        if (allGranted) {
-            update { it.copy(settings = it.settings.copy(healthConnectConnected = true)) }
-            _stravaMessage.value = "Health Connect connected — permissions granted."
-        } else {
-            // Do NOT mark as connected — permissions are missing.
-            update { it.copy(settings = it.settings.copy(healthConnectConnected = false)) }
-            _stravaMessage.value = "Health Connect permissions were not granted. Please try again and allow access to steps and sleep data."
+        viewModelScope.launch {
+            val allGrantedInCallback = com.rork.mindsetframestracker.integrations
+                .MindsetHealthConnectClient.requiredPermissions.all { it in granted }
+            val actuallyGranted = allGrantedInCallback ||
+                com.rork.mindsetframestracker.integrations
+                    .MindsetHealthConnectClient.hasAllPermissions(getApplication())
+            if (actuallyGranted) {
+                update { it.copy(settings = it.settings.copy(healthConnectConnected = true)) }
+                _stravaMessage.value = "Health Connect connected — permissions granted."
+            } else {
+                // Do NOT mark as connected — permissions are genuinely missing.
+                update { it.copy(settings = it.settings.copy(healthConnectConnected = false)) }
+                _stravaMessage.value =
+                    "Health Connect permissions were not granted. Open the Health Connect app " +
+                        "> App permissions > Mindset Frames and allow Steps and Sleep, or tap " +
+                        "Connect to try again."
+            }
         }
     }
 
@@ -704,6 +757,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val error = supabaseSync.signIn(email, password)
             if (error != null) {
+                // Account exists but the email was never confirmed — resend
+                // the confirmation link automatically so the user isn't stuck
+                // in a "can't sign in / can't sign up" loop.
+                if ("email not confirmed" in error.lowercase()) {
+                    val resendError = supabaseSync.resendSignupConfirmation(email)
+                    _syncState.value = _syncState.value.copy(
+                        busy = false,
+                        message = if (resendError == null) {
+                            "Your account exists but the email isn't verified yet. " +
+                                "We've just sent a fresh confirmation link to ${email.trim()} — " +
+                                "tap it, then sign in."
+                        } else {
+                            "Your account exists but the email isn't verified yet, and we " +
+                                "couldn't resend the link right now. Try again in a minute."
+                        },
+                        isError = resendError != null,
+                    )
+                    return@launch
+                }
                 _syncState.value = _syncState.value.copy(
                     busy = false,
                     message = friendlySignInError(error),
@@ -719,9 +791,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val normalized = raw.lowercase()
         return when {
             "invalid login credentials" in normalized || "invalid email or password" in normalized ->
-                "That email or password doesn't match our records. Double-check for typos, " +
-                        "use \"Forgot password?\" to reset it, or create a new account if you " +
-                        "haven't signed up yet."
+                "That email or password doesn't match our records. If you haven't created an " +
+                        "account yet, tap \"New here? Create an account\" below. Otherwise " +
+                        "double-check for typos or use \"Forgot password?\" to reset it."
             "email not confirmed" in normalized ->
                 "Please confirm your email first — check your inbox for the verification link we sent."
             else -> raw

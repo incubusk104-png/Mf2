@@ -11,7 +11,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.contentOrNull
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -21,16 +22,32 @@ import kotlinx.coroutines.withContext
 /**
  * Polar AccessLink API integration — OAuth 2.0 flow + REST API.
  *
- * Free for every user. Reads daily activity data (steps, calories,
- * distance) from Polar's AccessLink API after the user authorises the
- * app through Polar Flow's OAuth consent screen.
+ * Free for every user. Reads daily activity data (steps) from Polar's
+ * AccessLink API after the user authorises the app through Polar Flow's
+ * OAuth consent screen.
+ *
+ * Security: the token exchange goes through the polar-token-exchange
+ * Supabase Edge Function so the Polar client secret NEVER ships inside the
+ * APK. A legacy direct-exchange fallback (HTTP Basic auth) remains for
+ * builds that were configured with POLAR_CLIENT_SECRET before the Edge
+ * Function existed.
  *
  * Setup:
  *  1. Register at https://admin.polaraccesslink.com/
  *  2. Create an API client:
  *     - Authorization Callback URL: mindsetframes://polar-callback
+ *       (must match EXACTLY, scheme and host, or Polar rejects the redirect)
  *     - Scopes: accesslink.read_all (or at minimum dailyActivity)
- *  3. Set POLAR_CLIENT_ID and POLAR_CLIENT_SECRET in BuildConfig.
+ *  3. Set POLAR_CLIENT_ID at build time AND deploy the Edge Function:
+ *       supabase functions deploy polar-token-exchange
+ *       supabase secrets set POLAR_CLIENT_ID=... POLAR_CLIENT_SECRET=...
+ *
+ * Data model: Polar AccessLink is TRANSACTION based. You cannot simply GET
+ * today's steps — you must (1) open an activity transaction for the user,
+ * (2) list the new daily-activity summaries inside it, (3) read each
+ * summary, then (4) commit the transaction. A transaction only ever
+ * contains data that arrived since the last committed transaction, and a
+ * user must be REGISTERED with the API client before any transaction works.
  *
  * See: https://www.polar.com/accesslink-api/
  */
@@ -46,20 +63,32 @@ object PolarClient {
     val CLIENT_ID: String = BuildConfig.POLAR_CLIENT_ID
 
     /**
-     * Polar AccessLink OAuth client secret — needed client-side because
-     * Polar's token endpoint requires HTTP Basic auth (client_id:client_secret).
-     * Injected at build time via the POLAR_CLIENT_SECRET_KEY env var /
-     * gradle property; see build.gradle.kts.
+     * Legacy: Polar AccessLink OAuth client secret for the direct token
+     * exchange fallback. New builds should leave this BLANK and rely on the
+     * polar-token-exchange Edge Function instead, so no secret ships in the
+     * APK.
      */
     val CLIENT_SECRET: String = BuildConfig.POLAR_CLIENT_SECRET
+
     private const val REDIRECT_URI = "mindsetframes://polar-callback"
     private const val AUTH_URL = "https://flow.polar.com/oauth2/authorization"
     private const val TOKEN_URL = "https://polarremote.com/v2/oauth2/token"
-    private const val REGISTER_URL = "https://www.polaraccesslink.com/v3/users"
-    private const val DAILY_ACTIVITY_URL = "https://www.polaraccesslink.com/v3/users/daily-activity"
+    private const val API_BASE = "https://www.polaraccesslink.com/v3"
 
-    /** True when the Polar client ID is configured (non-empty). */
-    val isConfigured: Boolean get() = CLIENT_ID.isNotBlank() && CLIENT_SECRET.isNotBlank()
+    private val EDGE_FUNCTION_URL =
+        "${BuildConfig.SUPABASE_URL.trim().trimEnd('/')}/functions/v1/polar-token-exchange"
+
+    /**
+     * True when the Polar Connect button can work. Only the PUBLIC client id
+     * is required now — the secret lives server-side in the Edge Function.
+     * (Previously this also demanded CLIENT_SECRET, which made every build
+     * without the extra CI secret show "Polar isn't configured".)
+     */
+    val isConfigured: Boolean
+        get() = CLIENT_ID.isNotBlank() &&
+            (BuildConfig.SUPABASE_URL.isNotBlank() || CLIENT_SECRET.isNotBlank())
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     /**
      * Same set of physical-movement activities supported via step-based
@@ -96,130 +125,234 @@ object PolarClient {
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("client_id", CLIENT_ID)
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
+            .appendQueryParameter("scope", "accesslink.read_all")
             .build()
         return Intent(Intent.ACTION_VIEW, uri)
     }
 
     /**
      * Exchanges the authorization code for an access token.
-     * Polar AccessLink uses Basic auth (client_id:client_secret) for
-     * the token exchange.
+     *
+     * Primary path: the polar-token-exchange Edge Function (client secret
+     * stays server-side). Fallback: legacy direct Basic-auth exchange, used
+     * only when the Edge Function is unreachable AND a client secret was
+     * baked into this build.
      *
      * Returns a [PolarTokens] on success, or null on failure.
      */
     suspend fun exchangeCodeForTokens(code: String): PolarTokens? = withContext(Dispatchers.IO) {
-        runCatching {
-            val url = URL(TOKEN_URL)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            conn.setRequestProperty("Accept", "application/json")
-
-            // Polar requires Basic auth for the token endpoint
-            val credentials = "$CLIENT_ID:$CLIENT_SECRET"
-            val encoded = android.util.Base64.encodeToString(
-                credentials.toByteArray(), android.util.Base64.NO_WRAP,
-            )
-            conn.setRequestProperty("Authorization", "Basic $encoded")
-            conn.doOutput = true
-
-            val body = "grant_type=authorization_code&code=$code&redirect_uri=$REDIRECT_URI"
-            conn.outputStream.use { it.write(body.toByteArray()) }
-
-            val responseCode = conn.responseCode
-            if (responseCode != 200) {
-                Log.w(TAG, "Token exchange failed: HTTP $responseCode")
-                return@withContext null
-            }
-
-            val json = conn.inputStream.bufferedReader().use { it.readText() }
-            val obj = Json { ignoreUnknownKeys = true }.parseToJsonElement(json).jsonObject
-            val accessToken = obj["access_token"]?.jsonPrimitive?.content ?: return@withContext null
-            val userId = obj["x_user_id"]?.jsonPrimitive?.long
-
-            PolarTokens(
-                accessToken = accessToken,
-                userId = userId,
-            )
-        }.onFailure {
-            Log.w(TAG, "Token exchange error: ${it.message}")
-        }.getOrNull()
+        exchangeViaEdgeFunction(code)
+            ?: if (CLIENT_SECRET.isNotBlank()) exchangeDirect(code) else null
     }
+
+    private fun exchangeViaEdgeFunction(code: String): PolarTokens? = runCatching {
+        if (BuildConfig.SUPABASE_URL.isBlank()) return null
+        val conn = URL(EDGE_FUNCTION_URL).openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Accept", "application/json")
+        conn.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+        conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 15_000
+        conn.doOutput = true
+        conn.outputStream.use {
+            it.write("""{"code":"${code.replace("\"", "")}"}""".toByteArray())
+        }
+        if (conn.responseCode != 200) {
+            Log.w(TAG, "Edge token exchange failed: HTTP ${conn.responseCode}")
+            return null
+        }
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        parseTokenResponse(body)
+    }.onFailure {
+        Log.w(TAG, "Edge token exchange error: ${it.message}")
+    }.getOrNull()
+
+    /** Legacy direct exchange — requires the client secret in BuildConfig. */
+    private fun exchangeDirect(code: String): PolarTokens? = runCatching {
+        val conn = URL(TOKEN_URL).openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        conn.setRequestProperty("Accept", "application/json")
+        val credentials = "$CLIENT_ID:$CLIENT_SECRET"
+        val encoded = android.util.Base64.encodeToString(
+            credentials.toByteArray(), android.util.Base64.NO_WRAP,
+        )
+        conn.setRequestProperty("Authorization", "Basic $encoded")
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 15_000
+        conn.doOutput = true
+        val body = "grant_type=authorization_code&code=$code" +
+            "&redirect_uri=${Uri.encode(REDIRECT_URI)}"
+        conn.outputStream.use { it.write(body.toByteArray()) }
+        if (conn.responseCode != 200) {
+            Log.w(TAG, "Direct token exchange failed: HTTP ${conn.responseCode}")
+            return null
+        }
+        val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
+        parseTokenResponse(responseBody)
+    }.onFailure {
+        Log.w(TAG, "Direct token exchange error: ${it.message}")
+    }.getOrNull()
+
+    private fun parseTokenResponse(body: String): PolarTokens? {
+        val obj = json.parseToJsonElement(body).jsonObject
+        val accessToken = obj["access_token"]?.jsonPrimitive?.contentOrNull ?: return null
+        val userId = obj["x_user_id"]?.jsonPrimitive?.longOrNull
+        return PolarTokens(accessToken = accessToken, userId = userId)
+    }
+
+    // ── User registration ────────────────────────────────────────────
 
     /**
      * Registers the user with Polar AccessLink after first authorization.
-     * This is required before you can pull daily activity data.
-     * Returns true on success or if already registered (HTTP 409).
+     * This is REQUIRED before any transaction endpoint works — an
+     * unregistered user gets 403 on every data call.
+     *
+     * The member-id must be unique per user within this API client, so a
+     * random UUID is used (the previous fixed "mindset-frames-user" id
+     * collided across users: the second person to ever connect got 409 with
+     * someone ELSE holding the registration, and all their data calls then
+     * failed with 403).
+     *
+     * Returns true on success or if this user is already registered (409).
      */
     suspend fun registerUser(accessToken: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val url = URL(REGISTER_URL)
-            val conn = url.openConnection() as HttpURLConnection
+            val conn = URL("$API_BASE/users").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Authorization", "Bearer $accessToken")
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Accept", "application/json")
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
             conn.doOutput = true
-            // Polar requires a member-id field when registering
+            val memberId = UUID.randomUUID().toString().take(35)
             conn.outputStream.use {
-                it.write("""{"member-id":"mindset-frames-user"}""".toByteArray())
+                it.write("""{"member-id":"$memberId"}""".toByteArray())
             }
-
             val responseCode = conn.responseCode
-            // 200 = registered, 409 = already registered — both are success
+            // 200 = registered, 409 = this user is already registered — both fine
+            if (responseCode !in listOf(200, 409)) {
+                Log.w(TAG, "registerUser failed: HTTP $responseCode")
+            }
             responseCode in listOf(200, 409)
         }.onFailure {
             Log.w(TAG, "registerUser error: ${it.message}")
         }.getOrDefault(false)
     }
 
-    // ── Data Reading ─────────────────────────────────────────────────
+    // ── Data Reading (transaction flow) ──────────────────────────────
 
     /**
-     * Reads today's step count from Polar AccessLink daily activity.
-     * Returns null when the request fails or no data is available.
+     * Reads the newest available daily step count through Polar's
+     * transaction API:
      *
-     * Note: Polar AccessLink uses a transaction model — you must first
-     * create a daily activity transaction, then list its activities.
-     * For simplicity, this reads the latest available daily activity
-     * summary which includes steps.
+     *  1. POST /users/{userId}/activity-transactions
+     *     → 201 + transaction-id (new data available) or 204 (nothing new)
+     *  2. GET the transaction's activity list
+     *  3. GET each daily-activity summary, keep the newest "active-steps"
+     *  4. PUT (commit) the transaction so Polar can release the data
+     *
+     * Returns the step count, or null when there is no new data / any
+     * request fails. [userId] is the numeric Polar user id captured at
+     * token exchange (x_user_id).
      */
-    suspend fun readTodaySteps(accessToken: String): Long? = withContext(Dispatchers.IO) {
+    suspend fun readLatestSteps(accessToken: String, userId: Long): Long? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                // 1. Open a transaction.
+                val txUrl = "$API_BASE/users/$userId/activity-transactions"
+                val open = URL(txUrl).openConnection() as HttpURLConnection
+                open.requestMethod = "POST"
+                open.setRequestProperty("Authorization", "Bearer $accessToken")
+                open.setRequestProperty("Accept", "application/json")
+                open.connectTimeout = 15_000
+                open.readTimeout = 15_000
+                when (open.responseCode) {
+                    201 -> Unit // new data available — continue below
+                    204 -> {
+                        Log.i(TAG, "No new activity data from Polar (204)")
+                        return@withContext null
+                    }
+                    else -> {
+                        Log.w(TAG, "Open transaction failed: HTTP ${open.responseCode}")
+                        return@withContext null
+                    }
+                }
+                val txBody = open.inputStream.bufferedReader().use { it.readText() }
+                val txObj = json.parseToJsonElement(txBody).jsonObject
+                val transactionId = txObj["transaction-id"]?.jsonPrimitive?.longOrNull
+                    ?: return@withContext null
+
+                // 2. List activity summaries inside the transaction.
+                val listConn = URL("$txUrl/$transactionId").openConnection() as HttpURLConnection
+                listConn.setRequestProperty("Authorization", "Bearer $accessToken")
+                listConn.setRequestProperty("Accept", "application/json")
+                listConn.connectTimeout = 15_000
+                listConn.readTimeout = 15_000
+                if (listConn.responseCode != 200) {
+                    Log.w(TAG, "List transaction failed: HTTP ${listConn.responseCode}")
+                    commitTransaction(txUrl, transactionId, accessToken)
+                    return@withContext null
+                }
+                val listBody = listConn.inputStream.bufferedReader().use { it.readText() }
+                val activityUrls = json.parseToJsonElement(listBody)
+                    .jsonObject["activity-log"]?.jsonArray
+                    ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                    .orEmpty()
+
+                // 3. Read each summary; keep the newest active-steps value.
+                var latestSteps: Long? = null
+                for (activityUrl in activityUrls) {
+                    val actConn = URL(activityUrl).openConnection() as HttpURLConnection
+                    actConn.setRequestProperty("Authorization", "Bearer $accessToken")
+                    actConn.setRequestProperty("Accept", "application/json")
+                    actConn.connectTimeout = 15_000
+                    actConn.readTimeout = 15_000
+                    if (actConn.responseCode != 200) continue
+                    val actBody = actConn.inputStream.bufferedReader().use { it.readText() }
+                    val actObj = json.parseToJsonElement(actBody).jsonObject
+                    val steps = actObj["active-steps"]?.jsonPrimitive?.longOrNull
+                    if (steps != null) latestSteps = steps
+                }
+
+                // 4. Commit so Polar releases this batch (otherwise the same
+                //    transaction blocks all future reads for 10 minutes).
+                commitTransaction(txUrl, transactionId, accessToken)
+
+                latestSteps
+            }.onFailure {
+                Log.w(TAG, "readLatestSteps error: ${it.message}")
+            }.getOrNull()
+        }
+
+    private fun commitTransaction(txUrl: String, transactionId: Long, accessToken: String) {
         runCatching {
-            val url = URL(DAILY_ACTIVITY_URL)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.setRequestProperty("Authorization", "Bearer $accessToken")
-            conn.setRequestProperty("Accept", "application/json")
-
-            val responseCode = conn.responseCode
-            if (responseCode != 200) {
-                Log.w(TAG, "readTodaySteps failed: HTTP $responseCode")
-                return@withContext null
-            }
-
-            val json = conn.inputStream.bufferedReader().use { it.readText() }
-            val obj = Json { ignoreUnknownKeys = true }.parseToJsonElement(json).jsonObject
-
-            // Polar daily activity response contains "active-steps" field
-            obj["active-steps"]?.jsonPrimitive?.long
-                ?: obj["steps"]?.jsonPrimitive?.long
-        }.onFailure {
-            Log.w(TAG, "readTodaySteps error: ${it.message}")
-        }.getOrNull()
+            val commit = URL("$txUrl/$transactionId").openConnection() as HttpURLConnection
+            commit.requestMethod = "PUT"
+            commit.setRequestProperty("Authorization", "Bearer $accessToken")
+            commit.connectTimeout = 15_000
+            commit.readTimeout = 15_000
+            commit.responseCode // force execution
+        }.onFailure { Log.w(TAG, "Commit transaction failed: ${it.message}") }
     }
 
     /**
-     * Reads today's steps and books them onto [habitId] as an ActivityRecord.
+     * Reads the latest steps and books them onto [habitId] as an
+     * ActivityRecord. Returns true when new data was saved.
      */
     suspend fun syncTodayToHabit(
         context: Context,
         accessToken: String,
+        userId: Long,
         habitId: String,
         activityType: String,
     ): Boolean {
-        val steps = readTodaySteps(accessToken)
+        val steps = readLatestSteps(accessToken, userId)
         if (steps == null) {
-            Log.w(TAG, "syncTodayToHabit: no step data from Polar")
+            Log.w(TAG, "syncTodayToHabit: no new step data from Polar")
             return false
         }
         val record = ActivityRecord(
