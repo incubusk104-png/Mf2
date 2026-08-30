@@ -158,6 +158,8 @@ import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.stringsFor
 import com.rork.mindsetframestracker.ui.components.AuthMessageBanner
 import com.rork.mindsetframestracker.ui.components.BrandLogos
+import com.rork.mindsetframestracker.ui.components.IntegrationConsent
+import com.rork.mindsetframestracker.ui.components.IntegrationConsentDialog
 import com.rork.mindsetframestracker.ui.components.PremiumSheet
 import com.rork.mindsetframestracker.ui.components.PasswordField
 import java.time.Instant
@@ -254,6 +256,11 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var showGrounding by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
     var showActivityReport by remember { mutableStateOf(false) }
+
+    // Privacy consent gate: every integration Connect shows this dialog
+    // FIRST; the OAuth/permission flow launches only after "Agree & connect".
+    var pendingConsent by remember { mutableStateOf<IntegrationConsent?>(null) }
+    var pendingConsentAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val hasAccess = settings.hasFeatureAccess()
 
     var showTimePicker by remember { mutableStateOf(false) }
@@ -447,12 +454,11 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     "Sync steps from your phone and connected wearables. Free for everyone."
                 },
                 onConnect = {
-                    // Launch the Health Connect permission flow — the user must
-                    // explicitly grant step + sleep read access before we mark
-                    // the integration as connected. The ViewModel exposes a
-                    // pending-permission flag that AppNavigation observes and
-                    // feeds into the registered permission-result launcher.
-                    viewModel.requestHealthConnectPermissions()
+                    // Privacy consent first; only then launch the Health
+                    // Connect permission flow (AppNavigation observes the
+                    // pending-permission flag and fires the launcher).
+                    pendingConsent = IntegrationConsent.HEALTH_CONNECT
+                    pendingConsentAction = { viewModel.requestHealthConnectPermissions() }
                 },
                 onDisconnect = { viewModel.disconnectHealthConnect() },
             )
@@ -478,14 +484,13 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     "Link your Polar account to import activity data. Free for everyone."
                 },
                 onConnect = {
-                    if (!PolarClient.isConfigured) {
+                    if (!PolarClient.canAttemptConnect) {
                         viewModel.onStravaConnectFailed("Polar isn't configured for this build yet.")
                     } else {
-                        runCatching {
-                            context.startActivity(PolarClient.buildAuthIntent())
-                        }.onFailure {
-                            viewModel.onStravaConnectFailed("No browser available to open Polar.")
-                        }
+                        // Privacy consent first; connectPolar() resolves the
+                        // public client id at runtime when the build has none.
+                        pendingConsent = IntegrationConsent.POLAR
+                        pendingConsentAction = { viewModel.connectPolar() }
                     }
                 },
                 onDisconnect = { viewModel.disconnectPolar() },
@@ -514,12 +519,13 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 },
                 onConnect = {
                     when {
-                        stravaEntitled && !StravaAuthClient.isConfigured ->
+                        stravaEntitled && !StravaAuthClient.canAttemptConnect ->
                             viewModel.onStravaConnectFailed("Strava isn't configured for this build yet.")
-                        stravaEntitled -> runCatching {
-                            context.startActivity(StravaAuthClient.buildAuthIntent())
-                        }.onFailure {
-                            viewModel.onStravaConnectFailed("No browser available to open Strava.")
+                        stravaEntitled -> {
+                            // Privacy consent first; connectStrava() resolves
+                            // the public client id at runtime if needed.
+                            pendingConsent = IntegrationConsent.STRAVA
+                            pendingConsentAction = { viewModel.connectStrava() }
                         }
                         else -> showPremiumSheet = true
                     }
@@ -1471,6 +1477,23 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 modifier = Modifier.padding(top = 10.dp),
             )
         }
+    }
+
+    // ── Privacy consent dialog — shown before EVERY integration connect ──
+    if (pendingConsent != null) {
+        IntegrationConsentDialog(
+            consent = pendingConsent!!,
+            onAgree = {
+                val action = pendingConsentAction
+                pendingConsent = null
+                pendingConsentAction = null
+                action?.invoke()
+            },
+            onDismiss = {
+                pendingConsent = null
+                pendingConsentAction = null
+            },
+        )
     }
 
     if (showPremiumSheet) {

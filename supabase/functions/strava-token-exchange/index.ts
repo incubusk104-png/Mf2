@@ -16,6 +16,13 @@
 // Response (200, JSON):
 //   { "access_token": "...", "refresh_token": "...", "expires_at": 1735689600 }
 //
+// Request  (GET): returns the PUBLIC OAuth client id so app builds compiled
+// without the STRAVA_CLIENT_ID build secret can still start the OAuth flow
+// (fixes "Strava isn't configured for this build yet"). The numeric client
+// id is public — it appears in every Strava OAuth URL. The SECRET is never
+// returned.
+//   { "client_id": "12345" }
+//
 // The function never logs tokens or the client secret.
 
 const STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token";
@@ -24,7 +31,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -44,6 +51,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  if (req.method === "GET") {
+    // Public client id discovery — lets the app start the OAuth consent
+    // flow even when the APK was built without STRAVA_CLIENT_ID baked in.
+    const clientId = Deno.env.get("STRAVA_CLIENT_ID");
+    if (!clientId) {
+      return json(500, { error: "Strava integration is not configured" });
+    }
+    return json(200, { client_id: clientId });
+  }
+
   if (req.method !== "POST") {
     return json(405, { error: "Method not allowed" });
   }

@@ -24,7 +24,44 @@ data class Habit(
     val durationSeconds: Int? = null,
     /** Links to HabitIconCatalog.HabitIcon.id for visual picker display. */
     val iconId: String? = null,
+    /**
+     * Alarm repeat schedule as a 7-bit mask, bit 0 = Monday … bit 6 = Sunday
+     * (mirrors the system Clock app's "Repeat: Once / Daily / Custom" row).
+     *   127 (default) = every day
+     *   0             = once — the alarm fires a single time then disarms
+     *   0b0011111(31) = weekdays, 0b1100000(96) = weekends, any other = custom
+     */
+    val repeatDaysMask: Int = REPEAT_DAILY,
+    /**
+     * Screen-time habit: the package name of the phone app being monitored
+     * (e.g. "com.facebook.katana"). Null for every other habit type.
+     */
+    val monitoredPackage: String? = null,
+    /**
+     * Screen-time habit: the daily usage budget in minutes (e.g. 120 = keep
+     * Facebook under 2 hours). The habit auto-completes for a day when the
+     * measured foreground time stayed at or under this limit.
+     */
+    val screenTimeLimitMinutes: Int? = null,
+    /** Human-readable label of the monitored app, for display. */
+    val monitoredAppLabel: String? = null,
 )
+
+/** [Habit.repeatDaysMask] value meaning "every day". */
+const val REPEAT_DAILY = 0b1111111
+
+/** [Habit.repeatDaysMask] value meaning "fire once, then disarm". */
+const val REPEAT_ONCE = 0
+
+/** [Habit.repeatDaysMask] for Monday–Friday. */
+const val REPEAT_WEEKDAYS = 0b0011111
+
+/** [Habit.repeatDaysMask] for Saturday + Sunday. */
+const val REPEAT_WEEKENDS = 0b1100000
+
+/** True when this habit tracks phone screen time instead of a manual check-in. */
+val Habit.isScreenTimeHabit: Boolean
+    get() = monitoredPackage != null && screenTimeLimitMinutes != null
 
 @Serializable
 data class ActivityRecord(

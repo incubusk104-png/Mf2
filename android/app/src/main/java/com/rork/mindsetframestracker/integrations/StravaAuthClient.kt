@@ -42,6 +42,50 @@ object StravaAuthClient {
     /** True when a Strava client id was configured at build time. */
     val isConfigured: Boolean get() = STRAVA_CLIENT_ID_PUBLIC.isNotBlank()
 
+    /**
+     * True when a Connect attempt can be made AT ALL — either the client id
+     * was baked into this build, or a Supabase URL is configured so the id
+     * can be discovered from the Edge Function at runtime (see
+     * [resolveClientId]). Kills the "Strava isn't configured for this build
+     * yet" dead end for APKs built without the STRAVA_CLIENT_ID CI secret.
+     */
+    val canAttemptConnect: Boolean
+        get() = STRAVA_CLIENT_ID_PUBLIC.isNotBlank() || BuildConfig.SUPABASE_URL.isNotBlank()
+
+    /** Runtime-discovered client id (cached for the process lifetime). */
+    @Volatile
+    private var remoteClientId: String? = null
+
+    /**
+     * Resolves the PUBLIC Strava OAuth client id: build-time value first,
+     * then a one-time GET to the strava-token-exchange Edge Function.
+     * Returns null when neither source is available.
+     */
+    suspend fun resolveClientId(): String? = withContext(Dispatchers.IO) {
+        STRAVA_CLIENT_ID_PUBLIC.takeIf { it.isNotBlank() }
+            ?: remoteClientId
+            ?: runCatching {
+                if (BuildConfig.SUPABASE_URL.isBlank()) return@runCatching null
+                val request = Request.Builder()
+                    .url(EDGE_FUNCTION_URL)
+                    .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                    .addHeader("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+                    .get()
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.w(TAG, "Strava client-id discovery failed: HTTP ${response.code}")
+                        return@runCatching null
+                    }
+                    val json = JSONObject(response.body?.string() ?: "{}")
+                    json.optString("client_id").takeIf { it.isNotBlank() }
+                        ?.also { remoteClientId = it }
+                }
+            }.onFailure {
+                Log.w(TAG, "Strava client-id discovery error: ${it.message}")
+            }.getOrNull()
+    }
+
     private const val REDIRECT_URI = "mindsetframes://strava-callback"
     private const val AUTH_URL = "https://www.strava.com/oauth/mobile/authorize"
 
@@ -50,9 +94,9 @@ object StravaAuthClient {
     private val httpClient = OkHttpClient()
     private val jsonMediaType = "application/json".toMediaType()
 
-    fun buildAuthIntent(): Intent {
+    fun buildAuthIntent(clientId: String = STRAVA_CLIENT_ID_PUBLIC): Intent {
         val uri = Uri.parse(AUTH_URL).buildUpon()
-            .appendQueryParameter("client_id", STRAVA_CLIENT_ID_PUBLIC)
+            .appendQueryParameter("client_id", clientId)
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("approval_prompt", "auto")

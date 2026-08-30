@@ -17,6 +17,13 @@
 // Response (200, JSON):
 //   { "access_token": "...", "x_user_id": 12345678, "expires_in": 473040000 }
 //
+// Request  (GET): returns the PUBLIC OAuth client id so app builds that were
+// compiled without the POLAR_CLIENT_ID build secret can still start the
+// OAuth flow (fixes "Polar isn't configured for this build yet"). The
+// client id is a public identifier — it appears in every OAuth URL — so
+// exposing it here leaks nothing. The client SECRET is never returned.
+//   { "client_id": "xxxxx" }
+//
 // The function never logs tokens or the client secret.
 
 const POLAR_TOKEN_URL = "https://polarremote.com/v2/oauth2/token";
@@ -26,7 +33,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -40,6 +47,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  if (req.method === "GET") {
+    // Public client id discovery — lets the app start the OAuth consent
+    // flow even when the APK was built without POLAR_CLIENT_ID baked in.
+    const clientId = Deno.env.get("POLAR_CLIENT_ID");
+    if (!clientId) {
+      return json(500, { error: "Polar integration is not configured" });
+    }
+    return json(200, { client_id: clientId });
+  }
+
   if (req.method !== "POST") {
     return json(405, { error: "Method not allowed" });
   }

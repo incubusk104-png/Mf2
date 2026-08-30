@@ -88,6 +88,53 @@ object PolarClient {
         get() = CLIENT_ID.isNotBlank() &&
             (BuildConfig.SUPABASE_URL.isNotBlank() || CLIENT_SECRET.isNotBlank())
 
+    /**
+     * True when a Connect attempt can be made AT ALL — either the client id
+     * was baked into this build, or a Supabase URL is configured so the id
+     * can be discovered from the Edge Function at runtime (see
+     * [resolveClientId]). This is what finally kills the
+     * "Polar isn't configured for this build yet" dead end: APKs built
+     * without the POLAR_CLIENT_ID CI secret still connect fine as long as
+     * the polar-token-exchange function + its secrets are deployed.
+     */
+    val canAttemptConnect: Boolean
+        get() = CLIENT_ID.isNotBlank() || BuildConfig.SUPABASE_URL.isNotBlank()
+
+    /** Runtime-discovered client id (cached for the process lifetime). */
+    @Volatile
+    private var remoteClientId: String? = null
+
+    /**
+     * Resolves the PUBLIC Polar OAuth client id: build-time value first,
+     * then a one-time GET to the polar-token-exchange Edge Function, which
+     * returns the id it holds server-side. Returns null when neither source
+     * is available (function not deployed / secrets not set).
+     */
+    suspend fun resolveClientId(): String? = withContext(Dispatchers.IO) {
+        CLIENT_ID.takeIf { it.isNotBlank() }
+            ?: remoteClientId
+            ?: runCatching {
+                if (BuildConfig.SUPABASE_URL.isBlank()) return@runCatching null
+                val conn = URL(EDGE_FUNCTION_URL).openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Accept", "application/json")
+                conn.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                if (conn.responseCode != 200) {
+                    Log.w(TAG, "Polar client-id discovery failed: HTTP ${conn.responseCode}")
+                    return@runCatching null
+                }
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val id = json.parseToJsonElement(body).jsonObject["client_id"]
+                    ?.jsonPrimitive?.contentOrNull
+                id?.takeIf { it.isNotBlank() }?.also { remoteClientId = it }
+            }.onFailure {
+                Log.w(TAG, "Polar client-id discovery error: ${it.message}")
+            }.getOrNull()
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
@@ -118,12 +165,13 @@ object PolarClient {
 
     /**
      * Builds the Polar OAuth authorization Intent that opens the
-     * browser for user consent.
+     * browser for user consent. Pass the id from [resolveClientId] when the
+     * build-time [CLIENT_ID] may be blank.
      */
-    fun buildAuthIntent(): Intent {
+    fun buildAuthIntent(clientId: String = CLIENT_ID): Intent {
         val uri = Uri.parse(AUTH_URL).buildUpon()
             .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("client_id", CLIENT_ID)
+            .appendQueryParameter("client_id", clientId)
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("scope", "accesslink.read_all")
             .build()
