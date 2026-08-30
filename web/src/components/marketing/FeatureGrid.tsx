@@ -6,6 +6,9 @@ import {
   HeartPulse,
   Languages,
   ShieldCheck,
+  Activity,
+  Bell,
+  Share2,
 } from "lucide-react";
 
 import { useI18n, type Copy } from "@/lib/i18n";
@@ -24,6 +27,9 @@ const FEATURES: ReadonlyArray<Feature> = [
   { icon: Languages, titleKey: "feat4Title", bodyKey: "feat4Body" },
   { icon: CloudUpload, titleKey: "feat5Title", bodyKey: "feat5Body" },
   { icon: ShieldCheck, titleKey: "feat6Title", bodyKey: "feat6Body" },
+  { icon: Activity, titleKey: "feat7Title", bodyKey: "feat7Body" },
+  { icon: Bell, titleKey: "feat8Title", bodyKey: "feat8Body" },
+  { icon: Share2, titleKey: "feat9Title", bodyKey: "feat9Body" },
 ];
 
 export function FeatureGrid() {

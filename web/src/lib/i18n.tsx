@@ -37,6 +37,12 @@ export interface Copy {
   feat5Body: string;
   feat6Title: string;
   feat6Body: string;
+  feat7Title: string;
+  feat7Body: string;
+  feat8Title: string;
+  feat8Body: string;
+  feat9Title: string;
+  feat9Body: string;
 
   screensTitle: string;
   screensSub: string;
@@ -151,6 +157,12 @@ const en: Copy = {
   feat5Body: "Sign in with HUAWEI ID or email to back up and restore. Skip it entirely and stay 100% on-device.",
   feat6Title: "Private by design",
   feat6Body: "Local-first storage, encrypted sessions, strict per-account isolation, and one-tap account deletion.",
+  feat7Title: "Activity integrations",
+  feat7Body: "Sync Strava, Google Fit, and Huawei Health — login to each account first, then capture activity data into your Mindset Frames timeline.",
+  feat8Title: "Smart adaptive alarms",
+  feat8Body: "Your habit times are inconsistent? Smart alarms analyze your real activity patterns and set optimal reminders — weekday vs. weekend, with streak protection.",
+  feat9Title: "Share your consistency",
+  feat9Body: "Generate weekly or monthly reports and share them on Twitter/X, Facebook, LinkedIn, WhatsApp, Telegram, WeChat, and more.",
 
   screensTitle: "Designed to feel like paper, not pressure",
   screensSub: "Warm cream surfaces, a hand-set serif, and a companion that is genuinely proud of you.",
@@ -269,6 +281,12 @@ const zh: Copy = {
   feat5Body: "使用华为帐号或邮箱登录即可备份与恢复；也可以完全跳过，数据 100% 留在设备上。",
   feat6Title: "隐私优先的设计",
   feat6Body: "本地优先存储、加密会话、严格的帐号隔离，以及一键删除帐号。",
+  feat7Title: "运动数据整合",
+  feat7Body: "同步 Strava、Google Fit 和华为健康 — 先登录各平台帐号，然后将运动数据捕获到 Mindset Frames 时间线。",
+  feat8Title: "智能自适应闹钟",
+  feat8Body: "习惯时间不固定？智能闹钟会分析你的真实运动模式，分别设置工作日和周末提醒，并保护连续打卡记录。",
+  feat9Title: "分享你的坚持",
+  feat9Body: "生成周报或月报，分享到 Twitter/X、Facebook、LinkedIn、WhatsApp、Telegram、微信等平台。",
 
   screensTitle: "像纸张一样温润，而非催促",
   screensSub: "温暖的米色界面、衬线字体，以及一位真心为你骄傲的小伙伴。",

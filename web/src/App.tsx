@@ -9,6 +9,8 @@ import Index from "./pages/Index";
 import AuthCallback from "./pages/AuthCallback";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PrivacyPolicyZh from "./pages/PrivacyPolicyZh";
+import ActivityDashboard from "./pages/ActivityDashboard";
+import ShareReport from "./pages/ShareReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +26,8 @@ const App = () => (
             <Route path="/auth-callback" element={<AuthCallback />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/privacy/zh" element={<PrivacyPolicyZh />} />
+            <Route path="/activity" element={<ActivityDashboard />} />
+            <Route path="/share/:token" element={<ShareReport />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
