@@ -38,6 +38,7 @@
 -dontwarn kotlinx.coroutines.**
 -dontwarn io.ktor.**
 -keep class io.ktor.client.engine.android.** { *; }
+-keep class kotlinx.coroutines.android.** { *; }
 
 # AndroidViewModel subclasses are constructed reflectively by the default
 # ViewModelProvider factory — keep the (Application) constructor.
@@ -60,6 +61,35 @@
     public static int e(...);
     public static int wtf(...);
 }
+
+# ── AndroidX Health Connect ─────────────────────────────────────────────
+# R8 strips the ActivityResultContract returned by
+# PermissionController.createRequestPermissionResultContract(). Without
+# these rules the permission launcher silently fails in release builds
+# because the contract class is renamed/removed by minification.
+-keep class androidx.health.connect.client.** { *; }
+-keep class androidx.health.connect.client.permission.** { *; }
+-keep class androidx.health.connect.client.records.** { *; }
+-keep class androidx.health.connect.client.impl.** { *; }
+-keep class androidx.health.connect.client.aggregate.** { *; }
+-keep class androidx.health.connect.client.request.** { *; }
+-keep class androidx.health.connect.client.time.** { *; }
+# Health Connect IPC transport layer — the client library communicates
+# with the Health Connect provider APK via this package. If R8 strips
+# or renames these classes the IPC calls fail silently at runtime.
+-keep class androidx.health.platform.client.** { *; }
+-keep class androidx.health.** { *; }
+
+# The permission-result contract is an ActivityResultContract subclass.
+# Keep all ActivityResultContract implementations so the Activity Result
+# API can resolve them reflectively at runtime.
+-keep class * extends androidx.activity.result.contract.ActivityResultContract { *; }
+
+# Our own Health Connect wrapper — sealed interface subtypes must survive
+# obfuscation so when() branches resolve correctly at runtime.
+-keep class com.rork.mindsetframestracker.integrations.HealthConnectStatus { *; }
+-keep class com.rork.mindsetframestracker.integrations.HealthConnectStatus$* { *; }
+-keep class com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient { *; }
 
 # ── HMS Core / Account Kit / AGConnect ─────────────────────────────────
 -keep class com.huawei.hms.** { *; }

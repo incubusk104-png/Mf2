@@ -17,6 +17,8 @@ import java.time.temporal.ChronoUnit
 
 sealed interface HealthConnectStatus {
     data object NotInstalled : HealthConnectStatus
+    /** HC is installed but needs a provider update before it can be used. */
+    data object UpdateRequired : HealthConnectStatus
     data object PermissionsNeeded : HealthConnectStatus
     data object Ready : HealthConnectStatus
 }
@@ -34,11 +36,22 @@ object MindsetHealthConnectClient {
         // at minSdk 24 for everything else) — so on API 24/25 devices we must
         // never actually call into the SDK, only report it as unavailable.
         if (Build.VERSION.SDK_INT < 26) return HealthConnectStatus.NotInstalled
-        val availability = HealthConnectClient.getSdkStatus(context)
-        return if (availability != HealthConnectClient.SDK_AVAILABLE) {
-            HealthConnectStatus.NotInstalled
-        } else {
-            HealthConnectStatus.PermissionsNeeded
+
+        // getSdkStatus() can throw on certain OEM firmware (e.g. when the
+        // PackageManager queries fail) — catch everything so the caller
+        // never crashes.
+        val availability = try {
+            HealthConnectClient.getSdkStatus(context)
+        } catch (e: Exception) {
+            android.util.Log.w("MindsetHC", "getSdkStatus threw: ${e.message}")
+            return HealthConnectStatus.NotInstalled
+        }
+
+        return when (availability) {
+            HealthConnectClient.SDK_AVAILABLE -> HealthConnectStatus.PermissionsNeeded
+            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED ->
+                HealthConnectStatus.UpdateRequired
+            else -> HealthConnectStatus.NotInstalled
         }
     }
 
