@@ -39,6 +39,22 @@ name: Build
 # these — it uses an on-device permission dialog, no client id.)
 # ─────────────────────────────────────────────────────────────────────────
 #
+# REQUIRED (backend connectivity — sign-in, backup/restore, and BOTH the
+# Strava/Polar token-exchange Edge Functions AND their runtime client-id
+# discovery fallback all depend on this): add
+#   SUPABASE_URL         Project Settings -> API -> Project URL
+#   SUPABASE_ANON_KEY    Project Settings -> API -> anon / publishable key
+# NOT the values on the "Edge Function Secrets" page — that page only
+# configures the server-side Edge Functions themselves and is never read
+# by the Android build. Without these two, BuildConfig.SUPABASE_URL is
+# blank in every APK this workflow produces: the app still compiles, but
+# sign-in, backup/restore, and Strava/Polar Connect all silently no-op —
+# StravaAuthClient.canAttemptConnect and PolarClient.canAttemptConnect
+# both fall back to (CLIENT_ID.isNotBlank() || SUPABASE_URL.isNotBlank()),
+# so a missing SUPABASE_URL removes their only other path to working when
+# STRAVA_CLIENT_ID / POLAR_CLIENT_ID aren't set either.
+# ─────────────────────────────────────────────────────────────────────────
+#
 # HUAWEI SIGN-IN ("opens then instantly closes" with no error): this almost
 # always means the SHA-256 certificate fingerprint of the APK THIS workflow
 # just signed isn't registered against the app in AppGallery Connect
@@ -117,6 +133,22 @@ jobs:
           fi
           echo "All signing secrets present."
 
+      - name: Check backend secrets are present
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          missing=""
+          [ -z "$SUPABASE_URL" ] && missing="$missing SUPABASE_URL"
+          [ -z "$SUPABASE_ANON_KEY" ] && missing="$missing SUPABASE_ANON_KEY"
+          if [ -n "$missing" ]; then
+            echo "::warning::Missing backend secret(s):$missing — this build's APK will have sign-in, backup/restore, and Strava/Polar Connect all silently no-op (BuildConfig.SUPABASE_URL will be blank)."
+            echo "Add them under Settings -> Secrets and variables -> Actions."
+            echo "Values: Supabase dashboard -> Project Settings -> API (Project URL / anon key) — NOT the Edge Function Secrets page."
+          else
+            echo "Backend secrets present."
+          fi
+
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -152,6 +184,13 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # Backend connectivity — read by build.gradle.kts (resolveRorkValue)
+          # and baked into BuildConfig.SUPABASE_URL / SUPABASE_ANON_KEY. This
+          # was previously missing from this step entirely, so every APK this
+          # workflow built had it blank — see the "REQUIRED" note at the top
+          # of this file for what that silently breaks.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           # Activity-sync OAuth client identifiers — read by build.gradle.kts
           # (resolveRorkValue) and baked into BuildConfig. Without these the
           # Strava/Polar "Connect" buttons compile fine but silently no-op
