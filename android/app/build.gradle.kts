@@ -36,7 +36,6 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 configurations.all {
     exclude(group = "com.huawei.hms", module = "stats")
     exclude(group = "com.huawei.hms", module = "device")
-    exclude(group = "com.huawei.hms", module = "network-grs")
 }
 
 val agconnectGeneratedAssets = layout.buildDirectory.dir("generated/agconnect/assets")
@@ -163,9 +162,16 @@ dependencies {
     // Huawei App Update (JosApps / AppUpdateClient live here)
     implementation(libs.huawei.update)
 
-    // HMS Core modules
-    implementation("com.huawei.hms:base:6.11.0.300")
-    implementation("com.huawei.hms:iap:6.11.0.300")
+    // HMS Core modules — pinned to match libs.huawei.hwid (6.14.0.300) so
+    // Account Kit's compiled references resolve against the SAME base
+    // module version it was built against. A mismatched base version here
+    // causes NoSuchMethodError/NoClassDefFoundError at the exact moment
+    // AccountAuthManager.getService(...) runs — which is an Error, not an
+    // Exception, so it is NOT caught by "catch (e: Exception)" anywhere in
+    // HuaweiAuthClient.kt and force-stops the app instead of returning a
+    // friendly error message.
+    implementation("com.huawei.hms:base:6.14.0.300")
+    implementation("com.huawei.hms:iap:6.14.0.300")
 
     // AndroidX Health Connect
     implementation(libs.androidx.health.connect.client)
