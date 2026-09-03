@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -265,6 +267,24 @@ private fun SignedOutContent(
         busy = syncState.busy && !emailMode,
         modifier = Modifier.fillMaxWidth(),
     )
+
+    // Small, easy-to-miss-on-purpose link for troubleshooting a Huawei
+    // sign-in that closes with no visible error — shows the on-device log
+    // HuaweiServicesConfig has been quietly recording, without needing adb.
+    var showHuaweiDiagnostics by rememberSaveable { mutableStateOf(false) }
+    TextButton(
+        onClick = { showHuaweiDiagnostics = true },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = "Huawei sign-in not working? View diagnostics",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (showHuaweiDiagnostics) {
+        HuaweiDiagnosticsDialog(onDismiss = { showHuaweiDiagnostics = false })
+    }
 
     OrDivider(modifier = Modifier.padding(vertical = 14.dp))
 
@@ -498,4 +518,63 @@ private fun OrDivider(modifier: Modifier = Modifier) {
         )
         HorizontalDivider(modifier = Modifier.weight(1f))
     }
+}
+
+/**
+ * Shows the on-device Huawei sign-in log (written by
+ * [com.rork.mindsetframestracker.auth.HuaweiServicesConfig.logDiagnostic])
+ * with a one-tap copy button, so a report of "it just closes, nothing
+ * happens" can be turned into an actual paste-able log — no adb, no
+ * computer, no logcat required. Every attempt records: the signing
+ * certificate fingerprint this build was built with, whether
+ * agconnect-services.json loaded, and — for a rejected sign-in — how many
+ * milliseconds it took to come back (a fast rejection is a config/cert
+ * issue; a slow one is a genuine user cancel).
+ */
+@Composable
+private fun HuaweiDiagnosticsDialog(onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val diagnosticsText = remember {
+        com.rork.mindsetframestracker.auth.HuaweiServicesConfig.readDiagnostics(context)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Huawei sign-in diagnostics") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = "Newest entries are at the bottom. Copy this and share it if " +
+                        "sign-in still doesn't work after checking AppGallery Connect.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = diagnosticsText,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(diagnosticsText))
+                },
+            ) {
+                Text("Copy")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
 }
