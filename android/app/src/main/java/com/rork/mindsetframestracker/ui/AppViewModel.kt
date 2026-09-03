@@ -1347,7 +1347,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * (reminderMinutes == null) — as opposed to [addHabitObject], which
      * creates a brand-new habit entirely.
      */
-    fun setHabitReminder(habitId: String, reminderMinutes: Int, repeatDaysMask: Int) {
+    fun setHabitReminder(habitId: String, reminderMinutes: Int?, repeatDaysMask: Int) {
         update { data ->
             data.copy(
                 habits = data.habits.map { habit ->
@@ -1488,6 +1488,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 checkIns = data.checkIns - habitId,
             )
         }
+        // A local delete only removes the habit from _state — pushSnapshot()
+        // upserts whatever's currently in _state, it never deletes rows that
+        // are no longer present. Without this, a deleted habit stays in
+        // Supabase forever and comes back on next pull/restore. Queuing the
+        // id here means it survives even if the sync that follows fails or
+        // the app is killed before it runs.
+        supabaseSync.queueHabitDeletion(habitId)
         queueSync()
     }
 
