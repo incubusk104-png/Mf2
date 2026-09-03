@@ -8,6 +8,7 @@ class HabitAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra("habitId") ?: return
         val habitName = intent.getStringExtra("habitName") ?: return
-        HabitCheckInNotifier.show(context, habitId, habitName)
+        val isSnoozeRefire = intent.getBooleanExtra("isSnoozeRefire", false)
+        HabitCheckInNotifier.show(context, habitId, habitName, reschedule = !isSnoozeRefire)
     }
 }
