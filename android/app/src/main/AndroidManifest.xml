@@ -34,6 +34,12 @@
          falls back to an inexact windowed alarm when it isn't granted, so the
          app never crashes and reminders still fire. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Lets the app show the one-tap "exempt from battery optimization"
+         dialog. Without this, exact/windowed alarms can still be silently
+         killed on MIUI (Xiaomi), Samsung, Oppo/Vivo, and Honor even with
+         SCHEDULE_EXACT_ALARM granted — this is the most common real-device
+         cause of "the alarm just didn't ring" reports. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- USE_EXACT_ALARM is auto-granted on API 33+ for alarm/reminder apps.
          Unlike SCHEDULE_EXACT_ALARM it doesn't require the user to visit
          Settings > Alarms & Reminders. Both are declared so the scheduler
@@ -232,6 +238,12 @@
         <!-- Added HabitAlarmReceiver for individual habit notification alarms -->
         <receiver
             android:name=".notifications.HabitAlarmReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
+        <!-- Handles "Snooze 5 min" tapped on a habit reminder notification -->
+        <receiver
+            android:name=".notifications.HabitSnoozeReceiver"
             android:exported="false"
             android:enabled="true" />
 
