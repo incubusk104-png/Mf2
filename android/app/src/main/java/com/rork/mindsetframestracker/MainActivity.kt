@@ -178,18 +178,35 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == HuaweiAuthClient.SIGN_IN_REQUEST_CODE) {
-            when (val result = HuaweiAuthClient.parseResult(this, requestCode, resultCode, data)) {
-                is HuaweiSignInResult.Success -> {
-                    appViewModel.signInWithHuawei(result.idToken, result.email, result.displayName)
+            try {
+                when (val result = HuaweiAuthClient.parseResult(this, requestCode, resultCode, data)) {
+                    is HuaweiSignInResult.Success -> {
+                        appViewModel.signInWithHuawei(result.idToken, result.email, result.displayName)
+                    }
+                    is HuaweiSignInResult.Cancelled -> {
+                        // User dismissed the Huawei sign-in dialog — no action needed.
+                    }
+                    is HuaweiSignInResult.Error -> {
+                        // Keep the auth sheet open and show the failure inline so the
+                        // user can retry or fall back to email sign-in.
+                        appViewModel.onHuaweiSignInFailed(result.message)
+                    }
                 }
-                is HuaweiSignInResult.Cancelled -> {
-                    // User dismissed the Huawei sign-in dialog — no action needed.
+            } catch (e: Throwable) {
+                // Last-resort net: parseResult and signInWithHuawei are already
+                // defensive, but if anything downstream still throws, show it
+                // instead of silently crashing back to the previous screen —
+                // that silent crash is indistinguishable from "nothing happened."
+                Log.e("MainActivity", "Huawei sign-in result handling threw: ${e::class.qualifiedName}: ${e.message}", e)
+                runCatching {
+                    File(cacheDir, "startup_errors.txt").appendText(
+                        "${System.currentTimeMillis()} onActivityResult(Huawei) threw " +
+                            "${e::class.qualifiedName}: ${e.message}\n${e.stackTraceToString()}\n\n",
+                    )
                 }
-                is HuaweiSignInResult.Error -> {
-                    // Keep the auth sheet open and show the failure inline so the
-                    // user can retry or fall back to email sign-in.
-                    appViewModel.onHuaweiSignInFailed(result.message)
-                }
+                appViewModel.onHuaweiSignInFailed(
+                    "Huawei sign-in hit an unexpected error (${e::class.simpleName}). Try again or use email.",
+                )
             }
         } else if (requestCode == com.rork.mindsetframestracker.billing.SubscriptionBilling.SUBSCRIPTION_REQUEST_CODE) {
             com.rork.mindsetframestracker.billing.SubscriptionBilling.handlePurchaseResult(
