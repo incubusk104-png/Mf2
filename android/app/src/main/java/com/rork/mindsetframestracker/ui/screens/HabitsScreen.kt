@@ -117,6 +117,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
     // Alarm picker state: when the user taps any non-TodoList icon, we show
     // a time picker pre-filled with the icon's default alarm time.
     var alarmPickerIcon by remember { mutableStateOf<HabitIcon?>(null) }
+    // Non-null when the picker was opened via "Set up alarm" on an existing
+    // habit that has none — on confirm this UPDATES that habit's reminder
+    // instead of creating a brand-new habit.
+    var alarmSetupExistingHabitId by remember { mutableStateOf<String?>(null) }
 
     // Activity source picker state: when the user taps an activity-trackable
     // icon, we store the newly created habit info here and show the sheet.
@@ -128,6 +132,11 @@ fun HabitsScreen(viewModel: AppViewModel) {
     // Which catalog icons already have a habit (so the grid can show the check badge).
     val selectedIconIds = remember(data.habits) {
         data.habits.mapNotNull { it.iconId }.toSet()
+    }
+    // Real reminder time per added habit (null = no alarm actually set),
+    // so the grid can tell "no alarm" apart from "hasn't loaded yet".
+    val reminderMinutesByIconId = remember(data.habits) {
+        data.habits.mapNotNull { habit -> habit.iconId?.let { it to habit.reminderMinutes } }.toMap()
     }
 
     Scaffold(
@@ -190,6 +199,14 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 if (viewModel.canAddHabit()) showTodoDialog = true
                 else showPremiumSheet = true
             },
+            reminderMinutesByIconId = reminderMinutesByIconId,
+            onSetupAlarmTapped = { icon ->
+                val existing = data.habits.firstOrNull { it.iconId == icon.id }
+                if (existing != null) {
+                    alarmSetupExistingHabitId = existing.id
+                    alarmPickerIcon = icon
+                }
+            },
         )
     }
 
@@ -201,9 +218,30 @@ fun HabitsScreen(viewModel: AppViewModel) {
         AlarmPickerDialog(
             habitName = icon.label,
             defaultMinutes = icon.defaultReminderMinutes,
-            onDismiss = { alarmPickerIcon = null },
-            onConfirm = { chosenMinutes, repeatMask ->
+            onDismiss = {
                 alarmPickerIcon = null
+                alarmSetupExistingHabitId = null
+            },
+            onConfirm = onConfirm@{ chosenMinutes, repeatMask ->
+                alarmPickerIcon = null
+                val existingHabitId = alarmSetupExistingHabitId
+                alarmSetupExistingHabitId = null
+
+                if (existingHabitId != null) {
+                    // "Set up alarm" path — update the existing habit in place.
+                    viewModel.setHabitReminder(existingHabitId, chosenMinutes, repeatMask)
+                    val updated = data.habits.firstOrNull { it.id == existingHabitId }
+                        ?.copy(reminderMinutes = chosenMinutes, repeatDaysMask = repeatMask)
+                    if (updated != null) HabitAlarmScheduler.schedule(context, updated)
+                    val timeStr = formatAlarmTime(chosenMinutes)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "Alarm set — ${formatRepeat(repeatMask)} at $timeStr",
+                        )
+                    }
+                    return@onConfirm
+                }
+
                 val habit = Habit(
                     id = UUID.randomUUID().toString(),
                     name = icon.label,
