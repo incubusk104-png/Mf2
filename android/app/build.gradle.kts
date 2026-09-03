@@ -162,7 +162,7 @@ dependencies {
     // Huawei App Update (JosApps / AppUpdateClient live here)
     implementation(libs.huawei.update)
 
-    // HMS Core modules — pinned to match libs.huawei.hwid (6.14.0.300) so
+    // HMS Core modules — pinned to match libs.huawei.hwid (6.12.0.300) so
     // Account Kit's compiled references resolve against the SAME base
     // module version it was built against. A mismatched base version here
     // causes NoSuchMethodError/NoClassDefFoundError at the exact moment
@@ -170,8 +170,15 @@ dependencies {
     // Exception, so it is NOT caught by "catch (e: Exception)" anywhere in
     // HuaweiAuthClient.kt and force-stops the app instead of returning a
     // friendly error message.
-    implementation("com.huawei.hms:base:6.14.0.300")
-    implementation("com.huawei.hms:iap:6.14.0.300")
+    //
+    // IMPORTANT: com.huawei.hms:base and com.huawei.hms:iap do NOT publish
+    // a 6.14.x release (only hwid and appservice do) — pinning them to
+    // 6.14.0.300 fails to resolve entirely. 6.12.0.300 is a verified,
+    // mutually-compatible release across hwid/base/iap (Huawei's own POM
+    // metadata for hwid:6.12.0.300 and iap:6.12.0.300 both declare
+    // base >= 6.12.0.300).
+    implementation("com.huawei.hms:base:6.12.0.300")
+    implementation("com.huawei.hms:iap:6.12.0.300")
 
     // AndroidX Health Connect
     implementation(libs.androidx.health.connect.client)
