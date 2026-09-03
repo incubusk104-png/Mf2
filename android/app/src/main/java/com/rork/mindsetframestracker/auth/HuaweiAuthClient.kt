@@ -218,10 +218,20 @@ object HuaweiAuthClient {
             signInLaunchedAtMs = System.currentTimeMillis()
             activity.startActivityForResult(service.signInIntent, SIGN_IN_REQUEST_CODE)
             null
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable, not Exception: a version-mismatched HMS jar throws
+            // NoSuchMethodError/NoClassDefFoundError here, which are Errors
+            // and slip straight past "catch (e: Exception)" — silently
+            // crashing the app with no message shown, which looks
+            // identical to "the button did nothing." Catching Throwable
+            // closes that gap.
             signInLaunchedAtMs = null
-            Log.w(TAG, "Failed to launch Huawei sign-in: ${e.message}")
-            "Couldn't open Huawei sign-in. Try again or use email."
+            Log.w(TAG, "Failed to launch Huawei sign-in: ${e::class.qualifiedName}: ${e.message}")
+            HuaweiServicesConfig.logDiagnostic(
+                activity,
+                "startSignIn threw ${e::class.qualifiedName}: ${e.message}",
+            )
+            "Couldn't open Huawei sign-in (${e::class.simpleName}). Try again or use email."
         }
     }
 
@@ -293,9 +303,18 @@ object HuaweiAuthClient {
                     )
                 }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Huawei sign-in result parsing failed: ${e.message}")
-            HuaweiSignInResult.Error("Could not complete Huawei sign-in. Try again or use email.")
+        } catch (e: Throwable) {
+            // Throwable for the same reason as startSignIn above — an Error
+            // here (mismatched HMS jar) would otherwise crash the app with
+            // zero on-screen feedback instead of showing this message.
+            Log.w(TAG, "Huawei sign-in result parsing failed: ${e::class.qualifiedName}: ${e.message}")
+            HuaweiServicesConfig.logDiagnostic(
+                context,
+                "parseResult threw ${e::class.qualifiedName}: ${e.message}",
+            )
+            HuaweiSignInResult.Error(
+                "Could not complete Huawei sign-in (${e::class.simpleName}). Try again or use email.",
+            )
         }
     }
 
