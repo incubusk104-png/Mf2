@@ -17,7 +17,10 @@ object HabitCheckInNotifier {
     const val CHANNEL_ID = "habit_reminder"
     private const val NOTIFICATION_ID_BASE = 3000
 
-    fun show(context: Context, habitId: String, habitName: String) {
+    /** Stable notification id for a given habit — shared with snooze/cancel logic. */
+    fun notificationId(habitId: String): Int = NOTIFICATION_ID_BASE + habitId.hashCode()
+
+    fun show(context: Context, habitId: String, habitName: String, reschedule: Boolean = true) {
         ensureChannel(context)
 
         val tapIntent = Intent(context, MainActivity::class.java).apply {
@@ -25,6 +28,15 @@ object HabitCheckInNotifier {
         }
         val contentIntent = PendingIntent.getActivity(
             context, habitId.hashCode(), tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val snoozeIntent = Intent(context, HabitSnoozeReceiver::class.java).apply {
+            putExtra("habitId", habitId)
+            putExtra("habitName", habitName)
+        }
+        val snoozePendingIntent = PendingIntent.getBroadcast(
+            context, habitId.hashCode(), snoozeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -40,12 +52,15 @@ object HabitCheckInNotifier {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             // Vibrate pattern for attention
             .setVibrate(longArrayOf(0, 250, 100, 250))
+            .addAction(0, "Snooze 5 min", snoozePendingIntent)
             .build()
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID_BASE + habitId.hashCode(), notification)
+        manager.notify(notificationId(habitId), notification)
 
-        HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
+        if (reschedule) {
+            HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
+        }
     }
 
     private fun ensureChannel(context: Context) {
