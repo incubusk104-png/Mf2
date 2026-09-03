@@ -32,11 +32,20 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 
 // ---------------------------------------------------------------------------
 // Huawei agconnect-services.json support.
+//
+// NOTE: previously excluded com.huawei.hms:stats and com.huawei.hms:device
+// globally here (likely to resolve an unrelated duplicate-class error at
+// some point). Removed — Account Kit's sign-in flow touches Huawei's
+// device-identification classes internally for its own risk checks even
+// though app code never calls them directly, so excluding that module
+// leaves the class present at compile time (project builds fine) but
+// absent at runtime, which surfaces as NoClassDefFoundError the moment
+// AccountAuthManager tries to use it — i.e. exactly on tapping the Huawei
+// sign-in button. If a genuine duplicate-class build error reappears,
+// exclude the conflicting module from the SPECIFIC dependency that pulls
+// the extra copy in (via `implementation(...) { exclude(...) }` on just
+// that one `implementation` line), not globally via `configurations.all`.
 // ---------------------------------------------------------------------------
-configurations.all {
-    exclude(group = "com.huawei.hms", module = "stats")
-    exclude(group = "com.huawei.hms", module = "device")
-}
 
 val agconnectGeneratedAssets = layout.buildDirectory.dir("generated/agconnect/assets")
 val copyAgconnectServices = tasks.register<Copy>("copyAgconnectServices") {
