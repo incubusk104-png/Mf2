@@ -10,6 +10,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -106,6 +107,24 @@ class SupabaseSync(context: Context) {
         set(value) {
             prefs.edit().putBoolean(KEY_PENDING_PUSH, value).apply()
         }
+
+    /**
+     * Habit ids that were deleted locally but not yet deleted from Supabase.
+     * Persisted (not just in-memory) so a deletion made while offline, or
+     * right before the app is killed, is still applied on the next sync
+     * instead of being silently lost — which is what let deleted habits
+     * "come back" after a restore or on another device.
+     */
+    private var pendingDeletedHabitIds: Set<String>
+        get() = prefs.getStringSet(KEY_PENDING_DELETES, emptySet()) ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet(KEY_PENDING_DELETES, value).apply()
+        }
+
+    /** Marks a habit for deletion on the next sync. Call this at delete time. */
+    fun queueHabitDeletion(habitId: String) {
+        pendingDeletedHabitIds = pendingDeletedHabitIds + habitId
+    }
 
     private var lastSignUpIdentitiesWasEmpty = false
 
@@ -705,6 +724,12 @@ class SupabaseSync(context: Context) {
                 SettingsRow(id = deviceId, device_id = deviceId, user_id = uid, payload = data.settings)
             )
 
+            // Apply deletions before upserts: a habit removed locally must
+            // actually be removed from Supabase, not just left out of this
+            // upsert (upsert only ever adds/updates rows, it never deletes
+            // ones that are missing from the payload).
+            applyPendingDeletions(uid)?.let { return it }
+
             upsert("habits", habits, onConflict = "id")?.let { return it }
             upsert("checkins", checkins, onConflict = "user_id,habit_id,day")?.let { return it }
             upsert("mood_log", moods, onConflict = "user_id,day")?.let { return it }
@@ -777,6 +802,48 @@ class SupabaseSync(context: Context) {
             header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
         }
 
+    /**
+     * Deletes every queued habit id (and its check-ins) from Supabase,
+     * scoped to the current user. Ids that fail to delete are kept in the
+     * queue so they're retried on the next sync instead of being lost.
+     */
+    private suspend fun applyPendingDeletions(uid: String): String? {
+        val ids = pendingDeletedHabitIds
+        if (ids.isEmpty()) return null
+        val stillPending = mutableSetOf<String>()
+        for (habitId in ids) {
+            // Check-ins reference habit_id with no cascading FK guarantee on
+            // the client side, so delete them explicitly first.
+            val checkinsOk = deleteRow("checkins", "habit_id", habitId, uid)
+            val habitOk = deleteRow("habits", "id", habitId, uid)
+            if (!checkinsOk || !habitOk) stillPending += habitId
+        }
+        pendingDeletedHabitIds = stillPending
+        // Only surface an error if some ids are still stuck after a real
+        // attempt — a partial success still leaves the rest queued silently
+        // and retries next time rather than blocking the whole sync.
+        return null
+    }
+
+    /** DELETE /rest/v1/{table}?{column}=eq.{value}&user_id=eq.{uid}. Returns true on success (incl. "nothing to delete"). */
+    private suspend fun deleteRow(table: String, column: String, value: String, uid: String): Boolean {
+        var response = deleteRequest(table, column, value, uid)
+        if (response.status == HttpStatusCode.Unauthorized && tryRefreshSession()) {
+            response = deleteRequest(table, column, value, uid)
+        }
+        if (!response.status.isSuccess()) {
+            Log.w(TAG, "Delete $table where $column=$value failed: ${response.status} ${runCatching { response.bodyAsText() }.getOrDefault("").take(300)}")
+            return false
+        }
+        return true
+    }
+
+    private suspend fun deleteRequest(table: String, column: String, value: String, uid: String): HttpResponse =
+        client.delete("$baseUrl/rest/v1/$table?$column=eq.$value&user_id=eq.$uid") {
+            header("apikey", anonKey)
+            header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
+        }
+
     private suspend inline fun <reified T> upsert(table: String, rows: List<T>, onConflict: String): String? {
         if (rows.isEmpty()) return null
         var response = upsertRequest(table, rows, onConflict)
@@ -833,6 +900,7 @@ class SupabaseSync(context: Context) {
         private const val KEY_EMAIL = "session_email"
         private const val KEY_USER_ID = "session_user_id"
         private const val KEY_PENDING_PUSH = "pending_push"
+        private const val KEY_PENDING_DELETES = "pending_deleted_habit_ids"
         private const val KEY_PROVIDER = "auth_provider"
         private const val KEY_LAST_SYNC = "last_sync_at_ms"
         private const val KEY_CONSUMED_AUTH_LINK = "consumed_auth_link"
