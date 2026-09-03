@@ -784,10 +784,33 @@ class SupabaseSync(context: Context) {
             response = upsertRequest(table, rows, onConflict)
         }
         if (!response.status.isSuccess()) {
-            Log.w(TAG, "Upsert $table failed: ${response.status} ${response.bodyAsText().take(200)}")
-            return "Sync failed on '$table' (${response.status.value}). Try again in a moment."
+            val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
+            Log.w(TAG, "Upsert $table failed: ${response.status} ${bodyText.take(500)}")
+            // Surface the actual PostgREST error (not just the status code) so
+            // the real cause — e.g. a missing column, a NOT NULL violation, or
+            // a row-level-security policy rejection — is visible instead of a
+            // generic, unhelpful "try again" message that repeats forever.
+            val detail = extractPostgrestMessage(bodyText)
+            val suffix = if (detail != null) ": $detail" else ""
+            return "Sync failed on '$table' (${response.status.value})$suffix"
         }
         return null
+    }
+
+    /**
+     * PostgREST error bodies look like:
+     *   {"code":"42703","details":null,"hint":null,"message":"column \"foo\" of relation \"habits\" does not exist"}
+     * Pull out just the human-readable `message` (falling back to `hint` or
+     * `details`) so the UI can show something actionable instead of raw JSON.
+     */
+    private fun extractPostgrestMessage(bodyText: String): String? {
+        if (bodyText.isBlank()) return null
+        return runCatching {
+            val obj = Json.parseToJsonElement(bodyText).jsonObject
+            obj["message"]?.jsonPrimitive?.contentOrNull
+                ?: obj["hint"]?.jsonPrimitive?.contentOrNull
+                ?: obj["details"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
     }
 
     private suspend inline fun <reified T> upsertRequest(
