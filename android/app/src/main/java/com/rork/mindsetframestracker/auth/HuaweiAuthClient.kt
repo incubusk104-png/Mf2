@@ -56,6 +56,28 @@ object HuaweiAuthClient {
     /** Request code for the HMS sign-in intent. */
     const val SIGN_IN_REQUEST_CODE = 8888
 
+    /**
+     * Wall-clock time [startSignIn] launched the HMS sign-in activity, or
+     * null if no attempt is in flight. Used by [parseResult] to tell a
+     * genuine user cancel (screen was visible for a while) apart from an
+     * instant server-side rejection (screen opens and closes itself in a
+     * few hundred ms, before a human could plausibly have seen an account
+     * picker and tapped back) — see [FAST_REJECT_THRESHOLD_MS].
+     */
+    @Volatile
+    private var signInLaunchedAtMs: Long? = null
+
+    /**
+     * If the sign-in activity returns RESULT_CANCELED faster than this, it
+     * almost certainly never showed a real account picker — HMS Account Kit
+     * rejected it server-side (most commonly: this build's signing
+     * certificate SHA-256 isn't registered for this app in AppGallery
+     * Connect, or the Account Kit service toggle hasn't finished
+     * propagating yet). A real human cancel — seeing the picker, deciding
+     * not to sign in, tapping back — reliably takes over a second.
+     */
+    private const val FAST_REJECT_THRESHOLD_MS = 1200L
+
     /** Account Kit status code: the user cancelled the sign-in dialog. */
     private const val STATUS_SIGN_IN_CANCELLED = 2012
 
@@ -193,9 +215,11 @@ object HuaweiAuthClient {
         }
         return try {
             val service = AccountAuthManager.getService(activity, authParams())
+            signInLaunchedAtMs = System.currentTimeMillis()
             activity.startActivityForResult(service.signInIntent, SIGN_IN_REQUEST_CODE)
             null
         } catch (e: Exception) {
+            signInLaunchedAtMs = null
             Log.w(TAG, "Failed to launch Huawei sign-in: ${e.message}")
             "Couldn't open Huawei sign-in. Try again or use email."
         }
@@ -207,25 +231,47 @@ object HuaweiAuthClient {
      */
     fun parseResult(context: Context, requestCode: Int, resultCode: Int, data: Intent?): HuaweiSignInResult {
         if (requestCode != SIGN_IN_REQUEST_CODE) return HuaweiSignInResult.Cancelled
+        val launchedAt = signInLaunchedAtMs
+        signInLaunchedAtMs = null
+        val elapsedMs = launchedAt?.let { System.currentTimeMillis() - it }
         if (resultCode != Activity.RESULT_OK || data == null) {
-            Log.i(TAG, "Huawei sign-in cancelled or dismissed (resultCode=$resultCode)")
+            Log.i(TAG, "Huawei sign-in cancelled or dismissed (resultCode=$resultCode, elapsedMs=$elapsedMs)")
+            HuaweiServicesConfig.logDiagnostic(
+                context,
+                "Huawei sign-in returned resultCode=$resultCode, data=${data == null}, " +
+                    "elapsedMs=$elapsedMs.",
+            )
             // resultCode != RESULT_OK covers BOTH a genuine user cancel (tapped
             // back / dismissed the account picker) AND the sign-in activity
             // being auto-rejected and closing itself instantly — most often
             // because this build's signing certificate SHA-256 isn't
-            // registered for this app in AppGallery Connect. HMS gives no
-            // distinct status code for the second case, so this can't be
-            // told apart from a real cancel in-band; log it so a pattern of
-            // "always resultCode=$resultCode within ~1s of launch, never a
-            // real account picker seen" is at least visible afterwards.
-            HuaweiServicesConfig.logDiagnostic(
-                context,
-                "Huawei sign-in returned resultCode=$resultCode, data=${data == null}. " +
-                    "If this happens on every attempt with no account picker ever " +
-                    "shown, check the signing cert SHA-256 registered in AppGallery " +
-                    "Connect matches this build's — see HuaweiServicesConfig doc.",
-            )
-            return HuaweiSignInResult.Cancelled
+            // registered for this app in AppGallery Connect, or the Account
+            // Kit toggle in AppGallery Connect hasn't finished propagating
+            // yet. HMS gives no distinct status code for the second case,
+            // but it IS distinguishable by timing: a human has to see the
+            // account picker and tap back, which takes over a second; a
+            // server-side rejection closes the screen in well under that.
+            return if (elapsedMs != null && elapsedMs < FAST_REJECT_THRESHOLD_MS) {
+                val fingerprint = HuaweiServicesConfig.signingCertSha256(context)
+                    .firstOrNull()
+                    ?: "<could not read — check huawei_diagnostics.txt>"
+                Log.w(TAG, "Huawei sign-in rejected in ${elapsedMs}ms — treating as config error, not a cancel")
+                HuaweiSignInResult.Error(
+                    "Huawei sign-in was rejected immediately (no account picker shown). This " +
+                        "almost always means one of two things:\n\n" +
+                        "1) This build's SHA-256 certificate fingerprint isn't the one registered " +
+                        "in AppGallery Connect for this app. This app's build is signed with:\n" +
+                        "$fingerprint\n" +
+                        "Compare that EXACTLY against Project settings > General information > " +
+                        "App information > SHA-256 certificate fingerprint. Debug and release " +
+                        "builds use different keystores — make sure you registered the one for " +
+                        "the build you're testing.\n\n" +
+                        "2) The Account Kit toggle was enabled recently and AppGallery Connect " +
+                        "hasn't finished propagating it yet (can take up to ~30 minutes).",
+                )
+            } else {
+                HuaweiSignInResult.Cancelled
+            }
         }
         return try {
             val task = AccountAuthManager.parseAuthResultFromIntent(data)
