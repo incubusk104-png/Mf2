@@ -173,12 +173,16 @@ dependencies {
     //
     // IMPORTANT: com.huawei.hms:base and com.huawei.hms:iap do NOT publish
     // a 6.14.x release (only hwid and appservice do) — pinning them to
-    // 6.14.0.300 fails to resolve entirely. 6.12.0.300 is a verified,
-    // mutually-compatible release across hwid/base/iap (Huawei's own POM
-    // metadata for hwid:6.12.0.300 and iap:6.12.0.300 both declare
-    // base >= 6.12.0.300).
+    // 6.14.0.300 fails to resolve entirely. base:6.12.0.300 is a verified,
+    // mutually-compatible release with hwid:6.12.0.300 (Huawei's own POM
+    // metadata for hwid:6.12.0.300 declares base >= 6.12.0.300).
+    //
+    // iap does NOT share hwid/base's version line at all — it's an
+    // independently-versioned kit that jumped straight from 6.13.x to
+    // 6.16.x, so iap:6.12.0.300 was never published either. 6.13.0.300 is
+    // the closest confirmed-real iap release to this hwid/base vintage.
     implementation("com.huawei.hms:base:6.12.0.300")
-    implementation("com.huawei.hms:iap:6.12.0.300")
+    implementation("com.huawei.hms:iap:6.13.0.300")
 
     // AndroidX Health Connect
     implementation(libs.androidx.health.connect.client)
