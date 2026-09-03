@@ -232,11 +232,20 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     viewModel.setHabitReminder(existingHabitId, chosenMinutes, repeatMask)
                     val updated = data.habits.firstOrNull { it.id == existingHabitId }
                         ?.copy(reminderMinutes = chosenMinutes, repeatDaysMask = repeatMask)
-                    if (updated != null) HabitAlarmScheduler.schedule(context, updated)
-                    val timeStr = formatAlarmTime(chosenMinutes)
+                    if (chosenMinutes != null && updated != null) {
+                        HabitAlarmScheduler.schedule(context, updated)
+                    } else if (updated != null) {
+                        // Switched back to "no alarm" — cancel any previously
+                        // scheduled alarm for this habit instead of leaving
+                        // a stale one armed.
+                        HabitAlarmScheduler.cancel(context, updated)
+                    }
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            "Alarm set — ${formatRepeat(repeatMask)} at $timeStr",
+                            if (chosenMinutes != null)
+                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}"
+                            else
+                                "Alarm removed for this habit.",
                         )
                     }
                     return@onConfirm
@@ -251,12 +260,14 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     repeatDaysMask = repeatMask,
                 )
                 if (viewModel.addHabitObject(habit)) {
-                    HabitAlarmScheduler.schedule(context, habit)
+                    if (chosenMinutes != null) HabitAlarmScheduler.schedule(context, habit)
                     viewModel.queueSync()
-                    val timeStr = formatAlarmTime(chosenMinutes)
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at $timeStr",
+                            if (chosenMinutes != null)
+                                "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}"
+                            else
+                                "Added ${habit.name} — no alarm. Tap it anytime to add one.",
                         )
                     }
                     // Offer activity source picker for physical-activity icons
@@ -511,7 +522,7 @@ private fun AlarmPickerDialog(
     habitName: String,
     defaultMinutes: Int,
     onDismiss: () -> Unit,
-    onConfirm: (reminderMinutes: Int, repeatMask: Int) -> Unit,
+    onConfirm: (reminderMinutes: Int?, repeatMask: Int) -> Unit,
 ) {
     val defaultHour = defaultMinutes / 60
     val defaultMinute = defaultMinutes % 60
@@ -531,7 +542,7 @@ private fun AlarmPickerDialog(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Choose when you'd like to be reminded.",
+                    text = "Choose when you'd like to be reminded, or skip it — you can always add one later.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp),
@@ -545,6 +556,14 @@ private fun AlarmPickerDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                // "I want to remove setup because I didn't setup all of
+                // them alarm" — not every habit needs a reminder. This lets
+                // the user add the habit with no alarm at all instead of
+                // being forced to pick a time for every single one.
+                TextButton(
+                    onClick = { onConfirm(null, repeatMask) },
+                    modifier = Modifier.padding(top = 4.dp),
+                ) { Text("Skip — no alarm for this habit") }
             }
         },
         confirmButton = {
