@@ -207,4 +207,19 @@ object HuaweiServicesConfig {
             file.writeText(combined)
         }
     }
+
+    /**
+     * Reads back everything [logDiagnostic] has recorded so far, newest
+     * entries last. Lets the in-app diagnostics viewer show this without
+     * requiring adb — most testers debugging a phone-only build have no
+     * way to run `adb shell run-as ... cat cache/huawei_diagnostics.txt`.
+     * Returns a friendly placeholder instead of throwing when the file
+     * doesn't exist yet (e.g. sign-in was never attempted).
+     */
+    fun readDiagnostics(context: Context): String {
+        return runCatching {
+            val file = File(context.applicationContext.cacheDir, DIAGNOSTICS_FILE)
+            if (file.exists()) file.readText() else "No diagnostics recorded yet — try Huawei sign-in once, then check again."
+        }.getOrDefault("Could not read diagnostics file.")
+    }
 }
