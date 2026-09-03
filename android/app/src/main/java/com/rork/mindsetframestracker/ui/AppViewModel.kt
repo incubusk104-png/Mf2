@@ -1341,6 +1341,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Used by the icon grid on the Habits tab: tapping an icon builds the habit
      * and schedules its alarm, then hands it here. Respects the free-tier cap.
      */
+    /**
+     * Sets/replaces the reminder time on an already-added habit. Used by the
+     * "Set up alarm" flow when a habit exists but has no reminder configured
+     * (reminderMinutes == null) — as opposed to [addHabitObject], which
+     * creates a brand-new habit entirely.
+     */
+    fun setHabitReminder(habitId: String, reminderMinutes: Int, repeatDaysMask: Int) {
+        update { data ->
+            data.copy(
+                habits = data.habits.map { habit ->
+                    if (habit.id == habitId) {
+                        habit.copy(reminderMinutes = reminderMinutes, repeatDaysMask = repeatDaysMask)
+                    } else {
+                        habit
+                    }
+                },
+            )
+        }
+        queueSync()
+    }
+
     fun addHabitObject(habit: Habit): Boolean {
         if (!canAddHabit()) return false
         update { data ->
