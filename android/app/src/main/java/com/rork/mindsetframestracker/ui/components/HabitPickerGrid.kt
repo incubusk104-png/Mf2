@@ -62,6 +62,12 @@ fun HabitPickerGrid(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     header: (@Composable () -> Unit)? = null,
+    /** Actual reminder minutes for an already-added habit, keyed by icon id.
+     *  null (or a missing entry) means that habit has no alarm configured —
+     *  the card shows "Set up alarm" instead of a time in that case. */
+    reminderMinutesByIconId: Map<String, Int?> = emptyMap(),
+    /** Called when the user taps "Set up alarm" on a habit that has none. */
+    onSetupAlarmTapped: (HabitIcon) -> Unit = {},
 ) {
     val isDark = isSystemInDarkTheme()
 
@@ -77,11 +83,17 @@ fun HabitPickerGrid(
         }
         items(HabitIconCatalog.icons, key = { it.id }) { icon ->
             val isSelected = icon.id in selectedIconIds
+            // Only meaningful once the habit is actually added — for
+            // not-yet-added catalog tiles this key is simply absent, and the
+            // tile falls back to previewing the catalog's default time.
+            val hasNoAlarmSet = isSelected && reminderMinutesByIconId[icon.id] == null
 
             HabitCardTile(
                 icon = icon,
                 isSelected = isSelected,
                 isDark = isDark,
+                hasNoAlarmSet = hasNoAlarmSet,
+                actualReminderMinutes = reminderMinutesByIconId[icon.id],
                 onClick = {
                     when {
                         icon.isTodoList -> onTodoListTapped()
@@ -89,6 +101,7 @@ fun HabitPickerGrid(
                         else -> onIconTapped(icon)
                     }
                 },
+                onSetupAlarmClick = { onSetupAlarmTapped(icon) },
             )
         }
     }
@@ -114,10 +127,16 @@ private fun HabitCardTile(
     isSelected: Boolean,
     isDark: Boolean,
     onClick: () -> Unit,
+    hasNoAlarmSet: Boolean = false,
+    actualReminderMinutes: Int? = null,
+    onSetupAlarmClick: () -> Unit = {},
 ) {
     val tileBg = cardBackground(icon, isDark)
     val textColor = cardTextColor(icon, isDark)
     val subtitleColor = textColor.copy(alpha = 0.65f)
+    // "Set up alarm" needs to stand out as something needing attention,
+    // not just another muted subtitle line.
+    val warningColor = Color(0xFFFF9800)
 
     Box(
         modifier = Modifier
@@ -143,20 +162,48 @@ private fun HabitCardTile(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(3.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Alarm,
-                    contentDescription = null,
-                    tint = subtitleColor,
-                    modifier = Modifier.size(11.dp),
-                )
-                Spacer(Modifier.width(3.dp))
-                Text(
-                    text = formatTime(icon.defaultReminderMinutes),
-                    fontSize = 11.sp,
-                    color = subtitleColor,
-                    fontWeight = FontWeight.Medium,
-                )
+            if (hasNoAlarmSet) {
+                // Independently clickable — tapping this specific row opens
+                // the alarm picker directly, without triggering the card's
+                // own onClick (which would remove the habit if selected).
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable(onClick = onSetupAlarmClick),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Alarm,
+                        contentDescription = null,
+                        tint = warningColor,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        text = "Set up alarm",
+                        fontSize = 11.sp,
+                        color = warningColor,
+                        fontWeight = FontWeight.Bold,
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    )
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Alarm,
+                        contentDescription = null,
+                        tint = subtitleColor,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        // Once a habit is actually added, show ITS real
+                        // reminder time, not the catalog's generic default —
+                        // those can differ if the user customised it.
+                        text = formatTime(actualReminderMinutes ?: icon.defaultReminderMinutes),
+                        fontSize = 11.sp,
+                        color = subtitleColor,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         }
 
