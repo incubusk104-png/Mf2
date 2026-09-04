@@ -47,6 +47,11 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Vibration for habit reminder notifications. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Lets a habit reminder launch AlarmRingingActivity full-screen — even
+         over the lock screen and through silent/Do Not Disturb/Bedtime mode —
+         so it behaves like a real alarm instead of a notification a phone
+         can silently swallow while the user is asleep. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Needed for usage stats tracking features -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -90,6 +95,7 @@
     </queries>
 
     <application
+        android:name=".MindsetFramesApplication"
         android:allowBackup="true"
         tools:replace="android:allowBackup"
         android:fullBackupContent="@xml/backup_rules"
@@ -183,6 +189,19 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!-- Full-screen alarm-ringing UI launched from a habit reminder's
+             full-screen intent. showWhenLocked/turnScreenOn are also set in
+             code for API 27+; the manifest flags below cover the same intent
+             on older devices via the deprecated window-flag path. -->
+        <activity
+            android:name=".notifications.AlarmRingingActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.MindsetFrames" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
