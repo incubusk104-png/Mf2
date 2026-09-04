@@ -450,16 +450,18 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     repeatDaysMask = repeatMask,
                 )
                 if (viewModel.addHabitObject(habit)) {
-                    // ── ARM THE ALARM ──
-                    HabitAlarmScheduler.schedule(context, habit)
+                    // ── ARM THE ALARM (only if one was actually set) ──
+                    if (reminderMinutes != null) HabitAlarmScheduler.schedule(context, habit)
 
                     // ── SYNC TO CLOUD ──
                     viewModel.queueSync()
 
-                    val timeStr = formatAlarmTime(reminderMinutes)
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at $timeStr",
+                            if (reminderMinutes != null)
+                                "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at ${formatAlarmTime(reminderMinutes)}"
+                            else
+                                "Added ${habit.name} — no alarm. Tap it anytime to add one.",
                         )
                     }
                 } else {
@@ -638,7 +640,7 @@ private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
 @Composable
 private fun TodoListDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, reminderMinutes: Int, repeatMask: Int) -> Unit,
+    onConfirm: (name: String, reminderMinutes: Int?, repeatMask: Int) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
     var repeatMask by remember { mutableStateOf(REPEAT_DAILY) }
@@ -663,7 +665,7 @@ private fun TodoListDialog(
                         .padding(bottom = 16.dp),
                 )
                 Text(
-                    text = "Pick the time for your daily reminder alarm.",
+                    text = "Pick a time for a daily reminder alarm, or skip it.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp),
@@ -677,6 +679,13 @@ private fun TodoListDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                // Same "no alarm" escape hatch as the icon-picker flow — a
+                // custom to-do habit shouldn't be forced to carry an alarm.
+                TextButton(
+                    onClick = { onConfirm(name.trim(), null, repeatMask) },
+                    enabled = name.trim().isNotEmpty(),
+                    modifier = Modifier.padding(top = 4.dp),
+                ) { Text("Skip — no alarm for this habit") }
             }
         },
         confirmButton = {
