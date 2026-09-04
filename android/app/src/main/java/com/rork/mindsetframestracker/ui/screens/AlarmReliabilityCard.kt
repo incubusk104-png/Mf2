@@ -160,7 +160,38 @@ fun AlarmReliabilityCard(modifier: Modifier = Modifier) {
                 granted = batteryExempt,
                 actionLabel = "Fix",
                 onFix = { requestBatteryOptimizationExemption(context) },
-                isLast = true,
+            )
+
+            // "Make sure can work the alarm and notify and snoozing" — instead
+            // of waiting up to 24h for a real habit alarm to prove it out,
+            // this fires the exact same notification (heads-up, sound,
+            // vibration, and the real "Snooze 5 min" button) immediately, so
+            // the user can confirm right now whether delivery actually works
+            // on their device/OEM — independent of any specific habit's
+            // scheduled time.
+            Spacer(Modifier.width(0.dp))
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    com.rork.mindsetframestracker.notifications.HabitCheckInNotifier.show(
+                        context = context,
+                        habitId = "diagnostic_test",
+                        habitName = "Test reminder",
+                        reschedule = false,
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            ) {
+                Icon(Icons.Outlined.NotificationsActive, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Send a test reminder now")
+            }
+            Text(
+                text = "Fires the exact same notification a habit alarm would — heads-up banner, sound, vibration, and a working \"Snooze 5 min\" button. If this doesn't show up, the fix above is the reason; if it does show up and works, real habit alarms will too.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
     }
