@@ -185,7 +185,7 @@ private fun HabitCardTile(
                         textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
                     )
                 }
-            } else {
+            } else if (isSelected) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Outlined.Alarm,
@@ -195,15 +195,25 @@ private fun HabitCardTile(
                     )
                     Spacer(Modifier.width(3.dp))
                     Text(
-                        // Once a habit is actually added, show ITS real
-                        // reminder time, not the catalog's generic default —
-                        // those can differ if the user customised it.
+                        // Only reachable when a habit actually exists with a
+                        // real, non-null reminder — never a guessed default.
                         text = formatTime(actualReminderMinutes ?: icon.defaultReminderMinutes),
                         fontSize = 11.sp,
                         color = subtitleColor,
                         fontWeight = FontWeight.Medium,
                     )
                 }
+            } else {
+                // Not added yet — show nothing suggesting an alarm already
+                // exists. Previously this previewed the catalog's default
+                // time here, which looked like an alarm was already set
+                // before the user had chosen anything at all.
+                Text(
+                    text = "Tap to add",
+                    fontSize = 11.sp,
+                    color = subtitleColor,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
 
