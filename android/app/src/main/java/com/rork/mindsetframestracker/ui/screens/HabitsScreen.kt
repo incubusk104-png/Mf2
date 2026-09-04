@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -121,6 +122,16 @@ fun HabitsScreen(viewModel: AppViewModel) {
     // habit that has none — on confirm this UPDATES that habit's reminder
     // instead of creating a brand-new habit.
     var alarmSetupExistingHabitId by remember { mutableStateOf<String?>(null) }
+    // "Even a single/double tap on an already-added habit deleted it
+    // instantly" — tapping a selected tile used to call onHabitRemoved
+    // directly with no confirmation at all. This holds the icon id pending
+    // confirmation instead of deleting immediately.
+    var pendingRemoveIconId by remember { mutableStateOf<String?>(null) }
+    // "Automatic — no need to hunt for permissions in Settings" — set to
+    // true right after any alarm is actually scheduled, only if something
+    // is still missing. The dialog itself no-ops (never shown) once
+    // everything's granted, so this never nags after the first fix.
+    var showAlarmPermissionPrompt by remember { mutableStateOf(false) }
 
     // Activity source picker state: when the user taps an activity-trackable
     // icon, we store the newly created habit info here and show the sheet.
@@ -186,14 +197,11 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 }
             },
             onHabitRemoved = { iconId ->
-                val existing = data.habits.firstOrNull { it.iconId == iconId }
-                if (existing != null) {
-                    // Cancel the alarm BEFORE deleting the habit data.
-                    HabitAlarmScheduler.cancel(context, existing)
-                    viewModel.deleteHabit(existing.id)
-                    // deleteHabit already calls queueSync internally.
-                    scope.launch { snackbarHostState.showSnackbar("Removed ${existing.name}") }
-                }
+                // No longer deletes on the spot — a stray tap (or a fast
+                // double-tap) on an already-added tile must not be able to
+                // silently wipe out a habit and its whole history. Just
+                // arms the confirmation dialog below.
+                pendingRemoveIconId = iconId
             },
             onTodoListTapped = {
                 if (viewModel.canAddHabit()) showTodoDialog = true
@@ -234,6 +242,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                         ?.copy(reminderMinutes = chosenMinutes, repeatDaysMask = repeatMask)
                     if (chosenMinutes != null && updated != null) {
                         HabitAlarmScheduler.schedule(context, updated)
+                        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
                     } else if (updated != null) {
                         // Switched back to "no alarm" — cancel any previously
                         // scheduled alarm for this habit instead of leaving
@@ -260,7 +269,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     repeatDaysMask = repeatMask,
                 )
                 if (viewModel.addHabitObject(habit)) {
-                    if (chosenMinutes != null) HabitAlarmScheduler.schedule(context, habit)
+                    if (chosenMinutes != null) {
+                        HabitAlarmScheduler.schedule(context, habit)
+                        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                    }
                     viewModel.queueSync()
                     scope.launch {
                         snackbarHostState.showSnackbar(
@@ -280,6 +292,44 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 }
             },
         )
+    }
+
+    // ── Remove-habit confirmation ───────────────────────────────────────
+    // Deleting a habit also wipes its check-in history and (via
+    // queueHabitDeletion) removes it from the cloud — a destructive,
+    // unrecoverable action, so it now always requires an explicit tap on
+    // "Remove" rather than firing straight off a tap on the card.
+    if (pendingRemoveIconId != null) {
+        val iconId = pendingRemoveIconId!!
+        val existing = data.habits.firstOrNull { it.iconId == iconId }
+        AlertDialog(
+            onDismissRequest = { pendingRemoveIconId = null },
+            title = { Text("Remove ${existing?.name ?: "this habit"}?") },
+            text = { Text("This deletes its check-in history too, on this device and in the cloud. This can't be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingRemoveIconId = null
+                        if (existing != null) {
+                            HabitAlarmScheduler.cancel(context, existing)
+                            viewModel.deleteHabit(existing.id)
+                            scope.launch { snackbarHostState.showSnackbar("Removed ${existing.name}") }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoveIconId = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // ── Automatic alarm-permission prompt ───────────────────────────────
+    // Pops up right after an alarm is set, only if something's missing —
+    // replaces the old standalone Settings card entirely.
+    if (showAlarmPermissionPrompt) {
+        AlarmPermissionPromptDialog(onDismiss = { showAlarmPermissionPrompt = false })
     }
 
     // ── Activity Source Picker ──────────────────────────────────────────
@@ -451,7 +501,10 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 )
                 if (viewModel.addHabitObject(habit)) {
                     // ── ARM THE ALARM (only if one was actually set) ──
-                    if (reminderMinutes != null) HabitAlarmScheduler.schedule(context, habit)
+                    if (reminderMinutes != null) {
+                        HabitAlarmScheduler.schedule(context, habit)
+                        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                    }
 
                     // ── SYNC TO CLOUD ──
                     viewModel.queueSync()
