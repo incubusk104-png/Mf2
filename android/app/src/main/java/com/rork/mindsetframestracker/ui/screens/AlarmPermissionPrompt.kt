@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import android.widget.Toast
 import com.rork.mindsetframestracker.notifications.HabitCheckInNotifier
 
 /**
@@ -184,12 +185,31 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
 
                 OutlinedButton(
                     onClick = {
-                        HabitCheckInNotifier.show(
-                            context = context,
-                            habitId = "diagnostic_test",
-                            habitName = "Test reminder",
-                            reschedule = false,
-                        )
+                        if (!notifGranted) {
+                            // Previously this button silently did nothing when
+                            // notification permission was missing — notify()
+                            // is a no-op without it. Tell the user why instead
+                            // of letting it look broken.
+                            Toast.makeText(
+                                context,
+                                "Allow notifications above first, then try again.",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        } else {
+                            val posted = HabitCheckInNotifier.show(
+                                context = context,
+                                habitId = "diagnostic_test",
+                                habitName = "Test reminder",
+                                reschedule = false,
+                            )
+                            if (!posted) {
+                                Toast.makeText(
+                                    context,
+                                    "Couldn't send the test reminder — check notification settings.",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
