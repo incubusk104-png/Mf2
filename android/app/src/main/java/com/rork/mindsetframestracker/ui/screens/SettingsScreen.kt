@@ -1115,12 +1115,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
             }
         }
 
-        // Live status + one-tap fixes for the 3 permissions that make
-        // reminders unreliable on real devices (notifications, exact alarm,
-        // battery optimization). Was added as a file previously but never
-        // called from this screen — this is that missing wire-up.
-        AlarmReliabilityCard(modifier = Modifier.padding(bottom = 16.dp))
-
         SettingsCard(title = "Streak protection", animateSize = !settings.reducedMotion) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
