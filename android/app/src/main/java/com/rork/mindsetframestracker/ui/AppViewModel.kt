@@ -144,6 +144,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { evaluateScreenTimeHabits() }.onFailure {
             if (BuildConfig.DEBUG) Log.e("AppViewModel", "Screen-time evaluation failed: ${it.message}", it)
         }
+        // Self-heal the built-in reminders on every cold launch. A device
+        // reboot is already covered by BootReceiver, but an OEM battery
+        // manager "force stopping" the app (MIUI/EMUI/ColorOS are the usual
+        // culprits) silently cancels every AlarmManager alarm without
+        // sending BOOT_COMPLETED — the only way those come back is the user
+        // opening the app again, so make that moment repair everything
+        // instead of relying on the user to notice and re-toggle a setting
+        // that no longer exists in the UI. No-op (skipped) before
+        // onboarding finishes, and a no-op if notification permission
+        // hasn't been granted yet.
+        if (_state.value.settings.onboardingDone) {
+            runCatching { scheduleNotification() }.onFailure {
+                if (BuildConfig.DEBUG) Log.e("AppViewModel", "Startup reminder re-arm failed: ${it.message}", it)
+            }
+        }
     }
 
     // ── Premium subscription (Huawei IAP) ─────────────────────────────
@@ -1526,6 +1541,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         refreshCompanionUnlocks()
+        // Arm the built-in reminders (daily / streak / weekly recap) right
+        // away for a fresh install. AppRoot's LaunchedEffect also does this
+        // once onboardingDone flips to true — this is a belt-and-braces
+        // second call in case the notification permission is already
+        // granted (e.g. re-onboarding after a data wipe) and nothing ever
+        // triggers that Compose effect to actually schedule anything.
+        runCatching { scheduleNotification() }.onFailure {
+            if (BuildConfig.DEBUG) Log.e("AppViewModel", "Post-onboarding reminder arm failed: ${it.message}", it)
+        }
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -1551,44 +1575,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         scheduleNotification(minutes)
     }
 
+    /**
+     * Arms every "built-in" reminder — daily check-in, evening streak alert,
+     * Sunday recap, evening reflection — in one call. There is no longer any
+     * per-item enable/disable toggle: these are always on, matching the
+     * simplified Settings UI (a single explanatory card, no switches).
+     *
+     * Called from three places so a mis-armed alarm can't linger silently:
+     *  1. [init] — every cold app launch re-syncs all four against
+     *     AlarmManager, so even if an OEM force-stop or a device reboot
+     *     wiped the previously-scheduled alarms, simply opening the app
+     *     again repairs them.
+     *  2. [completeOnboarding] — arms them immediately for a fresh install,
+     *     instead of waiting on a Compose recomposition to notice.
+     *  3. [setNotificationMinutes] — re-arms the daily reminder at its new
+     *     time right away.
+     */
     fun scheduleNotification(minutes: Int = _state.value.settings.notificationMinutes) {
         if (hasNotificationPermission()) {
             notificationScheduler.scheduleDailyReminder(minutes)
             notificationScheduler.scheduleEveningReflection()
-        }
-        syncStreakAlertAlarm()
-        syncWeeklyRecapAlarm()
-    }
-
-    fun setStreakAlertEnabled(enabled: Boolean) {
-        update { it.copy(settings = it.settings.copy(streakAlertEnabled = enabled)) }
-        syncStreakAlertAlarm()
-    }
-
-    fun setStreakAlertMinutes(minutes: Int) {
-        update { it.copy(settings = it.settings.copy(streakAlertMinutes = minutes)) }
-        syncStreakAlertAlarm()
-    }
-
-    private fun syncStreakAlertAlarm() {
-        val settings = _state.value.settings
-        if (settings.streakAlertEnabled && hasNotificationPermission()) {
-            notificationScheduler.scheduleStreakAlert(settings.streakAlertMinutes)
-        } else {
-            notificationScheduler.cancelStreakAlert()
-        }
-    }
-
-    fun setWeeklyRecapEnabled(enabled: Boolean) {
-        update { it.copy(settings = it.settings.copy(weeklyRecapEnabled = enabled)) }
-        syncWeeklyRecapAlarm()
-    }
-
-    private fun syncWeeklyRecapAlarm() {
-        if (_state.value.settings.weeklyRecapEnabled && hasNotificationPermission()) {
+            notificationScheduler.scheduleStreakAlert(_state.value.settings.streakAlertMinutes)
             notificationScheduler.scheduleWeeklyRecap()
-        } else {
-            notificationScheduler.cancelWeeklyRecap()
         }
     }
 
