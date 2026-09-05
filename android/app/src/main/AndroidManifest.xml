@@ -254,12 +254,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Added HabitAlarmReceiver for individual habit notification alarms -->
-        <receiver
-            android:name=".notifications.HabitAlarmReceiver"
-            android:exported="false"
-            android:enabled="true" />
-
         <!-- Handles "Snooze 5 min" tapped on a habit reminder notification -->
         <receiver
             android:name=".notifications.HabitSnoozeReceiver"
