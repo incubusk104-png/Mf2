@@ -1,55 +1,62 @@
 package com.rork.mindsetframestracker.notifications
 
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.util.Log
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.REPEAT_DAILY
 import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import java.util.Calendar
+import java.util.concurrent.TimeUnit
 
 /**
- * Schedules, cancels, and reschedules per-habit reminder alarms via
- * [AlarmManager]. Each habit with a non-null [Habit.reminderMinutes] gets
- * its own daily repeating alarm that fires [HabitAlarmReceiver] ->
- * [HabitCheckInNotifier] to show the notification.
+ * Schedules, cancels, and reschedules per-habit reminders via **WorkManager**
+ * instead of [android.app.AlarmManager].
  *
- * ## Key architectural fixes in this revision
+ * ## Why WorkManager instead of AlarmManager
  *
- * 1. **USE_EXACT_ALARM support (API 33+):** On Android 13+ the app can hold
- *    the `USE_EXACT_ALARM` permission which is auto-granted for alarm/reminder
- *    apps. The scheduler now checks both `canScheduleExactAlarms()` (covers
- *    `SCHEDULE_EXACT_ALARM`) and the manifest `USE_EXACT_ALARM` flag before
- *    deciding whether to use exact or windowed alarms.
+ * The previous revision used `setExactAndAllowWhileIdle()` (falling back to
+ * `setWindow()`/`set()`), which needs the `SCHEDULE_EXACT_ALARM` /
+ * `USE_EXACT_ALARM` special permission on Android 12+. In practice that
+ * permission is exactly the kind of thing that quietly breaks reminders:
+ * OEM battery managers (MIUI, One UI, EMUI, ColorOS, …) revoke or ignore it,
+ * Play Store policy limits `USE_EXACT_ALARM` to apps whose core purpose is
+ * being an alarm clock or calendar, and a user can turn it off at any time
+ * in Settings > Apps > Alarms & reminders — with zero feedback inside the
+ * app when that happens. The result: "the habit alarm just doesn't fire."
  *
- * 2. **Triple-fallback strategy:** exact -> windowed -> inexact. Every layer
- *    is wrapped in `runCatching` so no OEM quirk can crash the UI.
+ * WorkManager is Android's own built-in, batteries-included scheduler
+ * (already used elsewhere in this app for [com.rork.mindsetframestracker.data.CloudBackupWorker]).
+ * It needs no special permission, is guaranteed to run (even after the app
+ * is killed or the device reboots — no custom [BootReceiver] wiring
+ * required for it specifically), and Android itself decides the most
+ * battery-friendly way to honor the requested delay. The one trade-off is
+ * that a fire time can drift by a few minutes under aggressive Doze — a
+ * reasonable price for "actually goes off" over "exactly on the second but
+ * sometimes silently doesn't."
  *
- * 3. **Boot resilience:** [BootReceiver] now calls [rescheduleAll] so
- *    individual habit alarms survive reboots and app updates.
+ * Each habit with a non-null [Habit.reminderMinutes] gets its own uniquely
+ * named one-time work request that reschedules itself (via
+ * [HabitReminderWorker] calling back into [scheduleNext]) after it fires,
+ * mirroring how the old alarm chain re-armed itself daily.
  */
 object HabitAlarmScheduler {
 
     private const val TAG = "HabitAlarmScheduler"
-    private const val REQUEST_CODE_BASE = 10_000
-
-    /** 15-minute tolerance window used when exact alarms aren't permitted. */
-    private const val WINDOW_MILLIS = 15L * 60L * 1000L
+    private const val WORK_NAME_PREFIX = "habit_reminder_"
 
     fun schedule(context: Context, habit: Habit) {
         val minutes = habit.reminderMinutes ?: return
-        setAlarm(context, habit.id, habit.name, minutes, habit.repeatDaysMask)
+        enqueue(context, habit.id, habit.name, minutes, habit.repeatDaysMask)
     }
 
     fun cancel(context: Context, habit: Habit) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pendingIntent = buildPendingIntent(context, habit.id, habit.name)
-        alarmManager.cancel(pendingIntent)
-        Log.d(TAG, "Cancelled alarm for '${habit.name}'")
+        WorkManager.getInstance(context).cancelUniqueWork(workName(habit.id))
+        Log.d(TAG, "Cancelled reminder for '${habit.name}'")
     }
 
     fun rescheduleAll(context: Context, habits: List<Habit>) {
@@ -60,13 +67,13 @@ object HabitAlarmScheduler {
                 count++
             }
         }
-        Log.i(TAG, "Rescheduled $count habit alarm(s)")
+        Log.i(TAG, "Rescheduled $count habit reminder(s)")
     }
 
     /**
-     * Called by HabitCheckInNotifier right after firing, to re-arm the next
-     * occurrence. A repeat mask of [REPEAT_ONCE] means the alarm was a
-     * one-shot — it is NOT re-armed (mirrors the system Clock's
+     * Called by [HabitReminderWorker] right after it fires, to re-arm the
+     * next occurrence. A repeat mask of [REPEAT_ONCE] means it was a
+     * one-shot reminder — it is NOT re-armed (mirrors the system Clock's
      * "Repeat: Once" behaviour).
      */
     fun scheduleNext(context: Context, habitId: String, habitName: String) {
@@ -77,97 +84,46 @@ object HabitAlarmScheduler {
             Log.d(TAG, "'${habit.name}' repeats Once — not re-arming")
             return
         }
-        setAlarm(context, habitId, habitName, minutes, habit.repeatDaysMask)
+        enqueue(context, habitId, habitName, minutes, habit.repeatDaysMask)
     }
 
-    private fun setAlarm(
+    private fun enqueue(
         context: Context,
         habitId: String,
         habitName: String,
         minutes: Int,
         repeatDaysMask: Int = REPEAT_DAILY,
     ) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pendingIntent = buildPendingIntent(context, habitId, habitName)
-        val triggerTime = nextTriggerMillis(minutes, repeatDaysMask)
+        val delayMillis =
+            (nextTriggerMillis(minutes, repeatDaysMask) - System.currentTimeMillis())
+                .coerceAtLeast(0L)
 
-        // Determine the best alarm type we can use:
-        //   1. Exact (setExactAndAllowWhileIdle) — most reliable, needs permission
-        //   2. Windowed (setWindow) — 15-min tolerance, no special permission
-        //   3. Inexact (set) — last resort
-        val canUseExact = canScheduleExact(alarmManager)
+        val inputData = Data.Builder()
+            .putString(HabitReminderWorker.KEY_HABIT_ID, habitId)
+            .putString(HabitReminderWorker.KEY_HABIT_NAME, habitName)
+            .putBoolean(HabitReminderWorker.KEY_IS_SNOOZE_REFIRE, false)
+            .build()
 
-        // Attempt 1: exact alarm
-        if (canUseExact) {
-            val exactOk = runCatching {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTime,
-                    pendingIntent,
-                )
-            }.isSuccess
-            if (exactOk) {
-                Log.d(TAG, "Exact alarm set for '$habitName' at $triggerTime")
-                return
-            }
-        }
+        val request = OneTimeWorkRequestBuilder<HabitReminderWorker>()
+            .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
+            .setInputData(inputData)
+            .build()
 
-        // Attempt 2: windowed alarm (15-min tolerance)
-        val windowOk = runCatching {
-            alarmManager.setWindow(
-                AlarmManager.RTC_WAKEUP,
-                triggerTime,
-                WINDOW_MILLIS,
-                pendingIntent,
-            )
-        }.isSuccess
-        if (windowOk) {
-            Log.d(TAG, "Windowed alarm set for '$habitName' at $triggerTime")
-            return
-        }
-
-        // Attempt 3: plain inexact alarm — last resort
-        runCatching {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
-        }.onSuccess {
-            Log.d(TAG, "Inexact alarm set for '$habitName' at $triggerTime")
-        }.onFailure { error ->
-            Log.e(TAG, "All alarm methods failed for '$habitName'", error)
-        }
-    }
-
-    /**
-     * Checks whether the app can schedule exact alarms on this device.
-     *
-     * - Below API 31 (Android 12): exact alarms are always allowed.
-     * - API 31+: `canScheduleExactAlarms()` returns true when either
-     *   `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM` is held.
-     */
-    private fun canScheduleExact(alarmManager: AlarmManager): Boolean {
-        return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            true
-        } else {
-            runCatching { alarmManager.canScheduleExactAlarms() }.getOrDefault(false)
-        }
-    }
-
-    private fun buildPendingIntent(context: Context, habitId: String, habitName: String): PendingIntent {
-        val intent = Intent(context, HabitAlarmReceiver::class.java).apply {
-            putExtra("habitId", habitId)
-            putExtra("habitName", habitName)
-        }
-        val requestCode = REQUEST_CODE_BASE + habitId.hashCode()
-        return PendingIntent.getBroadcast(
-            context, requestCode, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            workName(habitId),
+            ExistingWorkPolicy.REPLACE,
+            request,
         )
+        Log.d(TAG, "Reminder for '$habitName' queued in ${delayMillis / 60_000} min")
     }
+
+    private fun workName(habitId: String) = "$WORK_NAME_PREFIX$habitId"
 
     /**
      * Next trigger time honouring the repeat day mask (bit 0 = Monday …
      * bit 6 = Sunday). [REPEAT_ONCE] (mask 0) behaves like "next occurrence
      * of this time" — today if still ahead, otherwise tomorrow — and the
-     * alarm simply isn't re-armed after it fires.
+     * work simply isn't re-enqueued after it fires.
      */
     private fun nextTriggerMillis(minutesFromMidnight: Int, repeatDaysMask: Int = REPEAT_DAILY): Long {
         val cal = Calendar.getInstance().apply {
