@@ -1,26 +1,35 @@
 package com.rork.mindsetframestracker.notifications
 
-import android.app.AlarmManager
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 
 /**
  * Fired when the user taps "Snooze 5 min" on a habit reminder notification.
- * Dismisses the current notification and schedules a one-shot alarm 5
+ * Dismisses the current notification and enqueues a WorkManager job 5
  * minutes later that re-shows the same reminder — it does NOT touch or
- * reschedule the habit's normal daily alarm chain, so the next day's
+ * reschedule the habit's normal daily reminder chain, so the next day's
  * reminder still fires at its usual time regardless of a snooze today.
+ *
+ * Previously the 5-minute re-fire used `AlarmManager.setExactAndAllowWhileIdle()`,
+ * which silently falls back to an inexact, permission-gated alarm the moment
+ * the exact-alarm special permission isn't held — exactly the kind of thing
+ * that made "Snooze" look broken. WorkManager needs no special permission
+ * and reliably delivers the delayed re-fire through [HabitReminderWorker].
  */
 class HabitSnoozeReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "HabitSnoozeReceiver"
-        private const val SNOOZE_MILLIS = 5L * 60L * 1000L
-        private const val SNOOZE_REQUEST_CODE_BASE = 20_000
+        private const val SNOOZE_MINUTES = 5L
+        private const val WORK_NAME_PREFIX = "habit_snooze_"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -31,29 +40,25 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(HabitCheckInNotifier.notificationId(habitId))
 
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val snoozeIntent = Intent(context, HabitAlarmReceiver::class.java).apply {
-            putExtra("habitId", habitId)
-            putExtra("habitName", habitName)
-            // Marks this as a snooze re-fire so HabitAlarmReceiver does NOT
+        val inputData = Data.Builder()
+            .putString(HabitReminderWorker.KEY_HABIT_ID, habitId)
+            .putString(HabitReminderWorker.KEY_HABIT_NAME, habitName)
+            // Marks this as a snooze re-fire so HabitReminderWorker does NOT
             // call scheduleNext() again for it — only the original daily
-            // alarm chain should re-arm itself.
-            putExtra("isSnoozeRefire", true)
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            SNOOZE_REQUEST_CODE_BASE + habitId.hashCode(),
-            snoozeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+            // reminder chain should re-arm itself.
+            .putBoolean(HabitReminderWorker.KEY_IS_SNOOZE_REFIRE, true)
+            .build()
 
-        val triggerAt = System.currentTimeMillis() + SNOOZE_MILLIS
-        runCatching {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-        }.onFailure {
-            // Fall back to inexact if exact isn't permitted right now.
-            runCatching { alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent) }
-        }
-        Log.d(TAG, "Snoozed '$habitName' for 5 minutes")
+        val request = OneTimeWorkRequestBuilder<HabitReminderWorker>()
+            .setInitialDelay(SNOOZE_MINUTES, TimeUnit.MINUTES)
+            .setInputData(inputData)
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "$WORK_NAME_PREFIX$habitId",
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
+        Log.d(TAG, "Snoozed '$habitName' for $SNOOZE_MINUTES minutes")
     }
 }
