@@ -97,7 +97,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -266,11 +265,8 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var showTimePicker by remember { mutableStateOf(false) }
     var timeJustSaved by remember { mutableStateOf(false) }
     var editingPreset by remember { mutableStateOf<ReminderPreset?>(null) }
-    var reminderPreviewResult by remember { mutableStateOf<Boolean?>(null) }
     var showStreakTimePicker by remember { mutableStateOf(false) }
     var streakTimeJustSaved by remember { mutableStateOf(false) }
-    var streakPreviewResult by remember { mutableStateOf<Boolean?>(null) }
-    var recapPreviewResult by remember { mutableStateOf<Boolean?>(null) }
     val view = LocalView.current
     val context = LocalContext.current
 
@@ -1080,39 +1076,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-
-            OutlinedButton(
-                onClick = { reminderPreviewResult = viewModel.sendReminderPreview() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-                    .defaultMinSize(minHeight = 48.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Send,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = "Preview daily reminder",
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            when (reminderPreviewResult) {
-                true -> Text(
-                    text = "Preview sent — check your notification shade. It looks exactly like the real daily reminder.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                false -> Text(
-                    text = "Notifications are not allowed. Enable them for Mindset Frames in system settings, then try again.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                null -> Unit
-            }
         }
 
         SettingsCard(title = "Streak protection", animateSize = !settings.reducedMotion) {
@@ -1190,39 +1153,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-
-                OutlinedButton(
-                    onClick = { streakPreviewResult = viewModel.sendStreakAlertPreview() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                        .defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = s.settingsPreviewStreak,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-                when (streakPreviewResult) {
-                    true -> Text(
-                        text = "Preview sent — check your notification shade.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    false -> Text(
-                        text = "Notifications are not allowed. Enable them for Mindset Frames in system settings, then try again.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    null -> Unit
-                }
             }
         }
 
@@ -1267,38 +1197,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
-                OutlinedButton(
-                    onClick = { recapPreviewResult = viewModel.sendWeeklyRecapPreview() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                        .defaultMinSize(minHeight = 48.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = "Preview weekly recap",
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-                when (recapPreviewResult) {
-                    true -> Text(
-                        text = "Preview sent with this week's real numbers — check your notification shade.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    false -> Text(
-                        text = "Notifications are not allowed. Enable them for Mindset Frames in system settings, then try again.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    null -> Unit
-                }
             }
         }
 
