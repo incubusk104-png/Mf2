@@ -65,8 +65,8 @@ android {
         // AppGallery — required both for the update to install over the
         // existing app AND for IAP sandbox testing (sandbox activates only
         // when the test build's versionCode exceeds the released one).
-        versionCode = 21
-        versionName = "1.1.0"
+        versionCode = 22
+        versionName = "1.1.1"
 
         val supabaseUrl = resolveRorkValue("SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_URL", "mindset.supabaseUrl")
         val supabaseAnonKey = resolveRorkValue("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY", "mindset.supabaseAnonKey")
