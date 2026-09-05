@@ -10,8 +10,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -19,12 +17,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,7 +49,6 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.SettingsBrightness
-import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material.icons.outlined.CloudDone
@@ -113,7 +106,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material3.ripple
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -264,7 +256,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
     var showTimePicker by remember { mutableStateOf(false) }
     var timeJustSaved by remember { mutableStateOf(false) }
-    var editingPreset by remember { mutableStateOf<ReminderPreset?>(null) }
     var showStreakTimePicker by remember { mutableStateOf(false) }
     var streakTimeJustSaved by remember { mutableStateOf(false) }
     val view = LocalView.current
@@ -999,50 +990,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
         }
 
         SettingsCard(title = s.settingsDailyReminder, animateSize = !settings.reducedMotion) {
-            Text(
-                text = s.settingsQuickPick,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 8.dp),
-            ) {
-                reminderPresets.forEach { preset ->
-                    val minutes = settings.presetTimes[preset.id] ?: preset.defaultMinutes
-                    val selected = settings.notificationMinutes == minutes
-                    PresetChip(
-                        label = preset.label,
-                        timeLabel = formatMinutes(minutes),
-                        icon = if (selected) Icons.Filled.CheckCircle else preset.icon,
-                        selected = selected,
-                        reducedMotion = settings.reducedMotion,
-                        onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                            } else {
-                                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                            }
-                            viewModel.setNotificationMinutes(minutes)
-                            timeJustSaved = true
-                        },
-                        onLongClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                            editingPreset = preset
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-            Text(
-                text = "Long-press a preset to change its default time.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -1543,71 +1490,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 }
             },
         )
-    }
-
-    editingPreset?.let { preset ->
-        key(preset.id) {
-            val currentMinutes = settings.presetTimes[preset.id] ?: preset.defaultMinutes
-            val presetTimeState = rememberTimePickerState(
-                initialHour = currentMinutes / 60,
-                initialMinute = currentMinutes % 60,
-                is24Hour = false,
-            )
-            AlertDialog(
-                onDismissRequest = { editingPreset = null },
-                icon = {
-                    Icon(imageVector = preset.icon, contentDescription = null)
-                },
-                title = { Text("${preset.label} default time") },
-                text = {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "Tapping ${preset.label} will set your daily reminder to this time.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 16.dp),
-                        )
-                        TimePicker(state = presetTimeState)
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val newMinutes = presetTimeState.hour * 60 + presetTimeState.minute
-                            viewModel.setPresetTime(preset.id, newMinutes)
-                            if (settings.notificationMinutes == currentMinutes) {
-                                viewModel.setNotificationMinutes(newMinutes)
-                                timeJustSaved = true
-                            }
-                            editingPreset = null
-                        },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                    ) { Text("Save") }
-                },
-                dismissButton = {
-                    Row {
-                        TextButton(
-                            onClick = {
-                                viewModel.setPresetTime(preset.id, preset.defaultMinutes)
-                                if (settings.notificationMinutes == currentMinutes) {
-                                    viewModel.setNotificationMinutes(preset.defaultMinutes)
-                                    timeJustSaved = true
-                                }
-                                editingPreset = null
-                            },
-                            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                        ) { Text("Reset") }
-                        TextButton(
-                            onClick = { editingPreset = null },
-                            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                        ) { Text("Cancel") }
-                    }
-                },
-            )
-        }
     }
 
     if (showTimePicker) {
@@ -2556,94 +2438,6 @@ private fun DeleteAccountDialog(
             ) { Text("Cancel") }
         },
     )
-}
-
-private data class ReminderPreset(
-    val id: String,
-    val label: String,
-    val icon: ImageVector,
-    val defaultMinutes: Int,
-)
-
-private val reminderPresets = listOf(
-    ReminderPreset("morning", "Morning", Icons.Outlined.WbSunny, 8 * 60),
-    ReminderPreset("midday", "Midday", Icons.Outlined.LightMode, 12 * 60 + 30),
-    ReminderPreset("evening", "Evening", Icons.Outlined.DarkMode, 20 * 60),
-)
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PresetChip(
-    label: String,
-    timeLabel: String,
-    icon: ImageVector,
-    selected: Boolean,
-    reducedMotion: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val chipScale by animateFloatAsState(
-        targetValue = if (isPressed && !reducedMotion) 0.92f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "presetChipScale",
-    )
-    val shape = MaterialTheme.shapes.small
-    Surface(
-        shape = shape,
-        color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier
-            .defaultMinSize(minHeight = 48.dp)
-            .graphicsLayer {
-                scaleX = chipScale
-                scaleY = chipScale
-            },
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .clip(shape)
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = ripple(),
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                    onLongClickLabel = "Change default time for $label",
-                )
-                .defaultMinSize(minHeight = 48.dp)
-                .padding(horizontal = 4.dp, vertical = 8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = 4.dp),
-                )
-            }
-            Text(
-                text = timeLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-    }
 }
 
 @Composable
