@@ -1600,6 +1600,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Toggles the streak-protection alert on/off. When turning it on we
+     * immediately (re)schedule it at its saved time; when turning it off we
+     * cancel the pending alarm outright, otherwise it would still fire once
+     * even after being switched off.
+     */
+    fun setStreakAlertEnabled(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(streakAlertEnabled = enabled)) }
+        if (enabled) {
+            if (hasNotificationPermission()) {
+                notificationScheduler.scheduleStreakAlert(_state.value.settings.streakAlertMinutes)
+            }
+        } else {
+            notificationScheduler.cancelStreakAlert()
+        }
+    }
+
+    /** Updates the streak alert's daily fire time and reschedules it if enabled. */
+    fun setStreakAlertMinutes(minutes: Int) {
+        update { it.copy(settings = it.settings.copy(streakAlertMinutes = minutes)) }
+        if (_state.value.settings.streakAlertEnabled && hasNotificationPermission()) {
+            notificationScheduler.scheduleStreakAlert(minutes)
+        }
+    }
+
+    /**
+     * Toggles the Sunday weekly recap on/off, scheduling or cancelling the
+     * alarm to match — same reasoning as [setStreakAlertEnabled].
+     */
+    fun setWeeklyRecapEnabled(enabled: Boolean) {
+        update { it.copy(settings = it.settings.copy(weeklyRecapEnabled = enabled)) }
+        if (enabled) {
+            if (hasNotificationPermission()) {
+                notificationScheduler.scheduleWeeklyRecap()
+            }
+        } else {
+            notificationScheduler.cancelWeeklyRecap()
+        }
+    }
+
     fun sendReminderPreview(): Boolean {
         if (!hasNotificationPermission()) return false
         CheckInNotifier.show(getApplication(), preview = true)
