@@ -254,6 +254,14 @@
             </intent-filter>
         </receiver>
 
+        <!-- Fired by the AlarmManager alarm-clock alarm that HabitAlarmScheduler
+             schedules for each habit's reminder time (and by the snooze re-fire
+             below). -->
+        <receiver
+            android:name=".notifications.HabitReminderReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
         <!-- Handles "Snooze 5 min" tapped on a habit reminder notification -->
         <receiver
             android:name=".notifications.HabitSnoozeReceiver"
