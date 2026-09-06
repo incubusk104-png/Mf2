@@ -1,35 +1,38 @@
 package com.rork.mindsetframestracker.notifications
 
+import android.app.AlarmManager
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 /**
  * Fired when the user taps "Snooze 5 min" on a habit reminder notification.
- * Dismisses the current notification and enqueues a WorkManager job 5
- * minutes later that re-shows the same reminder — it does NOT touch or
- * reschedule the habit's normal daily reminder chain, so the next day's
- * reminder still fires at its usual time regardless of a snooze today.
+ * Dismisses the current notification and arms an [AlarmManager] alarm 5
+ * minutes later that re-shows the same reminder via [HabitReminderReceiver]
+ * — it does NOT touch or reschedule the habit's normal daily reminder chain,
+ * so the next day's reminder still fires at its usual time regardless of a
+ * snooze today.
  *
- * Previously the 5-minute re-fire used `AlarmManager.setExactAndAllowWhileIdle()`,
- * which silently falls back to an inexact, permission-gated alarm the moment
- * the exact-alarm special permission isn't held — exactly the kind of thing
- * that made "Snooze" look broken. WorkManager needs no special permission
- * and reliably delivers the delayed re-fire through [HabitReminderWorker].
+ * Uses `setExactAndAllowWhileIdle()` (falling back to a short `setWindow()`
+ * when the exact-alarm permission isn't held) instead of WorkManager: a
+ * WorkManager `setInitialDelay()` job can be deferred well past its delay
+ * once the screen is off, which for a 5-minute snooze the user is actively
+ * waiting on would look exactly like "snooze does nothing."
  */
 class HabitSnoozeReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "HabitSnoozeReceiver"
-        private const val SNOOZE_MINUTES = 5L
-        private const val WORK_NAME_PREFIX = "habit_snooze_"
+        private val SNOOZE_DELAY_MILLIS = TimeUnit.MINUTES.toMillis(5)
+        private val WINDOW_MILLIS = TimeUnit.MINUTES.toMillis(5)
+        // Offset from the habit's main-alarm request code so the snooze's
+        // PendingIntent never clobbers the next scheduled occurrence.
+        private const val SNOOZE_REQUEST_CODE_OFFSET = 1
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -37,28 +40,48 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
         val habitName = intent.getStringExtra("habitName") ?: return
 
         // Dismiss the notification that was just snoozed.
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.cancel(HabitCheckInNotifier.notificationId(habitId))
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(HabitCheckInNotifier.notificationId(habitId))
 
-        val inputData = Data.Builder()
-            .putString(HabitReminderWorker.KEY_HABIT_ID, habitId)
-            .putString(HabitReminderWorker.KEY_HABIT_NAME, habitName)
-            // Marks this as a snooze re-fire so HabitReminderWorker does NOT
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val reminderIntent = Intent(context, HabitReminderReceiver::class.java).apply {
+            action = HabitAlarmScheduler.ACTION_HABIT_REMINDER
+            putExtra(HabitReminderReceiver.EXTRA_HABIT_ID, habitId)
+            putExtra(HabitReminderReceiver.EXTRA_HABIT_NAME, habitName)
+            // Marks this as a snooze re-fire so HabitReminderReceiver does NOT
             // call scheduleNext() again for it — only the original daily
             // reminder chain should re-arm itself.
-            .putBoolean(HabitReminderWorker.KEY_IS_SNOOZE_REFIRE, true)
-            .build()
-
-        val request = OneTimeWorkRequestBuilder<HabitReminderWorker>()
-            .setInitialDelay(SNOOZE_MINUTES, TimeUnit.MINUTES)
-            .setInputData(inputData)
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "$WORK_NAME_PREFIX$habitId",
-            ExistingWorkPolicy.REPLACE,
-            request,
+            putExtra(HabitReminderReceiver.EXTRA_IS_SNOOZE_REFIRE, true)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            habitId.hashCode() + SNOOZE_REQUEST_CODE_OFFSET,
+            reminderIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        Log.d(TAG, "Snoozed '$habitName' for $SNOOZE_MINUTES minutes")
+
+        val triggerAtMillis = System.currentTimeMillis() + SNOOZE_DELAY_MILLIS
+        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            alarmManager.canScheduleExactAlarms()
+
+        runCatching {
+            if (canUseExact) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent,
+                )
+            } else {
+                alarmManager.setWindow(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    WINDOW_MILLIS,
+                    pendingIntent,
+                )
+            }
+        }
+            .onSuccess { Log.d(TAG, "Snoozed '$habitName' for 5 minutes (exact=$canUseExact)") }
+            .onFailure { error -> Log.w(TAG, "Failed to snooze '$habitName'", error) }
     }
 }
