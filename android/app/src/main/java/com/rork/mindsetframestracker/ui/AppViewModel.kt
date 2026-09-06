@@ -33,6 +33,7 @@ import com.rork.mindsetframestracker.data.universallyFreeLanguages
 import com.rork.mindsetframestracker.data.SupabaseSync
 import com.rork.mindsetframestracker.data.ThemeMode
 import com.rork.mindsetframestracker.notifications.CheckInNotifier
+import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
 import com.rork.mindsetframestracker.notifications.NotificationScheduler
 import com.rork.mindsetframestracker.notifications.StreakAlertNotifier
 import com.rork.mindsetframestracker.notifications.WeeklyRecapNotifier
@@ -158,6 +159,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { scheduleNotification() }.onFailure {
                 if (BuildConfig.DEBUG) Log.e("AppViewModel", "Startup reminder re-arm failed: ${it.message}", it)
             }
+            // BUG FIX: the self-heal above only ever covered the four
+            // "built-in" reminders (daily / streak / weekly / evening) —
+            // individual HABIT alarms (e.g. a "walk" reminder at 8:45 PM)
+            // were never re-armed here. They only came back on an actual
+            // device reboot (BootReceiver), so the very common "OEM battery
+            // manager force-stopped the app in the background, silently
+            // wiping every AlarmManager alarm, no BOOT_COMPLETED sent" case
+            // left habit alarms dead until the user happened to reopen the
+            // habit's own alarm picker. Re-arming them here — on every cold
+            // launch, same as the built-in reminders — closes that gap.
+            runCatching { rearmHabitAlarms() }.onFailure {
+                if (BuildConfig.DEBUG) Log.e("AppViewModel", "Startup habit-alarm re-arm failed: ${it.message}", it)
+            }
+        }
+    }
+
+    /**
+     * Re-arms every per-habit alarm against the current [Habit.reminderMinutes] /
+     * [Habit.repeatDaysMask] state via [HabitAlarmScheduler.rescheduleAll]. Safe
+     * to call anytime — habits with no reminder set are skipped, and rescheduling
+     * an already-armed alarm just replaces it with an identical one (no double-fire).
+     */
+    private fun rearmHabitAlarms() {
+        val habitsWithReminders = _state.value.habits.filter { it.reminderMinutes != null }
+        if (habitsWithReminders.isNotEmpty()) {
+            HabitAlarmScheduler.rescheduleAll(getApplication(), habitsWithReminders)
         }
     }
 
@@ -1549,6 +1576,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // triggers that Compose effect to actually schedule anything.
         runCatching { scheduleNotification() }.onFailure {
             if (BuildConfig.DEBUG) Log.e("AppViewModel", "Post-onboarding reminder arm failed: ${it.message}", it)
+        }
+        runCatching { rearmHabitAlarms() }.onFailure {
+            if (BuildConfig.DEBUG) Log.e("AppViewModel", "Post-onboarding habit-alarm arm failed: ${it.message}", it)
         }
     }
 
