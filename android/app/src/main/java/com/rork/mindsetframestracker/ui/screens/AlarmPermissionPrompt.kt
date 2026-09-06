@@ -105,6 +105,42 @@ object AlarmPermissions {
         hasNotificationPermission(context) &&
             hasExactAlarmPermission(context) &&
             isIgnoringBatteryOptimizations(context)
+
+    /**
+     * MIUI (Xiaomi/Redmi/POCO) kills scheduled work in the background unless
+     * the app is also allowed under its own proprietary "Autostart" toggle —
+     * a setting with no public Android API, entirely separate from (and in
+     * addition to) the standard battery-optimization exemption above. This
+     * is consistently the single biggest cause of "I set an alarm and it
+     * just never rang" reports specifically on Xiaomi/Redmi/POCO devices;
+     * [isIgnoringBatteryOptimizations] can return true while Autostart is
+     * still off and the alarm still won't fire.
+     */
+    fun isMiuiDevice(): Boolean =
+        Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true) ||
+            Build.MANUFACTURER.equals("Redmi", ignoreCase = true) ||
+            Build.MANUFACTURER.equals("POCO", ignoreCase = true)
+}
+
+/** Opens MIUI's Autostart management screen. No public API exists to check
+ * or request this — it's a manufacturer-specific settings page reached only
+ * via this hardcoded component, with a couple of known variants across MIUI
+ * versions. Falls back to the app's own details page if none resolve. */
+private fun openMiuiAutostartSettings(context: Context) {
+    val candidates = listOf(
+        "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+        "com.miui.securitycenter" to "com.miui.securitycenter.permission.AutoStartManagementActivity",
+    )
+    val opened = candidates.any { (pkg, cls) ->
+        runCatching {
+            val intent = Intent().apply {
+                component = android.content.ComponentName(pkg, cls)
+                putExtra("extra_pkgname", context.packageName)
+            }
+            context.startActivity(intent)
+        }.isSuccess
+    }
+    if (!opened) openAppDetailsSettings(context)
 }
 
 /**
@@ -180,6 +216,20 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         granted = batteryExempt,
                         actionLabel = "Fix",
                         onFix = { requestBatteryOptimizationExemption(context) },
+                    )
+                }
+
+                if (AlarmPermissions.isMiuiDevice()) {
+                    // Autostart has no public API to check its current state —
+                    // shown as a standing reminder rather than a pass/fail row,
+                    // since MIUI can silently kill alarms even when every
+                    // standard Android permission above is granted.
+                    PermissionRow(
+                        label = "MIUI Autostart",
+                        detail = "Xiaomi/Redmi/POCO phones need this enabled separately, or scheduled alarms can be killed even with everything else allowed.",
+                        granted = false,
+                        actionLabel = "Check",
+                        onFix = { openMiuiAutostartSettings(context) },
                     )
                 }
 
