@@ -144,6 +144,35 @@ private fun openMiuiAutostartSettings(context: Context) {
 }
 
 /**
+ * Opens MIUI's per-app "Battery saver" page (Settings → Battery & performance
+ * → App battery saver → this app), where it needs to be set to "No
+ * restrictions". This is SEPARATE from both the standard Android
+ * isIgnoringBatteryOptimizations() exemption above AND from Autostart —
+ * MIUI can (and very often does) kill a scheduled alarm's receiver even when
+ * both of those are already granted, if this third toggle is left on
+ * "Save battery" (the default for every newly installed app). No public API
+ * exists to read its current state, same as Autostart — these are the two
+ * known component paths across MIUI versions, with a details-page fallback.
+ */
+private fun openMiuiBatterySaverSettings(context: Context) {
+    val candidates = listOf(
+        "com.miui.powerkeeper" to "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
+        "com.miui.securitycenter" to "com.miui.powercenter.PowerSettings",
+    )
+    val opened = candidates.any { (pkg, cls) ->
+        runCatching {
+            val intent = Intent().apply {
+                component = android.content.ComponentName(pkg, cls)
+                putExtra("package_name", context.packageName)
+                putExtra("package_label", "Mindset Frames")
+            }
+            context.startActivity(intent)
+        }.isSuccess
+    }
+    if (!opened) openAppDetailsSettings(context)
+}
+
+/**
  * Auto-triggered dialog — shown right after the user sets an alarm, only
  * if something is actually missing. Walks them through fixing it on the
  * spot instead of leaving it to be discovered (or not) in Settings later.
@@ -262,16 +291,24 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                 }
 
                 if (AlarmPermissions.isMiuiDevice()) {
-                    // Autostart has no public API to check its current state —
-                    // shown as a standing reminder rather than a pass/fail row,
-                    // since MIUI can silently kill alarms even when every
-                    // standard Android permission above is granted.
+                    // Autostart and Battery saver have no public API to check
+                    // their current state — shown as standing reminders
+                    // rather than pass/fail rows, since MIUI can silently
+                    // kill alarms even when every standard Android
+                    // permission above is granted.
                     PermissionRow(
                         label = "MIUI Autostart",
                         detail = "Xiaomi/Redmi/POCO phones need this enabled separately, or scheduled alarms can be killed even with everything else allowed.",
                         granted = false,
                         actionLabel = "Check",
                         onFix = { openMiuiAutostartSettings(context) },
+                    )
+                    PermissionRow(
+                        label = "MIUI Battery saver",
+                        detail = "A SEPARATE toggle from battery optimization above — set it to \"No restrictions\", or MIUI can still kill this alarm in the background.",
+                        granted = false,
+                        actionLabel = "Check",
+                        onFix = { openMiuiBatterySaverSettings(context) },
                     )
                 }
 
