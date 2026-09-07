@@ -328,18 +328,47 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                                 Toast.LENGTH_SHORT,
                             ).show()
                         } else {
-                            val posted = HabitCheckInNotifier.show(
+                            // BUG FIX: this used to call show() and only
+                            // toast on a false result — meaning SUCCESS
+                            // produced no feedback at all. If posting the
+                            // notification silently threw (bad icon, a null
+                            // Uri, anything), the old show() had no
+                            // try/catch around its body, so the exception
+                            // could vanish with zero visible symptom other
+                            // than "I tapped it and nothing happened."
+                            // showResult() now wraps that body in
+                            // runCatching and reports exactly which of the
+                            // three things occurred, and every branch below
+                            // shows a toast — there is no more silent case.
+                            when (val result = HabitCheckInNotifier.showResult(
                                 context = context,
                                 habitId = "diagnostic_test",
                                 habitName = "Test reminder",
                                 reschedule = false,
-                            )
-                            if (!posted) {
-                                Toast.makeText(
-                                    context,
-                                    "Couldn't send the test reminder — check notification settings.",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                            )) {
+                                is HabitCheckInNotifier.NotifyResult.Posted -> {
+                                    Toast.makeText(
+                                        context,
+                                        "Test reminder sent — check your notification shade now.",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                                is HabitCheckInNotifier.NotifyResult.PermissionMissing -> {
+                                    Toast.makeText(
+                                        context,
+                                        "Notification permission isn't actually granted — try the Allow button above again.",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                }
+                                is HabitCheckInNotifier.NotifyResult.Failed -> {
+                                    // Surfaces the real exception so it can be
+                                    // reported instead of just "it's broken."
+                                    Toast.makeText(
+                                        context,
+                                        "Test reminder failed: ${result.error}",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                }
                             }
                         }
                     },
