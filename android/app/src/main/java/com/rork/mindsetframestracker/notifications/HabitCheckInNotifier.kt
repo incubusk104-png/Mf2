@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.MainActivity
@@ -17,87 +18,120 @@ import com.rork.mindsetframestracker.R
 
 object HabitCheckInNotifier {
 
+    private const val TAG = "HabitCheckInNotifier"
     const val CHANNEL_ID = "habit_reminder"
     private const val NOTIFICATION_ID_BASE = 3000
 
     /** Stable notification id for a given habit — shared with snooze/cancel logic. */
     fun notificationId(habitId: String): Int = NOTIFICATION_ID_BASE + habitId.hashCode()
 
+    /** Outcome of a [showResult] call — lets a caller (like the diagnostic
+     * "Send a test reminder now" button) tell the user EXACTLY what happened
+     * instead of a generic true/false. */
+    sealed class NotifyResult {
+        object Posted : NotifyResult()
+        object PermissionMissing : NotifyResult()
+        data class Failed(val error: String) : NotifyResult()
+    }
+
     /**
      * Posts the reminder. Returns false (and posts nothing) when the app
-     * can't show notifications at all — the caller can surface that to the
-     * user instead of the old silent no-op, which is what made the
-     * "Send a test reminder now" button look broken when permission was
-     * missing.
+     * can't show notifications at all, OR when building/posting the
+     * notification itself throws for any reason — see [showResult] for the
+     * distinction and the actual error text.
      */
-    fun show(context: Context, habitId: String, habitName: String, reschedule: Boolean = true): Boolean {
+    fun show(context: Context, habitId: String, habitName: String, reschedule: Boolean = true): Boolean =
+        showResult(context, habitId, habitName, reschedule) is NotifyResult.Posted
+
+    /**
+     * BUG FIX: previously the entire notification-building/posting body ran
+     * with NO try/catch. If it ever threw — a bad icon resource, a null
+     * Uri from RingtoneManager, anything — the exception propagated all the
+     * way up through the caller (e.g. the "Send a test reminder now" button,
+     * or [HabitReminderReceiver]'s own runCatching, which only wraps ITS
+     * call to [show], not this function's internals) and could crash the
+     * app or the broadcast dispatch silently, with the ONLY visible symptom
+     * being "I tapped the button and literally nothing happened" — no
+     * notification, no toast, no obvious crash dialog if the OS recovered
+     * quickly. Wrapping the whole body here means a failure is now always
+     * captured as a [NotifyResult.Failed] with the real exception text
+     * instead of an invisible crash.
+     */
+    fun showResult(context: Context, habitId: String, habitName: String, reschedule: Boolean = true): NotifyResult {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) return false
+            if (!granted) return NotifyResult.PermissionMissing
         }
 
-        ensureChannel(context)
+        return runCatching {
+            ensureChannel(context)
 
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentIntent = PendingIntent.getActivity(
-            context, habitId.hashCode(), tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            val tapIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val contentIntent = PendingIntent.getActivity(
+                context, habitId.hashCode(), tapIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+            val snoozeIntent = Intent(context, HabitSnoozeReceiver::class.java).apply {
+                putExtra("habitId", habitId)
+                putExtra("habitName", habitName)
+            }
+            val snoozePendingIntent = PendingIntent.getBroadcast(
+                context, habitId.hashCode(), snoozeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+            // Full-screen intent: turns this from a heads-up notification (which
+            // silent/Do-Not-Disturb/Bedtime modes can mute or dim entirely) into
+            // an actual ringing alarm screen — this is the fix for "I set an
+            // alarm but it never actually rang."
+            val ringingIntent = Intent(context, AlarmRingingActivity::class.java).apply {
+                putExtra("habitId", habitId)
+                putExtra("habitName", habitName)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_NO_USER_ACTION
+            }
+            val ringingPendingIntent = PendingIntent.getActivity(
+                context, NOTIFICATION_ID_BASE + habitId.hashCode(), ringingIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.splash_icon)
+                .setContentTitle(habitName)
+                .setContentText("Time for your habit")
+                .setContentIntent(contentIntent)
+                .setAutoCancel(true)
+                // Ensure heads-up display + sound on all API levels
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                // Vibrate pattern for attention
+                .setVibrate(longArrayOf(0, 250, 100, 250))
+                .addAction(0, "Snooze 5 min", snoozePendingIntent)
+                // Wakes the screen and rings even through silent/DND/Bedtime
+                // mode on devices that allow full-screen alarm intents.
+                .setFullScreenIntent(ringingPendingIntent, true)
+                .build()
+
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(notificationId(habitId), notification)
+
+            if (reschedule) {
+                HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
+            }
+        }.fold(
+            onSuccess = { NotifyResult.Posted },
+            onFailure = { error ->
+                Log.e(TAG, "Failed to post reminder for '$habitName'", error)
+                NotifyResult.Failed("${error.javaClass.simpleName}: ${error.message}")
+            },
         )
-
-        val snoozeIntent = Intent(context, HabitSnoozeReceiver::class.java).apply {
-            putExtra("habitId", habitId)
-            putExtra("habitName", habitName)
-        }
-        val snoozePendingIntent = PendingIntent.getBroadcast(
-            context, habitId.hashCode(), snoozeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        // Full-screen intent: turns this from a heads-up notification (which
-        // silent/Do-Not-Disturb/Bedtime modes can mute or dim entirely) into
-        // an actual ringing alarm screen — this is the fix for "I set an
-        // alarm but it never actually rang."
-        val ringingIntent = Intent(context, AlarmRingingActivity::class.java).apply {
-            putExtra("habitId", habitId)
-            putExtra("habitName", habitName)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                Intent.FLAG_ACTIVITY_NO_USER_ACTION
-        }
-        val ringingPendingIntent = PendingIntent.getActivity(
-            context, NOTIFICATION_ID_BASE + habitId.hashCode(), ringingIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.splash_icon)
-            .setContentTitle(habitName)
-            .setContentText("Time for your habit")
-            .setContentIntent(contentIntent)
-            .setAutoCancel(true)
-            // Ensure heads-up display + sound on all API levels
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            // Vibrate pattern for attention
-            .setVibrate(longArrayOf(0, 250, 100, 250))
-            .addAction(0, "Snooze 5 min", snoozePendingIntent)
-            // Wakes the screen and rings even through silent/DND/Bedtime
-            // mode on devices that allow full-screen alarm intents.
-            .setFullScreenIntent(ringingPendingIntent, true)
-            .build()
-
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(notificationId(habitId), notification)
-
-        if (reschedule) {
-            HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
-        }
-        return true
     }
 
     private fun ensureChannel(context: Context) {
