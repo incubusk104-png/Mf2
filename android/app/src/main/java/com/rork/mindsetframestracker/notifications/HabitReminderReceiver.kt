@@ -10,8 +10,8 @@ import android.util.Log
  * [HabitAlarmScheduler] scheduled for the user's chosen habit-reminder time
  * (or by [HabitSnoozeReceiver]'s 5-minute snooze re-fire).
  *
- * Posts the reminder via [HabitCheckInNotifier.show]. Unless this run was a
- * snooze re-fire, that call also re-arms tomorrow's occurrence through
+ * Posts the reminder via [HabitCheckInNotifier.showResult]. Unless this run
+ * was a snooze re-fire, that call also re-arms tomorrow's occurrence through
  * [HabitAlarmScheduler.scheduleNext] — mirroring how [CheckInReceiver] and
  * [StreakAlertReceiver] re-arm the global daily alarms.
  */
@@ -22,15 +22,21 @@ class HabitReminderReceiver : BroadcastReceiver() {
         val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: "Habit"
         val isSnoozeRefire = intent.getBooleanExtra(EXTRA_IS_SNOOZE_REFIRE, false)
 
-        runCatching {
-            HabitCheckInNotifier.show(
-                context,
-                habitId,
-                habitName,
-                reschedule = !isSnoozeRefire,
-            )
-        }.onFailure { error ->
-            Log.w(TAG, "Failed to show habit reminder for '$habitName'", error)
+        // showResult() already wraps its own body in runCatching, so this
+        // can't throw — but log every non-success case with the real reason
+        // (previously a failure here was invisible; nothing recorded WHY a
+        // scheduled alarm didn't produce a notification).
+        when (val result = HabitCheckInNotifier.showResult(
+            context,
+            habitId,
+            habitName,
+            reschedule = !isSnoozeRefire,
+        )) {
+            is HabitCheckInNotifier.NotifyResult.Posted -> Unit
+            is HabitCheckInNotifier.NotifyResult.PermissionMissing ->
+                Log.w(TAG, "Habit reminder for '$habitName' not shown: notification permission missing")
+            is HabitCheckInNotifier.NotifyResult.Failed ->
+                Log.w(TAG, "Habit reminder for '$habitName' failed: ${result.error}")
         }
     }
 
