@@ -151,10 +151,37 @@ private fun openMiuiAutostartSettings(context: Context) {
 @Composable
 fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    // Persists across dialog re-opens AND app restarts — needed because
+    // shouldShowRequestPermissionRationale() alone can't tell "never asked
+    // yet" apart from "asked once and permanently denied"; both return
+    // false. We only trust that signal once we know for certain we asked.
+    val prefs = remember {
+        context.getSharedPreferences("alarm_permission_prompt", Context.MODE_PRIVATE)
+    }
 
     var notifGranted by remember { mutableStateOf(AlarmPermissions.hasNotificationPermission(context)) }
     var exactAlarmGranted by remember { mutableStateOf(AlarmPermissions.hasExactAlarmPermission(context)) }
     var batteryExempt by remember { mutableStateOf(AlarmPermissions.isIgnoringBatteryOptimizations(context)) }
+
+    // BUG FIX: if the user denied the notification permission on an earlier
+    // run (very likely after a few rounds of testing), Android permanently
+    // stops showing its own permission dialog — requestPermissionLauncher.launch()
+    // then silently does NOTHING: no dialog, no callback change, no error.
+    // The "Allow" button just looked broken. We now detect that state and
+    // swap the button to "Open Settings" instead, which is the only way to
+    // re-grant a permanently-denied permission.
+    var notifPermanentlyDenied by remember {
+        mutableStateOf(
+            !notifGranted &&
+                prefs.getBoolean("notif_requested_before", false) &&
+                activity != null &&
+                !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                    activity,
+                    android.Manifest.permission.POST_NOTIFICATIONS,
+                ),
+        )
+    }
 
     // Re-check whenever the user comes back from a system Settings page.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -164,6 +191,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                 notifGranted = AlarmPermissions.hasNotificationPermission(context)
                 exactAlarmGranted = AlarmPermissions.hasExactAlarmPermission(context)
                 batteryExempt = AlarmPermissions.isIgnoringBatteryOptimizations(context)
+                if (notifGranted) notifPermanentlyDenied = false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -172,7 +200,15 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
 
     val notifLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted -> notifGranted = granted }
+    ) { granted ->
+        notifGranted = granted
+        if (!granted && activity != null) {
+            notifPermanentlyDenied = !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                activity,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            )
+        }
+    }
 
     val allGood = notifGranted && exactAlarmGranted && batteryExempt
 
@@ -194,11 +230,17 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                 if (!allGood) {
                     PermissionRow(
                         label = "Notifications",
-                        detail = "Required to show any reminder at all.",
+                        detail = if (notifPermanentlyDenied)
+                            "Blocked earlier — Android won't ask again automatically. Turn it on in Settings."
+                        else
+                            "Required to show any reminder at all.",
                         granted = notifGranted,
-                        actionLabel = "Allow",
+                        actionLabel = if (notifPermanentlyDenied) "Open Settings" else "Allow",
                         onFix = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (notifPermanentlyDenied) {
+                                openAppDetailsSettings(context)
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                prefs.edit().putBoolean("notif_requested_before", true).apply()
                                 notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                             }
                         },
@@ -242,7 +284,10 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                             // of letting it look broken.
                             Toast.makeText(
                                 context,
-                                "Allow notifications above first, then try again.",
+                                if (notifPermanentlyDenied)
+                                    "Turn on Notifications for this app in Settings first, then try again."
+                                else
+                                    "Allow notifications above first, then try again.",
                                 Toast.LENGTH_SHORT,
                             ).show()
                         } else {
