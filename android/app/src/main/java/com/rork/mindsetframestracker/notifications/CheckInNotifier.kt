@@ -34,7 +34,26 @@ object CheckInNotifier {
     private const val PREFS_NAME = "mindset_frames"
     private const val KEY_DATA = "app_data"
 
+    /**
+     * BUG FIX: this used to call manager.notify() unconditionally. On API 33+
+     * (Android 13+), notify() without POST_NOTIFICATIONS granted doesn't
+     * throw — it just silently does nothing. That's exactly the "I set a
+     * reminder and never got a notification" symptom, with zero signal
+     * anywhere (no crash, no log) about why. [HabitCheckInNotifier] already
+     * guarded this; this notifier didn't, so the daily check-in reminder
+     * could go permanently silent for any user who denied (or never granted)
+     * notification permission, without them or the app ever knowing.
+     */
     fun show(context: Context, preview: Boolean = false) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                Log.w(TAG, "Daily check-in not shown: notification permission missing")
+                return
+            }
+        }
         val s = NotificationStrings.resolve(context)
         ensureChannel(context, s.ntfChannelCheckInName, s.ntfChannelCheckInDesc)
 
