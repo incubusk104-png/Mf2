@@ -12,14 +12,6 @@ import com.rork.mindsetframestracker.MainActivity
 import com.rork.mindsetframestracker.R
 import org.json.JSONObject
 
-/**
- * The app's "companion voice" notifications — warm, honest, human:
- *
- * 1. Evening reflection — a quiet companion question that lands around 9:15 PM.
- *
- * Verifies state from the persisted app-data JSON at fire time, so a stale
- * alarm stays silent.
- */
 object CompanionNotifier {
 
     const val CHANNEL_ID = "companion"
@@ -30,14 +22,17 @@ object CompanionNotifier {
     private const val PREFS_NAME = "mindset_frames"
     private const val KEY_DATA = "app_data"
 
-    /**
-     * Posts the nightly evening reflection — a quiet companion question
-     * around 9:15 PM. Skips users who haven't finished onboarding yet.
-     * The rotating prompts live in the string table (localized per language);
-     * the day-of-year picks which, so the ritual never feels copy-pasted.
-     * Returns true when shown.
-     */
     fun showEveningReflection(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                Log.w(TAG, "Evening reflection not shown: notification permission missing")
+                return false
+            }
+        }
+
         val settings = readSettings(context) ?: return false
         if (!settings.optBoolean("onboardingDone", false)) {
             Log.i(TAG, "Skipping evening reflection: onboarding not done")
