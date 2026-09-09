@@ -13,18 +13,6 @@ import com.rork.mindsetframestracker.R
 import org.json.JSONObject
 import java.io.File
 
-/**
- * Builds and posts the daily check-in notification.
- *
- * Shared between [CheckInReceiver] (fired by the AlarmManager alarm) and the
- * preview action in Settings, so the preview is always identical to the real
- * reminder. When [show]'s preview flag is set, the notification carries a
- * small "Preview" tag so it isn't mistaken for a scheduled reminder.
- *
- * When a streak is active, the notification copy shifts to loss-aversion
- * messaging to motivate the user to check in before the day ends and break
- * their streak.
- */
 object CheckInNotifier {
 
     const val CHANNEL_ID = "daily_check_in"
@@ -34,16 +22,6 @@ object CheckInNotifier {
     private const val PREFS_NAME = "mindset_frames"
     private const val KEY_DATA = "app_data"
 
-    /**
-     * BUG FIX: this used to call manager.notify() unconditionally. On API 33+
-     * (Android 13+), notify() without POST_NOTIFICATIONS granted doesn't
-     * throw — it just silently does nothing. That's exactly the "I set a
-     * reminder and never got a notification" symptom, with zero signal
-     * anywhere (no crash, no log) about why. [HabitCheckInNotifier] already
-     * guarded this; this notifier didn't, so the daily check-in reminder
-     * could go permanently silent for any user who denied (or never granted)
-     * notification permission, without them or the app ever knowing.
-     */
     fun show(context: Context, preview: Boolean = false) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = androidx.core.content.ContextCompat.checkSelfPermission(
@@ -74,20 +52,14 @@ object CheckInNotifier {
         val bigText: String
 
         if (streakInfo.totalHabits == 0) {
-            // Companion voice — no habits configured yet. Instead of a generic
-            // reminder, ask what they're working on and offer to build it
-            // together. Humans respond to curiosity, not commands.
             title = s.ntfCheckInEmptyTitle
             text = s.ntfCheckInEmptyText
             bigText = s.ntfCheckInEmptyBig
         } else if (streakInfo.missedYesterday && !streakInfo.checkedToday) {
-            // Empathetic voice — yesterday slipped by. Sad but never guilt-y;
-            // the message always lands on encouragement and a fresh start.
             title = s.ntfCheckInMissedTitle
             text = s.ntfCheckInMissedText
             bigText = s.ntfCheckInMissedBig
         } else if (streakInfo.checkInStreak > 0 && !streakInfo.checkedToday) {
-            // Streak-loss-aversion messaging — user has a streak to protect
             val days = streakInfo.checkInStreak
             title = String.format(s.ntfCheckInStreakTitle, days)
             text = s.ntfCheckInStreakText
@@ -97,12 +69,10 @@ object CheckInNotifier {
                 else -> String.format(s.ntfCheckInStreakBigLow, days)
             }
         } else if (streakInfo.checkedToday) {
-            // Already checked in today — friendly encouragement
             title = s.ntfCheckInDoneTitle
             text = s.ntfCheckInDoneText
             bigText = s.ntfCheckInDoneBig
         } else {
-            // No active streak — standard reminder
             title = s.ntfCheckInDefaultTitle
             text = s.ntfCheckInDefaultText
             bigText = s.ntfCheckInDefaultBig
@@ -135,17 +105,10 @@ object CheckInNotifier {
     private data class StreakInfo(
         val checkInStreak: Int,
         val checkedToday: Boolean,
-        /** Number of habits the user currently tracks (0 = empty list). */
         val totalHabits: Int = 1,
-        /** True when history exists but yesterday had no check-ins at all. */
         val missedYesterday: Boolean = false,
     )
 
-    /**
-     * Reads the local app data JSON to compute the current streak and whether
-     * the user has already checked in today. This avoids needing the full
-     * repository in a BroadcastReceiver context.
-     */
     private fun getStreakInfo(context: Context): StreakInfo {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -157,7 +120,6 @@ object CheckInNotifier {
                 ?: return StreakInfo(0, false, totalHabits)
             val todayKey = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
 
-            // Check if any habit was checked today
             val allDays = mutableSetOf<String>()
             val keys = checkIns.keys()
             while (keys.hasNext()) {
@@ -175,7 +137,6 @@ object CheckInNotifier {
                 .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
             val missedYesterday = allDays.isNotEmpty() && !allDays.contains(yesterdayKey)
 
-            // Compute streak
             var cursor = java.time.LocalDate.now()
             if (!allDays.contains(cursor.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE))) {
                 cursor = cursor.minusDays(1)
@@ -196,9 +157,6 @@ object CheckInNotifier {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // Recreating the channel refreshes its user-visible name and
-            // description to the active language without touching the user's
-            // sound or importance overrides.
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 name,
