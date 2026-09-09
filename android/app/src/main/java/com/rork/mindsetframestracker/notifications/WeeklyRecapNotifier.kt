@@ -14,18 +14,6 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/**
- * The Sunday-evening weekly recap: one calm notification summarizing how many
- * of the last 7 days had at least one habit checked in — "You checked in 5/7
- * days this week."
- *
- * Tone rules, matching the app's no-guilt positioning:
- * - Strong weeks get celebrated; quiet weeks get a fresh-start framing.
- * - Numbers are stated, never weaponized — urgency is the streak alert's job.
- *
- * Reads the persisted app-data JSON directly so it works from a
- * BroadcastReceiver without spinning up the whole repository stack.
- */
 object WeeklyRecapNotifier {
 
     const val CHANNEL_ID = "weekly_recap"
@@ -35,13 +23,17 @@ object WeeklyRecapNotifier {
     private const val PREFS_NAME = "mindset_frames"
     private const val KEY_DATA = "app_data"
 
-    /**
-     * Posts the weekly recap. Returns true when a notification was shown.
-     *
-     * [preview] forces a representative notification even with no habit data
-     * so the Settings preview button always demonstrates the recap.
-     */
     fun showRecap(context: Context, preview: Boolean = false): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                Log.w(TAG, "Weekly recap not shown: notification permission missing")
+                return false
+            }
+        }
+
         val week = readWeekStats(context)
 
         if (week.totalHabits == 0 && !preview) {
@@ -72,7 +64,6 @@ object WeeklyRecapNotifier {
 
         when {
             week.totalHabits == 0 -> {
-                // Preview on an empty app: show a representative sample.
                 title = s.ntfRecapPreviewTitle
                 text = s.ntfRecapPreviewText
                 bigText = s.ntfRecapPreviewBig
@@ -125,8 +116,6 @@ object WeeklyRecapNotifier {
             .setAutoCancel(true)
             .apply { if (preview) setSubText(s.ntfPreviewTag) }
 
-        // "Share my week" — one-tap productivity snapshot straight from the
-        // notification to any social app (TikTok, Instagram, Messenger…).
         if (week.daysActive >= 1) {
             val shareText = String.format(s.ntfRecapShareText, week.daysActive)
             val chooser = Intent.createChooser(
@@ -154,15 +143,11 @@ object WeeklyRecapNotifier {
 
     private data class WeekStats(
         val totalHabits: Int,
-        /** Days in the last 7 (ending today) with at least one habit checked. */
         val daysActive: Int,
-        /** Days in the last 7 where every habit was checked. */
         val perfectDays: Int,
-        /** Display label of the most-logged mood this week, e.g. "Calm". */
         val dominantMood: String?,
     )
 
-    /** Reads the local app-data JSON and summarizes the last 7 days. */
     private fun readWeekStats(context: Context): WeekStats {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -224,8 +209,6 @@ object WeeklyRecapNotifier {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // Recreating the channel refreshes its user-visible name and
-            // description to the active language.
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 name,
