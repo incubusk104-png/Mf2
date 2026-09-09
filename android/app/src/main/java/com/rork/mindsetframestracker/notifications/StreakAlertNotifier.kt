@@ -14,19 +14,6 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-/**
- * The streak-protection alert. Unlike [CheckInNotifier] (which always posts
- * something at reminder time), this notifier decides at fire time whether an
- * alert is warranted:
- *
- * - All of today's habits done   -> stays completely silent
- * - Nothing done + active streak -> urgent "streak ends tonight" alert
- * - Nothing done, no streak      -> gentle "day is slipping away" nudge
- * - Partially done               -> "finish the remaining N" reminder
- *
- * Reads the persisted app-data JSON directly so it works from a
- * BroadcastReceiver without spinning up the whole repository stack.
- */
 object StreakAlertNotifier {
 
     const val CHANNEL_ID = "streak_alerts"
@@ -36,14 +23,17 @@ object StreakAlertNotifier {
     private const val PREFS_NAME = "mindset_frames"
     private const val KEY_DATA = "app_data"
 
-    /**
-     * Posts the streak alert when today's habits are incomplete.
-     * Returns true if a notification was shown, false when it was skipped.
-     *
-     * [preview] forces a notification even when today is already complete so
-     * the Settings "preview" button always demonstrates the alert.
-     */
     fun showIfStreakAtRisk(context: Context, preview: Boolean = false): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                Log.w(TAG, "Streak alert not shown: notification permission missing")
+                return false
+            }
+        }
+
         val status = readTodayStatus(context)
 
         if (status.totalHabits == 0 && !preview) {
@@ -67,7 +57,6 @@ object StreakAlertNotifier {
 
         when {
             preview && status.allDone -> {
-                // Preview while everything is done: show a representative sample.
                 title = s.ntfStreakPreviewTitle
                 text = s.ntfStreakPreviewText
                 bigText = s.ntfStreakPreviewBig
@@ -131,16 +120,11 @@ object StreakAlertNotifier {
     private data class TodayStatus(
         val totalHabits: Int,
         val completedToday: Int,
-        /** Consecutive-day streak that would break if today stays empty. */
         val streakAtRisk: Int,
     ) {
         val allDone: Boolean get() = totalHabits > 0 && completedToday >= totalHabits
     }
 
-    /**
-     * Reads the local app-data JSON to compute how much of today is done and
-     * the streak currently on the line.
-     */
     private fun readTodayStatus(context: Context): TodayStatus {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -171,8 +155,6 @@ object StreakAlertNotifier {
                 }
             }
 
-            // Streak that breaks tonight: counts back from yesterday, since the
-            // alert only matters while today is still incomplete.
             var streak = 0
             var cursor = LocalDate.now().minusDays(1)
             while (allDays.contains(cursor.format(formatter))) {
@@ -190,8 +172,6 @@ object StreakAlertNotifier {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // Recreating the channel refreshes its user-visible name and
-            // description to the active language.
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 name,
