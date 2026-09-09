@@ -1,32 +1,5 @@
 package com.rork.mindsetframestracker.ui.screens
 
-/*
- * ── WHAT CHANGED FROM THE OLD AlarmReliabilityCard.kt ───────────────────
- * Previously this was a persistent card the user had to go find in
- * Settings themselves. Per request: it's now automatic — call
- * [maybeShowAlarmPermissionPrompt] right after HabitAlarmScheduler.schedule()
- * fires (i.e. the moment the user actually sets an alarm), and this dialog
- * pops up on its own if anything is missing. Nothing to visit in Settings
- * anymore; delete any `AlarmReliabilityCard()` call there.
- *
- * ── HOW TO WIRE IT UP ────────────────────────────────────────────────────
- * 1. Drop this file next to HabitsScreen.kt.
- * 2. Delete the old AlarmReliabilityCard.kt file and any
- *    `AlarmReliabilityCard()` call in SettingsScreen.kt.
- * 3. In HabitsScreen.kt, wherever you currently call
- *    `HabitAlarmScheduler.schedule(context, habit)`, add right after it:
- *
- *        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
- *
- *    (with `var showAlarmPermissionPrompt by remember { mutableStateOf(false) }`
- *    declared once near your other dialog state, and this composable shown
- *    when it's true: `if (showAlarmPermissionPrompt) AlarmPermissionPromptDialog(
- *    onDismiss = { showAlarmPermissionPrompt = false } )`).
- *
- * No manifest changes needed — every permission requested here is already
- * declared in AndroidManifest.xml.
- */
-
 import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
@@ -72,11 +45,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import android.widget.Toast
 import com.rork.mindsetframestracker.notifications.HabitCheckInNotifier
 
-/**
- * Public so the screen that just set an alarm can check "should I show the
- * prompt?" without any UI overhead — no permission dialog is ever shown
- * unless something is actually missing.
- */
 object AlarmPermissions {
 
     fun hasNotificationPermission(context: Context): Boolean {
@@ -97,35 +65,27 @@ object AlarmPermissions {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         return runCatching {
             powerManager.isIgnoringBatteryOptimizations(context.packageName)
-        }.getOrDefault(true) // treat unsupported OEMs as "fine" rather than nagging forever
+        }.getOrDefault(true)
     }
 
-    /** True only when every permission that affects alarm delivery is granted. */
+    fun hasFullScreenIntentPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 34) return true
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        return runCatching { manager.canUseFullScreenIntent() }.getOrDefault(true)
+    }
+
     fun allGranted(context: Context): Boolean =
         hasNotificationPermission(context) &&
             hasExactAlarmPermission(context) &&
-            isIgnoringBatteryOptimizations(context)
+            isIgnoringBatteryOptimizations(context) &&
+            hasFullScreenIntentPermission(context)
 
-    /**
-     * MIUI (Xiaomi/Redmi/POCO) kills scheduled work in the background unless
-     * the app is also allowed under its own proprietary "Autostart" toggle —
-     * a setting with no public Android API, entirely separate from (and in
-     * addition to) the standard battery-optimization exemption above. This
-     * is consistently the single biggest cause of "I set an alarm and it
-     * just never rang" reports specifically on Xiaomi/Redmi/POCO devices;
-     * [isIgnoringBatteryOptimizations] can return true while Autostart is
-     * still off and the alarm still won't fire.
-     */
     fun isMiuiDevice(): Boolean =
         Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true) ||
             Build.MANUFACTURER.equals("Redmi", ignoreCase = true) ||
             Build.MANUFACTURER.equals("POCO", ignoreCase = true)
 }
 
-/** Opens MIUI's Autostart management screen. No public API exists to check
- * or request this — it's a manufacturer-specific settings page reached only
- * via this hardcoded component, with a couple of known variants across MIUI
- * versions. Falls back to the app's own details page if none resolve. */
 private fun openMiuiAutostartSettings(context: Context) {
     val candidates = listOf(
         "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
@@ -143,17 +103,6 @@ private fun openMiuiAutostartSettings(context: Context) {
     if (!opened) openAppDetailsSettings(context)
 }
 
-/**
- * Opens MIUI's per-app "Battery saver" page (Settings → Battery & performance
- * → App battery saver → this app), where it needs to be set to "No
- * restrictions". This is SEPARATE from both the standard Android
- * isIgnoringBatteryOptimizations() exemption above AND from Autostart —
- * MIUI can (and very often does) kill a scheduled alarm's receiver even when
- * both of those are already granted, if this third toggle is left on
- * "Save battery" (the default for every newly installed app). No public API
- * exists to read its current state, same as Autostart — these are the two
- * known component paths across MIUI versions, with a details-page fallback.
- */
 private fun openMiuiBatterySaverSettings(context: Context) {
     val candidates = listOf(
         "com.miui.powerkeeper" to "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
@@ -172,19 +121,27 @@ private fun openMiuiBatterySaverSettings(context: Context) {
     if (!opened) openAppDetailsSettings(context)
 }
 
-/**
- * Auto-triggered dialog — shown right after the user sets an alarm, only
- * if something is actually missing. Walks them through fixing it on the
- * spot instead of leaving it to be discovered (or not) in Settings later.
- */
+private fun openMiuiPopupPermissionSettings(context: Context) {
+    val candidates = listOf(
+        "com.miui.securitycenter" to "com.miui.permcenter.permissions.PermissionsEditorActivity",
+        "com.miui.securitycenter" to "com.miui.permcenter.permissions.AppPermissionsEditorActivity",
+    )
+    val opened = candidates.any { (pkg, cls) ->
+        runCatching {
+            val intent = Intent().apply {
+                component = android.content.ComponentName(pkg, cls)
+                putExtra("extra_pkgname", context.packageName)
+            }
+            context.startActivity(intent)
+        }.isSuccess
+    }
+    if (!opened) openAppDetailsSettings(context)
+}
+
 @Composable
 fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
-    // Persists across dialog re-opens AND app restarts — needed because
-    // shouldShowRequestPermissionRationale() alone can't tell "never asked
-    // yet" apart from "asked once and permanently denied"; both return
-    // false. We only trust that signal once we know for certain we asked.
     val prefs = remember {
         context.getSharedPreferences("alarm_permission_prompt", Context.MODE_PRIVATE)
     }
@@ -192,14 +149,8 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
     var notifGranted by remember { mutableStateOf(AlarmPermissions.hasNotificationPermission(context)) }
     var exactAlarmGranted by remember { mutableStateOf(AlarmPermissions.hasExactAlarmPermission(context)) }
     var batteryExempt by remember { mutableStateOf(AlarmPermissions.isIgnoringBatteryOptimizations(context)) }
+    var fullScreenGranted by remember { mutableStateOf(AlarmPermissions.hasFullScreenIntentPermission(context)) }
 
-    // BUG FIX: if the user denied the notification permission on an earlier
-    // run (very likely after a few rounds of testing), Android permanently
-    // stops showing its own permission dialog — requestPermissionLauncher.launch()
-    // then silently does NOTHING: no dialog, no callback change, no error.
-    // The "Allow" button just looked broken. We now detect that state and
-    // swap the button to "Open Settings" instead, which is the only way to
-    // re-grant a permanently-denied permission.
     var notifPermanentlyDenied by remember {
         mutableStateOf(
             !notifGranted &&
@@ -212,7 +163,6 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
         )
     }
 
-    // Re-check whenever the user comes back from a system Settings page.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -220,6 +170,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                 notifGranted = AlarmPermissions.hasNotificationPermission(context)
                 exactAlarmGranted = AlarmPermissions.hasExactAlarmPermission(context)
                 batteryExempt = AlarmPermissions.isIgnoringBatteryOptimizations(context)
+                fullScreenGranted = AlarmPermissions.hasFullScreenIntentPermission(context)
                 if (notifGranted) notifPermanentlyDenied = false
             }
         }
@@ -239,18 +190,23 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
         }
     }
 
-    val allGood = notifGranted && exactAlarmGranted && batteryExempt
+    val allGood = notifGranted && exactAlarmGranted && batteryExempt && fullScreenGranted
+    val allGoodOverall = allGood && !AlarmPermissions.isMiuiDevice()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (allGood) "You're all set" else "Make this alarm actually ring") },
+        title = { Text(if (allGoodOverall) "You're all set" else "Make this alarm actually ring") },
         text = {
             Column {
                 Text(
-                    text = if (allGood)
-                        "Notifications, exact timing, and battery optimization are all set up — this and future alarms will fire on time."
-                    else
-                        "Your phone can silently block scheduled alarms unless a few things are allowed. Takes a few seconds:",
+                    text = when {
+                        allGoodOverall ->
+                            "Notifications, exact timing, and battery optimization are all set up — this and future alarms will fire on time."
+                        allGood ->
+                            "Standard Android permissions are all granted — but MIUI has its own extra toggles Android can't check for us. Please confirm these three below are actually on:"
+                        else ->
+                            "Your phone can silently block scheduled alarms unless a few things are allowed. Takes a few seconds:"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp),
@@ -288,14 +244,18 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         actionLabel = "Fix",
                         onFix = { requestBatteryOptimizationExemption(context) },
                     )
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        PermissionRow(
+                            label = "Full screen alarm",
+                            detail = "Without this (Android 14+), the reminder shows as a quiet notification instead of an actual ringing alarm screen.",
+                            granted = fullScreenGranted,
+                            actionLabel = "Fix",
+                            onFix = { openFullScreenIntentSettings(context) },
+                        )
+                    }
                 }
 
                 if (AlarmPermissions.isMiuiDevice()) {
-                    // Autostart and Battery saver have no public API to check
-                    // their current state — shown as standing reminders
-                    // rather than pass/fail rows, since MIUI can silently
-                    // kill alarms even when every standard Android
-                    // permission above is granted.
                     PermissionRow(
                         label = "MIUI Autostart",
                         detail = "Xiaomi/Redmi/POCO phones need this enabled separately, or scheduled alarms can be killed even with everything else allowed.",
@@ -310,15 +270,18 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         actionLabel = "Check",
                         onFix = { openMiuiBatterySaverSettings(context) },
                     )
+                    PermissionRow(
+                        label = "MIUI \"Display pop-up windows\"",
+                        detail = "THE MOST COMMON reason it still won't ring even with Autostart + Battery saver fixed: under Other permissions, turn on \"Display pop-up windows while running in the background\".",
+                        granted = false,
+                        actionLabel = "Check",
+                        onFix = { openMiuiPopupPermissionSettings(context) },
+                    )
                 }
 
                 OutlinedButton(
                     onClick = {
                         if (!notifGranted) {
-                            // Previously this button silently did nothing when
-                            // notification permission was missing — notify()
-                            // is a no-op without it. Tell the user why instead
-                            // of letting it look broken.
                             Toast.makeText(
                                 context,
                                 if (notifPermanentlyDenied)
@@ -328,18 +291,6 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                                 Toast.LENGTH_SHORT,
                             ).show()
                         } else {
-                            // BUG FIX: this used to call show() and only
-                            // toast on a false result — meaning SUCCESS
-                            // produced no feedback at all. If posting the
-                            // notification silently threw (bad icon, a null
-                            // Uri, anything), the old show() had no
-                            // try/catch around its body, so the exception
-                            // could vanish with zero visible symptom other
-                            // than "I tapped it and nothing happened."
-                            // showResult() now wraps that body in
-                            // runCatching and reports exactly which of the
-                            // three things occurred, and every branch below
-                            // shows a toast — there is no more silent case.
                             when (val result = HabitCheckInNotifier.showResult(
                                 context = context,
                                 habitId = "diagnostic_test",
@@ -361,8 +312,6 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                                     ).show()
                                 }
                                 is HabitCheckInNotifier.NotifyResult.Failed -> {
-                                    // Surfaces the real exception so it can be
-                                    // reported instead of just "it's broken."
                                     Toast.makeText(
                                         context,
                                         "Test reminder failed: ${result.error}",
@@ -383,7 +332,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss) { Text(if (allGood) "Done" else "Not now") }
+            Button(onClick = onDismiss) { Text(if (allGoodOverall) "Done" else "Not now") }
         },
     )
 }
@@ -430,7 +379,6 @@ private fun PermissionRow(
     }
 }
 
-/** Opens the system "Alarms & reminders" page for this app (API 31+). */
 private fun openExactAlarmSettings(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
     runCatching {
@@ -443,11 +391,6 @@ private fun openExactAlarmSettings(context: Context) {
     }
 }
 
-/**
- * Requests the "ignore battery optimizations" exemption directly. This is
- * the single most impactful fix for "alarm just didn't ring" on Xiaomi,
- * Samsung, Oppo/Vivo, and Honor devices.
- */
 private fun requestBatteryOptimizationExemption(context: Context) {
     runCatching {
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
@@ -468,4 +411,16 @@ private fun openAppDetailsSettings(context: Context) {
         data = Uri.parse("package:${context.packageName}")
     }
     context.startActivity(intent)
+}
+
+private fun openFullScreenIntentSettings(context: Context) {
+    if (Build.VERSION.SDK_INT < 34) return
+    runCatching {
+        val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+            data = Uri.parse("package:${context.packageName}")
+        }
+        context.startActivity(intent)
+    }.onFailure {
+        openAppDetailsSettings(context)
+    }
 }
