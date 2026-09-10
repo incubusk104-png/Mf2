@@ -1359,6 +1359,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshCompanionUnlocks()
     }
 
+    /**
+     * Marks a habit as done for TODAY only — unlike [toggleHabitToday] this
+     * never un-checks an already-completed day, it's purely additive. Used
+     * right after the user confirms an alarm for a habit (new or re-edited):
+     * setting the alarm now auto-records today's check-in instead of making
+     * the user tap the habit a second time.
+     */
+    fun markHabitDoneToday(habitId: String) {
+        update { data ->
+            val today = Dates.todayKey()
+            val days = data.checkIns[habitId].orEmpty().toMutableSet()
+            if (days.add(today)) {
+                data.copy(checkIns = data.checkIns + (habitId to days.toList()))
+            } else {
+                data
+            }
+        }
+        refreshCompanionUnlocks()
+        queueSync()
+    }
+
     fun canAddHabit(): Boolean =
         _state.value.settings.hasFeatureAccess() || _state.value.habits.size < MAX_FREE_HABITS
 
