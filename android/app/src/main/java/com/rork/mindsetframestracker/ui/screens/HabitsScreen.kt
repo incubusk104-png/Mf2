@@ -236,13 +236,22 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 alarmSetupExistingHabitId = null
 
                 if (existingHabitId != null) {
-                    // "Set up alarm" path — update the existing habit in place.
+                    // "Set up alarm" / re-edit path — update the existing
+                    // habit in place. No permission prompt is shown here
+                    // anymore: if the user is re-editing an alarm, they've
+                    // already been through that dialog once (when the alarm
+                    // was first created), and re-showing it on every single
+                    // edit was the extra popup being flagged. Permission
+                    // gaps are still checked and surfaced the first time an
+                    // alarm is created, and any time from the Settings tab.
                     viewModel.setHabitReminder(existingHabitId, chosenMinutes, repeatMask)
                     val updated = data.habits.firstOrNull { it.id == existingHabitId }
                         ?.copy(reminderMinutes = chosenMinutes, repeatDaysMask = repeatMask)
                     if (chosenMinutes != null && updated != null) {
                         HabitAlarmScheduler.schedule(context, updated)
-                        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                        // Confirming an alarm auto-records today's check-in
+                        // for this habit — no extra tap needed.
+                        viewModel.markHabitDoneToday(existingHabitId)
                     } else if (updated != null) {
                         // Switched back to "no alarm" — cancel any previously
                         // scheduled alarm for this habit instead of leaving
@@ -252,7 +261,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             if (chosenMinutes != null)
-                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}"
+                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}. Marked done for today."
                             else
                                 "Alarm removed for this habit.",
                         )
@@ -272,6 +281,9 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     if (chosenMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
                         if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                        // Confirming an alarm auto-records today's check-in
+                        // for this habit — no extra tap needed.
+                        viewModel.markHabitDoneToday(habit.id)
                     }
                     viewModel.queueSync()
                     scope.launch {
@@ -504,6 +516,9 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     if (reminderMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
                         if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                        // Confirming an alarm auto-records today's check-in
+                        // for this habit — no extra tap needed.
+                        viewModel.markHabitDoneToday(habit.id)
                     }
 
                     // ── SYNC TO CLOUD ──
