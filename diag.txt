@@ -1,0 +1,48 @@
+exit=1
+--- kotlin errors ---
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:79:35 Unresolved reference 'eventFromIntent'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:81:28 Assignment type mismatch: actual type is 'Any', but 'TimerCompletionEvent?' was expected.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:82:29 Unresolved reference 'habitId'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:83:39 Unresolved reference 'ringTitle'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:84:45 Unresolved reference 'ringSubtitle'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitCheckInNotifier.kt:315:13 Unresolved reference 'setAudioAttributes'.
+--- other error lines ---
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:79:35 Unresolved reference 'eventFromIntent'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:82:29 Unresolved reference 'habitId'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:83:39 Unresolved reference 'ringTitle'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:84:45 Unresolved reference 'ringSubtitle'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitCheckInNotifier.kt:315:13 Unresolved reference 'setAudioAttributes'.
+FAILURE: Build failed with an exception.
+* What went wrong:
+Execution failed for task ':app:compileReleaseKotlin'.
+--- tail of log ---
+> Task :app:processReleaseManifestForPackage
+> Task :app:parseReleaseLocalResources
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseResources
+> Task :app:compileReleaseKotlin
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:79:35 Unresolved reference 'eventFromIntent'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:81:28 Assignment type mismatch: actual type is 'Any', but 'TimerCompletionEvent?' was expected.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:82:29 Unresolved reference 'habitId'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:83:39 Unresolved reference 'ringTitle'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt:84:45 Unresolved reference 'ringSubtitle'.
+e: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitCheckInNotifier.kt:315:13 Unresolved reference 'setAudioAttributes'.
+
+> Task :app:compileReleaseKotlin FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileReleaseKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3m 38s
+17 actionable tasks: 17 executed
+Configuration cache entry stored.
