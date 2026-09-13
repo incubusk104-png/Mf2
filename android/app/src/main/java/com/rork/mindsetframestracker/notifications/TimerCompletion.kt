@@ -61,6 +61,7 @@ object TimerCompletion {
 
         val event = TimerCompletionEvent(
             eventId = source.eventId,
+            runId = source.id,
             kind = source.kind,
             label = source.label,
             habitId = source.habitId,
@@ -72,6 +73,12 @@ object TimerCompletion {
         return when (val outcome = repo.recordCompletion(event)) {
             is TimerRepository.RecordOutcome.AlreadyRecorded -> {
                 Log.d(TAG, "Completion ${event.eventId} already recorded \u2014 not alerting again")
+                null
+            }
+            is TimerRepository.RecordOutcome.Rejected -> {
+                // No started run behind this event \u2014 nothing the user did, so
+                // nothing to announce and nothing to pop.
+                Log.d(TAG, "Completion ${event.eventId} rejected \u2014 run ${event.runId} was never started")
                 null
             }
             is TimerRepository.RecordOutcome.Recorded -> {
@@ -163,6 +170,11 @@ object TimerCompletion {
             status = TimerStatus.RUNNING,
         )
         repo.saveActive(timer)
+        // Record the session BEFORE anything can complete. This is what lets the
+        // popup prove later that the run it is reporting was really started by
+        // the user (see TimerRepository.wasRunStarted) \u2014 a completion can
+        // never outrun its own start.
+        repo.recordRunStarted(timer.id)
         TimerAlarmScheduler.schedule(context, timer)
         TimerService.start(context)
         return timer

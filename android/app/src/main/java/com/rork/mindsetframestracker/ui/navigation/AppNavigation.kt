@@ -166,9 +166,34 @@ private fun ConnectivityStatusIcon(
  * Lives outside the `NavHost` so the popup appears wherever the user is when a
  * timer finishes, and so exactly one composable can ever decide to show it.
  *
+ * ## When the popup may appear \u2014 and when it must not
+ *
+ * The popup reports the end of a walk the user was on. It must therefore only
+ * ever exist for a run the user actually started, and only while that result is
+ * still current. That is enforced one layer down, by
+ * [TimerRepository.loadPopupEvent], which this host reads through instead of
+ * raw [TimerRepository.loadPendingEvent]:
+ *
+ *  - **No started run, no popup.** A completion whose run id is absent from the
+ *    started-run ledger is *not* something the user did \u2014 an orphaned record
+ *    left by an older build, or a half-written event. It is discarded here, so
+ *    merely opening the app (landing on Home, or anywhere else) can never
+ *    produce a popup for a walk that was never set.
+ *  - **No live result, no popup.** A completion older than
+ *    [com.rork.mindsetframestracker.data.TIMER_POPUP_GRACE_MILLIS] is expired
+ *    rather than shown late.
+ *  - **Already shown, no popup.** The handled-ledger still gets the final say.
+ *
+ * Rejected events are *consumed*, never merely hidden, so none of them can
+ * resurface on a later recomposition, resume, navigation or launch.
+ *
+ * Note the host deliberately stays at the app root: a run that finishes while
+ * the user is on Home *should* announce itself there. What must never happen is
+ * a popup with no walk behind it \u2014 which is the failure this gate removes.
+ *
  * ## Why the popup cannot repeat
  *
- * The dialog is rendered from [TimerRepository.loadPendingEvent] — a persisted
+ * The dialog is rendered from [TimerRepository.loadPopupEvent] — a persisted
  * record, not transient UI state. Rendering it immediately calls
  * [TimerController.acknowledgeEvent], which appends the event's id to an
  * append-only handled-ledger on disk and clears the pending slot. From that
@@ -197,7 +222,7 @@ private fun TimerCompletionHost(
 ) {
     val repo = remember { TimerRepository(context) }
     val lifecycleOwner = LocalLifecycleOwner.current
-    var pendingEvent by remember { mutableStateOf(repo.loadPendingEvent()) }
+    var pendingEvent by remember { mutableStateOf(repo.loadPopupEvent()) }
 
     // Re-read on every resume. This is the *only* way an event that fired while
     // the app was in the background reaches the screen — and because showing it
@@ -205,7 +230,7 @@ private fun TimerCompletionHost(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                pendingEvent = repo.loadPendingEvent()
+                pendingEvent = repo.loadPopupEvent()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -218,7 +243,7 @@ private fun TimerCompletionHost(
     // receiver / service / TimerScreen's job — it only re-reads the result.
     LaunchedEffect(Unit) {
         while (true) {
-            val next = repo.loadPendingEvent()
+            val next = repo.loadPopupEvent()
             if (next?.eventId != pendingEvent?.eventId) pendingEvent = next
             kotlinx.coroutines.delay(1_000L)
         }

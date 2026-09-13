@@ -72,6 +72,11 @@ class TimerRepository(context: Context) {
      */
     @Synchronized
     fun recordCompletion(event: TimerCompletionEvent): RecordOutcome {
+        if (!wasRunStarted(event.runId)) {
+            // No started run behind this event: it cannot be a real completion,
+            // so it must never reach the popup or the alert.
+            return RecordOutcome.Rejected
+        }
         val existing = loadPendingEvent()
         if (existing != null && existing.eventId == event.eventId) {
             return RecordOutcome.AlreadyRecorded(existing)
@@ -140,6 +145,71 @@ class TimerRepository(context: Context) {
         }.onFailure { Log.w(TAG, "Failed to clear timer state", it) }
     }
 
+    // \u2500\u2500 Started-run ledger (session provenance) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /**
+     * Remembers that [runId] was genuinely started **by the user** on this
+     * device.
+     *
+     * This is what ties a completion popup to an actual timer session. A
+     * completion carries the id of the run that produced it, and the UI only
+     * ever shows the popup for a run that appears here. Without this ledger any
+     * orphaned record in the pending slot \u2014 a leftover from an older build,
+     * or a half-written event \u2014 would render a "walk complete" popup with no
+     * walk behind it, which is precisely the "why is this on my Home screen?"
+     * bug this guard exists to prevent.
+     */
+    @Synchronized
+    fun recordRunStarted(runId: String) {
+        if (runId.isBlank()) return
+        val runs = (startedRunIds() + runId).takeLast(MAX_STARTED_RUNS)
+        runCatching {
+            prefs.edit().putString(KEY_STARTED_RUNS, json.encodeToString(runs)).apply()
+        }.onFailure { Log.w(TAG, "Failed to persist started timer run", it) }
+    }
+
+    /** Every run id started on this device, oldest first (bounded). */
+    fun startedRunIds(): List<String> {
+        val raw = prefs.getString(KEY_STARTED_RUNS, null) ?: return emptyList()
+        return runCatching { json.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
+    }
+
+    /** True when [runId] is a run the user actually started. */
+    fun wasRunStarted(runId: String): Boolean =
+        runId.isNotBlank() && startedRunIds().contains(runId)
+
+    /**
+     * The pending completion that may be shown as a **popup**, or null.
+     *
+     * Stricter than [loadPendingEvent] on purpose: a popup interrupts whatever
+     * the user is doing, so it must prove three things first.
+     *
+     * 1. **Provenance** \u2014 the run that produced it was actually started here
+     *    ([wasRunStarted]). No started run, no popup.
+     * 2. **Freshness** \u2014 it fired within [TIMER_POPUP_GRACE_MILLIS].
+     * 3. **Not already shown** \u2014 the handled-ledger still gets the final say.
+     *
+     * Anything failing those checks is *consumed*, not merely hidden, so it can
+     * never resurface on a later launch or resume.
+     */
+    @Synchronized
+    fun loadPopupEvent(nowMs: Long = System.currentTimeMillis()): TimerCompletionEvent? {
+        val pending = loadPendingEvent() ?: return null
+        val orphaned = !wasRunStarted(pending.runId)
+        val expired = pending.firedAtEpochMs <= 0L ||
+            nowMs - pending.firedAtEpochMs > TIMER_POPUP_GRACE_MILLIS
+        if (orphaned || expired || isEventHandled(pending.eventId)) {
+            consumeEvent(pending.eventId)
+            Log.d(
+                TAG,
+                "Discarding pending timer event ${pending.eventId} " +
+                    "(orphaned=$orphaned expired=$expired)",
+            )
+            return null
+        }
+        return pending
+    }
+
     private fun writeEvent(event: TimerCompletionEvent, key: String) {
         runCatching {
             prefs.edit().putString(key, json.encodeToString(TimerCompletionEvent.serializer(), event)).apply()
@@ -153,6 +223,12 @@ class TimerRepository(context: Context) {
 
         /** Somebody already recorded it \u2014 do not alert again. */
         data class AlreadyRecorded(val event: TimerCompletionEvent) : RecordOutcome()
+
+        /**
+         * The event names a run that was never started here \u2014 it is not a
+         * completion of anything the user did, so it must never alert.
+         */
+        object Rejected : RecordOutcome()
     }
 
     private companion object {
@@ -161,8 +237,12 @@ class TimerRepository(context: Context) {
         const val KEY_ACTIVE = "active_timer"
         const val KEY_PENDING_EVENT = "pending_event"
         const val KEY_HANDLED_EVENTS = "handled_event_ids"
+        const val KEY_STARTED_RUNS = "started_run_ids"
         const val KEY_REMINDER_PREFIX = "reminder_sent_"
         /** Bounded so the ledger can never grow without limit. */
         const val MAX_HANDLED_EVENTS = 100
+
+        /** Same bound for the started-run ledger. */
+        const val MAX_STARTED_RUNS = 100
     }
 }

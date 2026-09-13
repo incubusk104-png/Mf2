@@ -45,6 +45,17 @@ const val MAX_TIMER_TARGET_SECONDS = 8 * 60 * 60
 /** How much \"Add 5 min\" (and the ringing screen's +5) extends a walk timer by. */
 const val TIMER_EXTEND_SECONDS = 5 * 60
 
+/**
+ * How long after a timer run ends its completion popup may still surface.
+ *
+ * The popup is a "the walk you were just on has finished" surface, so it is
+ * deliberately bounded: a completion stranded by a crash, a force-stop or an
+ * old build expires instead of ambushing the user on the Home screen days
+ * later. Past this window the result is still delivered as a notification \u2014
+ * it simply stops interrupting. See [TimerRepository.loadPopupEvent].
+ */
+const val TIMER_POPUP_GRACE_MILLIS = 30L * 60L * 1000L
+
 /** Default walk-timer target when a habit has no per-habit override (20 minutes). */
 const val DEFAULT_WALK_TARGET_SECONDS = 20 * 60
 
@@ -176,6 +187,14 @@ data class ActiveTimer(
 @Serializable
 data class TimerCompletionEvent(
     val eventId: String,
+    /**
+     * Id of the [ActiveTimer] run that produced this event.
+     *
+     * The popup only ever appears for a run the user actually started (see
+     * [TimerRepository.wasRunStarted]); this field is how a completion proves
+     * it came from a real timer session rather than from an orphaned record.
+     */
+    val runId: String = "",
     val kind: TimerKind,
     val label: String,
     val habitId: String? = null,

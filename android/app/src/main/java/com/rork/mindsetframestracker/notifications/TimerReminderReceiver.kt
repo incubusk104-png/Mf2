@@ -27,7 +27,10 @@ class TimerReminderReceiver : BroadcastReceiver() {
 
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
         val repo = TimerRepository(context)
-        val event = repo.loadPendingEvent()
+        // Only nudge for a completion that could still be shown as a popup
+        // (real started run, still fresh). An orphaned or expired event is
+        // discarded by this call rather than re-announced.
+        val event = repo.loadPopupEvent()
 
         if (event == null) {
             Log.d(TAG, "Reminder fired but nothing is pending \u2014 user already handled it")
