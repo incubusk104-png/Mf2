@@ -104,6 +104,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(repository?.load() ?: AppData())
     val state: StateFlow<AppData> = _state.asStateFlow()
 
+    /**
+     * Re-reads the persisted blob and replaces in-memory state with it.
+     *
+     * [_state] is only ever loaded once at construction time above, but the
+     * alarm/snooze BroadcastReceivers write straight to [MindsetRepository]
+     * (they have no AppViewModel instance to call into — the app process
+     * may not even be running when an alarm fires). If this activity/
+     * ViewModel was already alive in the background when that happened,
+     * its in-memory copy would otherwise silently go stale — e.g. a habit
+     * marked done by a ringing alarm wouldn't show as done until the app
+     * was force-restarted. Called from MainActivity on every ON_RESUME.
+     */
+    fun reloadFromDisk() {
+        val fresh = repository?.load() ?: return
+        if (fresh != _state.value) _state.value = fresh
+    }
+
     init {
         runCatching {
             LocalizationManager.init(application)
