@@ -20,13 +20,14 @@ jobs:
         continue-on-error: true
         run: |
           set +e
+          cd android
           chmod +x ./gradlew
           ./gradlew :app:compileReleaseKotlin --no-daemon --stacktrace > /tmp/build.log 2>&1
           echo "exit=$?" >> /tmp/build.log
       - name: Extract errors
         run: |
           set +e
-          { echo "===== e: lines ====="; grep -nE "^e: " /tmp/build.log | head -80; echo; echo "===== error:/What went wrong ====="; grep -nE "error:|What went wrong|Execution failed|Compilation error|Caused by" /tmp/build.log | head -60; echo; echo "===== tail 120 ====="; tail -120 /tmp/build.log; } > .ci-error.txt 2>&1
+          { echo "===== e: lines ====="; grep -nE "^e: " /tmp/build.log | head -100; echo; echo "===== error:/What went wrong ====="; grep -nE "error:|What went wrong|Execution failed|Compilation error|Caused by" /tmp/build.log | head -60; echo; echo "===== tail 150 ====="; tail -150 /tmp/build.log; } > .ci-error.txt 2>&1
           wc -l .ci-error.txt
       - name: Commit error report
         run: |
