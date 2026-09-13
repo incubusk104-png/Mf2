@@ -1,8 +1,8 @@
 name: Apply alarm-timer payload
 
-# One-shot helper: unpacks the base64 payload staged in .payload/ into the
-# repository root, commits it, and removes the staging files in the same commit.
-# Triggered manually (workflow_dispatch) and deletes itself afterwards.
+# One-shot helper. Downloads the updated project archive, verifies it by
+# SHA-256, overlays it onto the repository (replacing matching paths and adding
+# the new files), removes this workflow file, and pushes one commit.
 on:
   workflow_dispatch:
 
@@ -18,17 +18,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Unpack payload
+      - name: Download, verify and unpack the updated project
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2-alarm-review/mf2_36_updated.zip?tk=c2l0ZTpjYTYzNmQ0ZC0zNmM2LTQ0MDctOTA1OS0yNGZkYmFiMjNiMjAvZG9jdW1lbnRzL21mMi1hbGFybS1yZXZpZXc6MTc4OTMyNTE0Mw.ZDdiZTIxMDlkNDIzZGZhZjc3ODk2OGY0YjcwYjAxNGI"
+          PAYLOAD_SHA256: "a6afbca06467950f5b65860db4e8b079e84b351fadcc9119964c4003c486bebf"
         run: |
           set -euo pipefail
-          test -d .payload
-          cat .payload/part_* > /tmp/payload.b64
-          base64 -d /tmp/payload.b64 > /tmp/payload.tar.gz
-          tar xzf /tmp/payload.tar.gz -C .
-          rm -rf .payload
-          echo "--- files now present ---"
+          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/upd.zip "$PAYLOAD_URL"
+          ls -la /tmp/upd.zip
+          echo "$PAYLOAD_SHA256  /tmp/upd.zip" | sha256sum -c -
+          mkdir -p /tmp/upd
+          unzip -q /tmp/upd.zip -d /tmp/upd
+          test -d /tmp/upd/Mf2-main
+          cp -a /tmp/upd/Mf2-main/. .
+          rm -f .github/workflows/apply-alarm-timer-payload.yml
+          echo "--- resulting change set ---"
+          git status --short
+          echo "--- key files ---"
           ls -la ALARM_REPORT.md
-          ls -la android/app/src/main/java/com/rork/mindsetframestracker/notifications/ | head -40
+          ls -la android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmScheduler.kt
 
       - name: Commit and push
         run: |
