@@ -87,6 +87,18 @@ import com.rork.mindsetframestracker.notifications.HabitCheckInNotifier
 object AlarmPermissions {
 
     fun hasNotificationPermission(context: Context): Boolean {
+        // Catches the app-level "Allow notifications" switch being off —
+        // this exists on every Android version (it's the ONLY notification
+        // gate before API 33) and, separately from the runtime permission,
+        // can still be toggled off by the user (or an OEM default) even on
+        // API 33+. NotificationManager.notify() no-ops completely and
+        // silently when this is off — no exception, nothing in the shade,
+        // nothing logged — which is exactly the "I cleared everything but
+        // there's nothing in my notification shade at all" symptom.
+        val notificationsEnabledAtOsLevel =
+            androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        if (!notificationsEnabledAtOsLevel) return false
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
         return ContextCompat.checkSelfPermission(
             context,
@@ -271,57 +283,73 @@ private fun openOemAutostartSettings(context: Context) {
     if (!opened) openAppDetailsSettings(context)
 }
 
-private fun openMiuiAutostartSettings(context: Context) {
-    val candidates = listOf(
-        "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
-        "com.miui.securitycenter" to "com.miui.securitycenter.permission.AutoStartManagementActivity",
-    )
-    val opened = candidates.any { (pkg, cls) ->
-        runCatching {
-            val intent = Intent().apply {
-                component = android.content.ComponentName(pkg, cls)
-                putExtra("extra_pkgname", context.packageName)
-            }
-            context.startActivity(intent)
-        }.isSuccess
+/** Opens this device's "unrestricted battery / no restrictions" page, whatever OEM it is. */
+private fun openOemBatterySettings(context: Context) {
+    val opened = when (AlarmPermissions.oemFamily()) {
+        OemFamily.MIUI -> tryComponents(
+            context,
+            listOf(
+                "com.miui.powerkeeper" to "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
+                "com.miui.securitycenter" to "com.miui.powercenter.PowerSettings",
+            ),
+        ) {
+            putExtra("package_name", context.packageName)
+            putExtra("package_label", "Mindset Frames")
+        }
+        OemFamily.COLOROS -> tryComponents(
+            context,
+            listOf(
+                "com.coloros.oppoguardelf" to "com.coloros.powermanager.fuelgauge.PowerConsumptionActivity",
+                "com.coloros.safecenter" to "com.coloros.safecenter.powerbattery.PowerSaverModeActivity",
+            ),
+        )
+        OemFamily.FUNTOUCH -> tryComponents(
+            context,
+            listOf(
+                "com.vivo.abe" to "com.vivo.applicationbehaviorengine.ui.ExcessivePowerManagerActivity",
+                "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.PurviewTabActivity",
+            ),
+        )
+        OemFamily.HUAWEI_HONOR -> tryComponents(
+            context,
+            listOf(
+                "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
+            ),
+        )
+        else -> false
+    }
+    // Every OEM (including Samsung "Sleeping apps" and anything unlisted
+    // above) still has the standard battery-optimization exemption request
+    // as a fallback — it's the one thing guaranteed to exist everywhere.
+    if (!opened) requestBatteryOptimizationExemption(context)
+}
+
+/** Opens this device's "display pop-up / background permission" page, whatever OEM it is. */
+private fun openOemPopupSettings(context: Context) {
+    val opened = when (AlarmPermissions.oemFamily()) {
+        OemFamily.MIUI -> tryComponents(
+            context,
+            listOf(
+                "com.miui.securitycenter" to "com.miui.permcenter.permissions.PermissionsEditorActivity",
+                "com.miui.securitycenter" to "com.miui.permcenter.permissions.AppPermissionsEditorActivity",
+            ),
+        ) { putExtra("extra_pkgname", context.packageName) }
+        OemFamily.COLOROS -> tryComponents(
+            context,
+            listOf("com.coloros.safecenter" to "com.coloros.privacypermissionsentry.PermissionTopActivity"),
+        )
+        OemFamily.HUAWEI_HONOR -> tryComponents(
+            context,
+            listOf("com.huawei.systemmanager" to "com.huawei.permissionmanager.ui.MainActivity"),
+        )
+        else -> false // vivo/Samsung/other: this toggle usually lives in the same
+        // permission manager as autostart, or doesn't exist as a separate
+        // setting — app details is the safest generic landing spot.
     }
     if (!opened) openAppDetailsSettings(context)
 }
 
-private fun openMiuiBatterySaverSettings(context: Context) {
-    val candidates = listOf(
-        "com.miui.powerkeeper" to "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
-        "com.miui.securitycenter" to "com.miui.powercenter.PowerSettings",
-    )
-    val opened = candidates.any { (pkg, cls) ->
-        runCatching {
-            val intent = Intent().apply {
-                component = android.content.ComponentName(pkg, cls)
-                putExtra("package_name", context.packageName)
-                putExtra("package_label", "Mindset Frames")
-            }
-            context.startActivity(intent)
-        }.isSuccess
-    }
-    if (!opened) openAppDetailsSettings(context)
-}
 
-private fun openMiuiPopupPermissionSettings(context: Context) {
-    val candidates = listOf(
-        "com.miui.securitycenter" to "com.miui.permcenter.permissions.PermissionsEditorActivity",
-        "com.miui.securitycenter" to "com.miui.permcenter.permissions.AppPermissionsEditorActivity",
-    )
-    val opened = candidates.any { (pkg, cls) ->
-        runCatching {
-            val intent = Intent().apply {
-                component = android.content.ComponentName(pkg, cls)
-                putExtra("extra_pkgname", context.packageName)
-            }
-            context.startActivity(intent)
-        }.isSuccess
-    }
-    if (!opened) openAppDetailsSettings(context)
-}
 
 /**
  * Auto-triggered dialog — shown right after the user sets an alarm, only
@@ -392,11 +420,13 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
     }
 
     val allGood = notifGranted && exactAlarmGranted && batteryExempt && fullScreenGranted
-    val isMiui = AlarmPermissions.isMiuiDevice()
+    val needsOem = AlarmPermissions.needsOemConfirmation()
+    val oemName = AlarmPermissions.oemSkinName()
 
     // Only truly "all set" once the verifiable Android permissions AND the
-    // user's own MIUI confirmations (when on a MIUI device) are both done.
-    val allGoodOverall = allGood && (!isMiui || OemPermissionState.allConfirmed(context))
+    // user's own OEM-skin confirmations (Xiaomi, Oppo, Vivo, Honor/Huawei,
+    // Samsung, or any other non-Pixel skin) are both done.
+    val allGoodOverall = allGood && (!needsOem || OemPermissionState.allConfirmed(context))
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -408,7 +438,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         allGoodOverall ->
                             "Notifications, exact timing, and battery optimization are all set up — this and future alarms will fire on time."
                         allGood ->
-                            "Standard Android permissions are all granted — but MIUI has its own extra toggles Android can't check for us. Confirm each one below once you've turned it on:"
+                            "Standard Android permissions are all granted — but $oemName has its own extra toggles Android can't check for us. Confirm each one below once you've turned it on:"
                         else ->
                             "Your phone can silently block scheduled alarms unless a few things are allowed. Takes a few seconds:"
                     },
@@ -418,18 +448,19 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                 )
 
                 if (!allGood) {
+                    val notifNeedsSettingsPage = notifPermanentlyDenied || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
                     PermissionRow(
                         label = "Notifications",
-                        detail = if (notifPermanentlyDenied)
-                            "Blocked earlier — Android won't ask again automatically. Turn it on in Settings."
+                        detail = if (notifNeedsSettingsPage)
+                            "Off at the system level — this silently blocks every reminder with no error. Turn it on in Settings."
                         else
                             "Required to show any reminder at all.",
                         granted = notifGranted,
-                        actionLabel = if (notifPermanentlyDenied) "Open Settings" else "Allow",
+                        actionLabel = if (notifNeedsSettingsPage) "Open Settings" else "Allow",
                         onFix = {
-                            if (notifPermanentlyDenied) {
-                                openAppDetailsSettings(context)
-                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (notifNeedsSettingsPage) {
+                                openAppNotificationSettings(context)
+                            } else {
                                 prefs.edit().putBoolean("notif_requested_before", true).apply()
                                 notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                             }
@@ -460,36 +491,36 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                     }
                 }
 
-                if (isMiui) {
+                if (needsOem) {
                     // These three now behave like real pass/fail rows again —
                     // "Check" opens the OEM Settings page, and once you're
                     // back, tap "Mark as done" to confirm it and clear the
                     // warning for good (persisted, so it stays cleared).
                     ConfirmablePermissionRow(
-                        label = "MIUI Autostart",
-                        detail = "Xiaomi/Redmi/POCO phones need this enabled separately, or scheduled alarms can be killed even with everything else allowed.",
+                        label = "$oemName Autostart",
+                        detail = "This phone needs auto-start/background-launch enabled separately, or scheduled alarms can be killed even with everything else allowed.",
                         confirmed = autostartConfirmed,
-                        onOpenSettings = { openMiuiAutostartSettings(context) },
+                        onOpenSettings = { openOemAutostartSettings(context) },
                         onConfirm = {
                             OemPermissionState.setAutostartConfirmed(context, true)
                             autostartConfirmed = true
                         },
                     )
                     ConfirmablePermissionRow(
-                        label = "MIUI Battery saver",
-                        detail = "A SEPARATE toggle from battery optimization above — set it to \"No restrictions\", or MIUI can still kill this alarm in the background.",
+                        label = "$oemName Battery saver",
+                        detail = "A SEPARATE toggle from battery optimization above — set it to \"No restrictions\" / unrestricted, or the OS can still kill this alarm in the background.",
                         confirmed = batterySaverConfirmed,
-                        onOpenSettings = { openMiuiBatterySaverSettings(context) },
+                        onOpenSettings = { openOemBatterySettings(context) },
                         onConfirm = {
                             OemPermissionState.setBatterySaverConfirmed(context, true)
                             batterySaverConfirmed = true
                         },
                     )
                     ConfirmablePermissionRow(
-                        label = "MIUI \"Display pop-up windows\"",
-                        detail = "THE MOST COMMON reason it still won't ring even with Autostart + Battery saver fixed: under Other permissions, turn on \"Display pop-up windows while running in the background\".",
+                        label = "$oemName background pop-up permission",
+                        detail = "THE MOST COMMON reason it still won't ring even with Autostart + Battery saver fixed: find \"Display pop-up windows while running in the background\" (or similarly-named) under this app's permissions and turn it on.",
                         confirmed = popupConfirmed,
-                        onOpenSettings = { openMiuiPopupPermissionSettings(context) },
+                        onOpenSettings = { openOemPopupSettings(context) },
                         onConfirm = {
                             OemPermissionState.setPopupConfirmed(context, true)
                             popupConfirmed = true
@@ -692,6 +723,19 @@ private fun requestBatteryOptimizationExemption(context: Context) {
             openAppDetailsSettings(context)
         }
     }
+}
+
+private fun openAppNotificationSettings(context: Context) {
+    runCatching {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .apply { data = Uri.parse("package:${context.packageName}") }
+        }
+        context.startActivity(intent)
+    }.onFailure { openAppDetailsSettings(context) }
 }
 
 private fun openAppDetailsSettings(context: Context) {
