@@ -245,6 +245,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var showGrounding by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
     var showActivityReport by remember { mutableStateOf(false) }
+    var showAlarmPermissionCheck by remember { mutableStateOf(false) }
 
     // Privacy consent gate: every integration Connect shows this dialog
     // FIRST; the OAuth/permission flow launches only after "Agree & connect".
@@ -290,6 +291,28 @@ fun SettingsScreen(viewModel: AppViewModel) {
             onAvatarClick = { showCompanionStudio = true },
             modifier = Modifier.fillMaxWidth(),
         )
+
+        // Always-available manual entry point to the alarm/notification
+        // permission checker. Previously this dialog only ever popped up
+        // automatically right after setting an alarm, and only when the
+        // plain Android permissions were missing — on a device (e.g. MIUI)
+        // where those are already granted but the OEM-specific Autostart/
+        // Battery-saver/Pop-up confirmations are still outstanding, it
+        // never showed itself at all and there was no other way to open it.
+        SettingsCard(title = "Alarms & notifications") {
+            Text(
+                text = "Make sure your habit alarms actually ring — checks notifications, exact timing, battery optimization, and any extra steps your phone's manufacturer requires.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Button(
+                onClick = { showAlarmPermissionCheck = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Check alarm permissions")
+            }
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1208,6 +1231,10 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
     if (showPrivacyPolicy) {
         PrivacyPolicyDialog(onDismiss = { showPrivacyPolicy = false })
+    }
+
+    if (showAlarmPermissionCheck) {
+        AlarmPermissionPromptDialog(onDismiss = { showAlarmPermissionCheck = false })
     }
 
     if (showTerms) {
