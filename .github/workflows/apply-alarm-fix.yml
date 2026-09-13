@@ -1,0 +1,48 @@
+name: apply-alarm-fix
+
+# Triggered by adding this file to the branch (branch-level push:), which is
+# the deterministic trigger for a brand-new workflow file.
+on:
+  push:
+    branches:
+      - alarm-not-ringing-fix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download, verify and overlay the payload
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_alarm_fix_payload/mf2_alarm_fix_payload.zip"
+          EXPECTED_SHA256: "b982e12acad23d34bb57d124a7d2d6f24001319ec4bb8d2f0337677cc91c5c71"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/upd.zip "$PAYLOAD_URL"
+          echo "$EXPECTED_SHA256  /tmp/upd.zip" | sha256sum -c -
+          rm -rf /tmp/upd && mkdir -p /tmp/upd
+          unzip -q /tmp/upd.zip -d /tmp/upd
+          test -f /tmp/upd/payload/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmDelivery.kt
+          cp -a /tmp/upd/payload/. .
+          rm -f .github/workflows/apply-alarm-fix.yml
+          echo "--- changed paths ---"
+          git status --short
+
+      - name: Commit and push to main
+        run: |
+          set -euo pipefail
+          git config user.name "Mobile App Builder"
+          git config user.email "agent@teamily.ai"
+          git add -A
+          git commit -m "Fix habit reminder not ringing: channel was never an alarm, and silent drops were invisible" -m "ROOT CAUSE: the habit_reminder notification channel was created with IMPORTANCE_HIGH but no AudioAttributes, so it was never registered as an ALARM channel. IMPORTANCE_HIGH alone does not survive Do Not Disturb / Bedtime / Focus - a common state at reminder time and near-guaranteed overnight - so the reminder was posted and never rang. Compounding it, NotificationManager.notify() returns normally when the OS silently discards a notification, so the app reported success while nothing reached the user, and no log recorded why." -m "- HabitCheckInNotifier: declare the channel sound as USAGE_ALARM so it is a real alarm channel eligible for DND alarm exception." -m "- Add AlarmDelivery audit reporting every independent switch that can hide a reminder." -m "- Log the real delivery verdict at post time instead of assuming success." -m "- AlarmScheduler: add nextAlarmClock read-back to confirm an armed alarm against AlarmManager." -m "Alarm ladder unchanged: setAlarmClock -> setExactAndAllowWhileIdle -> setAndAllowWhileIdle -> setWindow."
+          git push origin HEAD:main
+          echo "PUSHED_SHA=$(git rev-parse HEAD)"
