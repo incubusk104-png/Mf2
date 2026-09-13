@@ -25,13 +25,13 @@ import com.rork.mindsetframestracker.data.formatTimerDuration
  *
  * Two *distinct* notifications, because they answer two different questions:
  *
- * 1. **The completion alert** ([postCompletion]) \u2014 \"your walk timer
- *    finished\". Uses the ALARM audio stream and an alarm-grade channel so it
+ * 1. **The completion alert** ([postCompletion]) — "your walk timer
+ *    finished". Uses the ALARM audio stream and an alarm-grade channel so it
  *    cuts through silent mode and Do Not Disturb the same way the habit
  *    reminders do, plus a full-screen intent that opens [AlarmRingingActivity]
  *    so the user gets a ringing screen rather than a notification they can
  *    sleep through.
- * 2. **The one-shot re-reminder** ([maybePostReminder]) \u2014 if the user swipes
+ * 2. **The one-shot re-reminder** ([maybePostReminder]) — if the user swipes
  *    the completion alert away *without acting on it*, this fires once (and
  *    only once, guarded by [TimerRepository.markReminderSent]) a few minutes
  *    later. No repeated polling, no notification spam.
@@ -43,10 +43,10 @@ object TimerNotifier {
 
     private const val TAG = "TimerNotifier"
 
-    /** Alarm-grade channel \u2014 heard through silent mode / DND like a real alarm. */
+    /** Alarm-grade channel — heard through silent mode / DND like a real alarm. */
     const val CHANNEL_ID = "timer_alarm"
 
-    /** Quiet channel for the one-shot \"still waiting on you\" re-reminder. */
+    /** Quiet channel for the one-shot "still waiting on you" re-reminder. */
     private const val CHANNEL_ID_REMINDER = "timer_alarm_reminder"
 
     private const val NOTIFICATION_ID_BASE = 4000
@@ -70,8 +70,45 @@ object TimerNotifier {
     private const val EXTRA_TIMER_TARGET = "extra_timer_target"
     private const val EXTRA_TIMER_ELAPSED = "extra_timer_elapsed"
 
-    /** Stable notification id for an event \u2014 re-posting updates, never stacks. */
+    /** Stable notification id for an event — re-posting updates, never stacks. */
     fun notificationId(eventId: String): Int = NOTIFICATION_ID_BASE + (eventId.hashCode() and 0x3FFF)
+
+    /**
+     * The timer event a full-screen alarm is ringing for, or null when the
+     * Intent carries no event (i.e. it is a habit reminder).
+     *
+     * Public so the *ringing screen* can identify what it was launched with.
+     * That is the whole point: [AlarmRingingActivity] previously understood only
+     * the habit contract's `habitId` / `habitName`, so a timer-driven launch
+     * arrived with neither. The screen then finished itself immediately (the
+     * timer alarm never appeared at all) and its teardown touched the
+     * still-uninitialised `habitId` on the way out.
+     */
+    fun eventFromIntent(intent: Intent?): TimerCompletionEvent? =
+        intent?.let { eventFromExtras(it) }
+
+    /**
+     * The headline a ringing screen shows for [event].
+     *
+     * Kept here, beside [postCompletion], so the notification and the full-screen
+     * screen can never disagree about what is ringing.
+     */
+    fun ringTitle(event: TimerCompletionEvent): String = when (event.kind) {
+        TimerKind.WALK_TIMER -> "Walk complete"
+        TimerKind.STOPWATCH -> "Target reached"
+    }
+
+    /** The supporting line a ringing screen shows for [event]. */
+    fun ringSubtitle(event: TimerCompletionEvent): String = buildString {
+        append(
+            if (event.kind == TimerKind.WALK_TIMER) {
+                "${formatTimerDuration(event.targetSeconds)} walk finished"
+            } else {
+                "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
+            },
+        )
+        if (event.label.isNotBlank()) append(" — ${event.label}")
+    }
 
     /** True when we hold POST_NOTIFICATIONS (or the OS predates the permission). */
     fun canPost(context: Context): Boolean {
@@ -92,7 +129,7 @@ object TimerNotifier {
      */
     fun postCompletion(context: Context, event: TimerCompletionEvent) {
         if (!canPost(context)) {
-            Log.w(TAG, "Completion alert suppressed \u2014 notifications unavailable for ${event.eventId}")
+            Log.w(TAG, "Completion alert suppressed — notifications unavailable for ${event.eventId}")
             return
         }
         runCatching {
@@ -144,7 +181,7 @@ object TimerNotifier {
                         "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
                     },
                 )
-                if (event.label.isNotBlank()) append(" \u2014 ${event.label}")
+                if (event.label.isNotBlank()) append(" — ${event.label}")
             }
 
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -174,7 +211,7 @@ object TimerNotifier {
         val repo = TimerRepository(context)
         if (repo.isEventHandled(event.eventId)) return false
         if (!repo.markReminderSent(event.eventId)) {
-            Log.d(TAG, "Re-reminder already sent for ${event.eventId} \u2014 skipping")
+            Log.d(TAG, "Re-reminder already sent for ${event.eventId} — skipping")
             return false
         }
         if (!canPost(context)) return false
@@ -206,7 +243,7 @@ object TimerNotifier {
         }.onFailure { Log.w(TAG, "Failed to post timer re-reminder", it) }.getOrDefault(false)
     }
 
-    /** Replaces any live \"timer running\" summary notification. Best-effort. */
+    /** Replaces any live "timer running" summary notification. Best-effort. */
     fun clearCompletion(context: Context, eventId: String) {
         runCatching {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

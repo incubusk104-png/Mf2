@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.rork.mindsetframestracker.data.TimerCompletionEvent
 import com.rork.mindsetframestracker.ui.theme.AppTheme
 
 /**
@@ -55,14 +56,36 @@ class AlarmRingingActivity : ComponentActivity() {
     private val autoStopHandler = Handler(Looper.getMainLooper())
     private val autoStopRunnable = Runnable { finishRinging() }
 
-    private lateinit var habitId: String
-    private lateinit var habitName: String
+    /**
+     * The timer event being rung, or null when this is a habit reminder.
+     *
+     * `habitId` / `habitName` are deliberately NOT `lateinit`: a timer has no
+     * habit, and a `lateinit` they were is exactly what turned the early
+     * [finish] below into an `UninitializedPropertyAccessException` during
+     * teardown. Empty strings keep every downstream path safe.
+     */
+    private var ringingEvent: TimerCompletionEvent? = null
+    private var habitId: String = ""
+    private var habitName: String = ""
+    private var ringingSubtitle: String = "Time for your habit"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        habitId = intent.getStringExtra("habitId") ?: run { finish(); return }
-        habitName = intent.getStringExtra("habitName") ?: "Habit"
+        // Identify WHAT is ringing before anything else. A timer-driven launch
+        // carries the event extras (see TimerNotifier.applyEventExtras), not the
+        // habit ones; requiring a habitId here made every timer alarm bail out
+        // of onCreate immediately, so it never rang.
+        val event = TimerNotifier.eventFromIntent(intent)
+        if (event != null) {
+            ringingEvent = event
+            habitId = event.habitId.orEmpty()
+            habitName = TimerNotifier.ringTitle(event)
+            ringingSubtitle = TimerNotifier.ringSubtitle(event)
+        } else {
+            habitId = intent.getStringExtra("habitId") ?: run { finish(); return }
+            habitName = intent.getStringExtra("habitName") ?: "Habit"
+        }
 
         showOverLockScreen()
         startRinging()
@@ -73,6 +96,11 @@ class AlarmRingingActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     AlarmRingingScreen(
                         habitName = habitName,
+                        subtitle = ringingSubtitle,
+                        // Snoozing a walk timer is meaningless (there is no
+                        // "later" for a completed walk), so it is a habit-only
+                        // affordance.
+                        showSnooze = ringingEvent == null,
                         onDismiss = { finishRinging() },
                         onSnooze = { snoozeAndFinish() },
                     )
@@ -141,7 +169,15 @@ class AlarmRingingActivity : ComponentActivity() {
         mediaPlayer = null
         runCatching { vibrator?.cancel() }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.cancel(HabitCheckInNotifier.notificationId(habitId))
+        // Cancel the notification that raised this ring: the timer's own event id
+        // for a timer, the habit's id for a reminder. A timer has no habit, so
+        // guard rather than compute a meaningless id from an empty string.
+        val event = ringingEvent
+        if (event != null) {
+            manager.cancel(TimerNotifier.notificationId(event.eventId))
+        } else if (habitId.isNotEmpty()) {
+            manager.cancel(HabitCheckInNotifier.notificationId(habitId))
+        }
     }
 
     private fun finishRinging() {
@@ -150,6 +186,12 @@ class AlarmRingingActivity : ComponentActivity() {
     }
 
     private fun snoozeAndFinish() {
+        // Snooze is a habit-reminder affordance and its button is hidden for a
+        // timer; this guard keeps a stray call from snoozing an empty id.
+        if (ringingEvent != null || habitId.isEmpty()) {
+            finishRinging()
+            return
+        }
         stopRinging()
         val snoozeIntent = Intent(this, HabitSnoozeReceiver::class.java).apply {
             putExtra("habitId", habitId)
@@ -173,6 +215,8 @@ class AlarmRingingActivity : ComponentActivity() {
 @Composable
 private fun AlarmRingingScreen(
     habitName: String,
+    subtitle: String,
+    showSnooze: Boolean,
     onDismiss: () -> Unit,
     onSnooze: () -> Unit,
 ) {
@@ -196,7 +240,7 @@ private fun AlarmRingingScreen(
             modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
         )
         Text(
-            text = "Time for your habit",
+            text = subtitle,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -208,10 +252,12 @@ private fun AlarmRingingScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) { Text("Dismiss") }
 
-            OutlinedButton(
-                onClick = onSnooze,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            ) { Text("Snooze 5 min") }
+            if (showSnooze) {
+                OutlinedButton(
+                    onClick = onSnooze,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                ) { Text("Snooze 5 min") }
+            }
         }
     }
 }
