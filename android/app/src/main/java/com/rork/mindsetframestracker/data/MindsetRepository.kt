@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.serialization.json.Json
+import java.util.UUID
 
 /**
  * Fully local, on-device persistence. Single JSON blob in SharedPreferences —
@@ -50,8 +51,9 @@ class MindsetRepository(context: Context) {
 
         val decoded = runCatching { json.decodeFromString<AppData>(raw) }.getOrNull()
         if (decoded != null) {
-            lastKnownGood = decoded
-            return decoded
+            val cleaned = stripInvalidCheckIns(decoded)
+            lastKnownGood = cleaned
+            return cleaned
         }
 
         Log.w(TAG, "Failed to decode primary data — trying backup copy")
@@ -116,6 +118,30 @@ class MindsetRepository(context: Context) {
         if (!days.add(today)) return false
         save(current.copy(checkIns = current.checkIns + (habitId to days.toList())))
         return true
+    }
+
+    /**
+     * SELF-HEAL: every real habit id is a [UUID] (created via
+     * `UUID.randomUUID().toString()` in HabitsScreen). The old diagnostic
+     * "Send a test reminder now" button wrote a check-in under the literal
+     * key "diagnostic_test", which is not a UUID — Supabase's `checkins`
+     * table stores habit_id as `uuid`, so any install that ever tapped that
+     * button got stuck with every future sync failing on that one bad row
+     * (see HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID). The button itself is
+     * fixed to never write this again, but this strips out any copy that
+     * was already saved on-device before that fix, so an existing install
+     * recovers automatically on the very next load — no need to sign out,
+     * clear app data, or reinstall.
+     */
+    private fun stripInvalidCheckIns(data: AppData): AppData {
+        val hasBadKey = data.checkIns.keys.any { runCatching { UUID.fromString(it) }.isFailure }
+        if (!hasBadKey) return data
+        val cleaned = data.copy(checkIns = data.checkIns.filterKeys {
+            runCatching { UUID.fromString(it) }.isSuccess
+        })
+        Log.i(TAG, "Removed invalid (non-UUID) check-in key(s) — this unblocks Supabase sync")
+        save(cleaned)
+        return cleaned
     }
 
     /** Appends one ActivityRecord and persists — used by Polar / Health Connect / Strava sync. */
