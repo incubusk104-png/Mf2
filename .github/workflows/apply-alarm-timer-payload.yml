@@ -3,8 +3,14 @@ name: Apply alarm-timer payload
 # One-shot helper. Downloads the updated project archive, verifies it by
 # SHA-256, overlays it onto the repository (replacing matching paths and adding
 # the new files), removes this workflow file, and pushes one commit.
+#
+# Two triggers: workflow_dispatch for a manual run, and a push to the marker
+# file so it can be started deterministically right after being added.
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.trigger-apply-payload'
 
 permissions:
   contents: write
@@ -31,7 +37,7 @@ jobs:
           unzip -q /tmp/upd.zip -d /tmp/upd
           test -d /tmp/upd/Mf2-main
           cp -a /tmp/upd/Mf2-main/. .
-          rm -f .github/workflows/apply-alarm-timer-payload.yml
+          rm -f .github/workflows/apply-alarm-timer-payload.yml .trigger-apply-payload
           echo "--- resulting change set ---"
           git status --short
           echo "--- key files ---"
