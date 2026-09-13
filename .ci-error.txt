@@ -1,0 +1,7 @@
+===== e: lines =====
+
+===== error:/What went wrong =====
+
+===== tail 120 =====
+/home/runner/work/_temp/56354582-d409-466b-8c8b-a23b5322cd50.sh: line 3: ./gradlew: No such file or directory
+exit=127
