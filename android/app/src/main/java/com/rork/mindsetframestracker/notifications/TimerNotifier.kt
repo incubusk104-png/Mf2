@@ -244,6 +244,51 @@ object TimerNotifier {
         intent.putExtra(EXTRA_TIMER_ELAPSED, event.elapsedSeconds)
     }
 
+    /**
+     * Reads a [TimerCompletionEvent] back out of a ringing intent.
+     *
+     * This is the name [AlarmRingingActivity] looks for; it delegates to
+     * [eventFromExtras] so there is exactly ONE reader of these extras. The
+     * producer ([postCompletion]) and the consumer (the ringing screen) must
+     * agree on every key, and a single implementation is what keeps them from
+     * drifting apart.
+     */
+    fun eventFromIntent(intent: Intent): TimerCompletionEvent? = eventFromExtras(intent)
+
+    /**
+     * Headline for the ringing screen.
+     *
+     * A walk timer is measured against a target, so reaching it is an
+     * achievement; a stopwatch merely stopped. Wording both the same would
+     * make a completed 30-minute walk read like a stopwatch that happened to
+     * halt.
+     */
+    fun ringTitle(event: TimerCompletionEvent): String = when (event.kind) {
+        TimerKind.WALK_TIMER -> "Walk complete"
+        TimerKind.STOPWATCH -> "Stopwatch stopped"
+    }
+
+    /**
+     * Subtitle for the ringing screen — what finished, and for a walk timer
+     * with a target, the elapsed time measured against it.
+     */
+    fun ringSubtitle(event: TimerCompletionEvent): String {
+        val label = event.label.ifBlank {
+            when (event.kind) {
+                TimerKind.WALK_TIMER -> "Walk timer"
+                TimerKind.STOPWATCH -> "Stopwatch"
+            }
+        }
+        val elapsed = formatTimerDuration(event.elapsedSeconds)
+        // A stopwatch can be open-ended, so "of 0:00" would be nonsense;
+        // only compare against a target that was actually set.
+        return if (event.targetSeconds > 0) {
+            "$label — $elapsed of ${formatTimerDuration(event.targetSeconds)}"
+        } else {
+            "$label — $elapsed"
+        }
+    }
+
     /** True when the app may currently ring full-screen (API 34+: its own grant). */
     fun canUseFullScreenIntent(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
