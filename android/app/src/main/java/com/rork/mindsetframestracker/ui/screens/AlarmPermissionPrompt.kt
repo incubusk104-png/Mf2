@@ -54,6 +54,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -656,6 +657,28 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                     Icon(Icons.Outlined.NotificationsActive, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Send a test reminder now")
+                }
+
+                // One-shot dump of every flag that can independently hide a
+                // reminder (permission, app/channel notification settings,
+                // DND, full-screen-intent grant, exact alarms, battery
+                // optimization) — copies as plain text so it can be pasted
+                // straight back for debugging instead of another
+                // screenshot-per-setting round trip.
+                OutlinedButton(
+                    onClick = {
+                        val report = AlarmDiagnostics.report(context)
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Alarm diagnostics", report))
+                        Toast.makeText(context, "Diagnostics copied — paste them wherever you need to share them.", Toast.LENGTH_LONG).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Copy full diagnostics")
                 }
             }
         },
