@@ -221,6 +221,29 @@ object HabitCheckInNotifier {
 
             manager.notify(notificationId(habitId), notification)
 
+            // Record whether the OS will actually DELIVER it. notify() returns
+            // normally even when the notification is silently dropped (app
+            // notifications off, or the channel set to NONE), so a clean call
+            // here is not evidence the user saw or heard anything \u2014 this
+            // line is what makes the difference visible in a bug report
+            // instead of leaving "I set it and nothing happened".
+            if (habitId != DIAGNOSTIC_HABIT_ID) {
+                val delivery = AlarmDelivery.audit(context, CHANNEL_ID)
+                when {
+                    !delivery.canRing -> Log.w(
+                        TAG,
+                        "Reminder for '$habitName' was posted but will NOT reach the user: " +
+                            AlarmDelivery.describe(context, CHANNEL_ID),
+                    )
+                    delivery.needsAttention -> Log.i(
+                        TAG,
+                        "Reminder for '$habitName' posted with degraded delivery: " +
+                            AlarmDelivery.describe(context, CHANNEL_ID),
+                    )
+                    else -> Log.d(TAG, "Reminder for '$habitName' posted; delivery path is clear")
+                }
+            }
+
             // Finalize today's check-in the moment the alarm actually rings
             // — this is the "record" the user's habit-tracking is built on,
             // not a guess made back when they merely picked a time. Kept in
@@ -275,9 +298,26 @@ object HabitCheckInNotifier {
             "Habit Reminders",
             NotificationManager.IMPORTANCE_HIGH,  // heads-up + sound + vibrate
         ).apply {
-            description = "Individual habit reminder alarms that fire at the time you set"
+            description = "Individual habit reminders that fire at the time you set"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 250, 100, 250)
+            // RING, don't just buzz. IMPORTANCE_HIGH alone does NOT bypass
+            // Do Not Disturb on most OEM skins — the channel also has to
+            // declare that it carries alarms, which is what makes it
+            // eligible for DND's alarm exception and gives it a real alarm
+            // ringtone instead of the default notification blip. Without
+            // this the channel was HIGH-severity but still "just a
+            // notification", so a phone left in DND or Bedtime mode
+            // overnight silently swallowed the reminder. `setBypassDnd`
+            // is deliberately NOT used: it needs a notification-policy
+            // access grant the app doesn't hold, and asking for one is a
+            // worse UX than the user simply setting an alarm sound.
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
             // USAGE_ALARM plays on the phone's Alarm volume, which most
             // "silent mode" / Do Not Disturb / Bedtime toggles leave
             // untouched — this is what makes the reminder actually ring

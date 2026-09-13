@@ -283,6 +283,43 @@ object AlarmScheduler {
         }.onFailure { Log.w(TAG, "Could not open app details settings", it) }
     }
 
+    /**
+     * When the *system-wide* next alarm clock fires, or null when none is set.
+     *
+     * This is the only public read-back Android offers for "did my
+     * `setAlarmClock` actually take?" — it is the same value the status-bar
+     * alarm icon is drawn from, and it is maintained by the platform across
+     * process death, so it reflects what `AlarmManager` really holds rather
+     * than what the app last *asked* for. It is the in-app equivalent of
+     * `adb shell dumpsys alarm`.
+     *
+     * Caveats that matter when interpreting it, and which are why it is a
+     * diagnostic rather than a hard assertion:
+     *
+     *  - **User-wide, not per-app.** A Clock-app alarm set for later will
+     *    win here. Only a trigger time that matches ours is evidence about
+     *    *our* alarm.
+     *  - **Only `setAlarmClock` registers here.** Our fallback rungs
+     *    (`setExactAndAllowWhileIdle`, `setAndAllowWhileIdle`, `setWindow`)
+     *    are deliberately invisible to it, so a null here does **not** mean
+     *    no alarm is armed — only that no *alarm-clock* alarm is. Reporting
+     *    a false failure off a null would be worse than reporting nothing,
+     *    so callers must combine this with [canScheduleExact] before
+     *    concluding anything.
+     */
+    fun nextArmedAlarmClock(context: Context): Long? =
+        runCatching { alarmManager(context).nextAlarmClock?.triggerTime }.getOrNull()
+
+    /**
+     * True when [expectedTriggerMillis] (within a second) is the alarm
+     * currently registered as the system's next alarm clock. See
+     * [nextArmedAlarmClock] for what this does and does not prove.
+     */
+    fun isArmedAsNextAlarmClock(context: Context, expectedTriggerMillis: Long): Boolean {
+        val armed = nextArmedAlarmClock(context) ?: return false
+        return kotlin.math.abs(armed - expectedTriggerMillis) < 1_000L
+    }
+
     private fun alarmManager(context: Context): AlarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 }
