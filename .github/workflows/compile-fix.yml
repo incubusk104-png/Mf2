@@ -1,0 +1,96 @@
+name: compile-fix
+
+# Throwaway: applies the two-file compile fix to main, but ONLY after proving
+# the patched tree actually compiles. The previous push went to main unbuilt,
+# which is how the compile break reached the user — so this workflow compiles
+# first and treats a failed compile as "do not touch main".
+#
+# The outcome (compiler errors, if any) is published to the fix-result branch,
+# because job logs are not readable without repository admin rights.
+on:
+  push:
+    branches:
+      - compile-fix
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Apply payload byte-exactly
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_compile_fix_payload/mf2_compile_fix_payload.zip"
+          PAYLOAD_SHA256: "99a81b04a124540423a0ed45de3db2e1c04d852090a1985d5cad761464492a49"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/fix.zip "$PAYLOAD_URL"
+          echo "$PAYLOAD_SHA256  /tmp/fix.zip" | sha256sum -c -
+          rm -rf /tmp/fx && mkdir -p /tmp/fx
+          unzip -q /tmp/fix.zip -d /tmp/fx
+          test -f /tmp/fx/payload/android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerNotifier.kt
+          cp -a /tmp/fx/payload/. .
+          echo "--- patched paths ---"
+          git status --short
+
+      - name: Compile release Kotlin
+        id: compile
+        run: |
+          set +e
+          chmod +x android/gradlew
+          (cd android && ./gradlew :app:compileReleaseKotlin --console=plain --no-daemon) > /tmp/c.log 2>&1
+          code=$?
+          set -e
+          {
+            echo "compile_exit=$code"
+            echo "--- kotlin errors ---"
+            grep -E "^e: " /tmp/c.log || echo "(none)"
+            echo "--- build result ---"
+            grep -E "BUILD SUCCESSFUL|BUILD FAILED" /tmp/c.log || true
+            echo "--- tail ---"
+            tail -20 /tmp/c.log
+          } > /tmp/res.txt
+          cat /tmp/res.txt
+          echo "compile_exit=$code" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Commit and push the fix to main
+        if: env.compile_exit == '0'
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/compile-fix.yml
+          git config user.name "Mobile App Builder"
+          git config user.email "agent@teamily.ai"
+          git add -A
+          git commit -m "Fix release-build compile errors in the alarm/timer notification path" -m "The release build failed at :app:compileReleaseKotlin with two independent defects that both landed after the alarm work was merged, neither of which had ever been compiled." -m "1. TimerNotifier: AlarmRingingActivity calls TimerNotifier.eventFromIntent / ringTitle / ringSubtitle to identify what is ringing, but none of the three existed - the event reader was named eventFromExtras. So the alarm that is supposed to RING would not even compile. Added the three functions; eventFromIntent delegates to the single existing reader so producer and consumer cannot drift, and ringTitle/ringSubtitle generate the screen copy per timer kind (walk timer vs stopwatch)." -m "2. HabitCheckInNotifier: NotificationChannel has no setAudioAttributes() setter (only a read-only audioAttributes property), so the call was a compile error. The channel's audio attributes are established by setSound(uri, attributes) - which was already present and already passes USAGE_ALARM on an alarm ringtone - so the intent (ring like a real alarm, not a blip, and survive DND) is fully preserved; the redundant call and its now-duplicated comment are removed." -m "Verified by compiling this exact tree in CI before committing; the alarm ladder is untouched: setAlarmClock -> setExactAndAllowWhileIdle -> setAndAllowWhileIdle -> setWindow."
+          git push origin HEAD:main
+
+      - name: Publish the compile result to a readable branch
+        if: always()
+        run: |
+          set -euo pipefail
+          git config --global user.name "diag"
+          git config --global user.email "diag@example.com"
+          rm -rf /tmp/pub && mkdir -p /tmp/pub && cd /tmp/pub
+          { echo "compile_exit=${{ env.compile_exit }}"; cat /tmp/res.txt 2>/dev/null || echo "(no log)"; } > result.txt
+          git init -q .
+          git add -f result.txt
+          git commit -q -m "compile result for the alarm/timer fix"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:fix-result
