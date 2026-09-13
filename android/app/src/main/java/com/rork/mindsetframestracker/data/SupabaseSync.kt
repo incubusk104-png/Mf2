@@ -714,9 +714,17 @@ class SupabaseSync(context: Context) {
                     monitored_app_label = it.monitoredAppLabel,
                 )
             }
-            val checkins = data.checkIns.flatMap { (habitId, days) ->
-                days.map { day -> CheckinRow(user_id = uid, habit_id = habitId, day = day) }
-            }
+            // Defense in depth: habit_id is a `uuid` column in Supabase.
+            // MindsetRepository.load() already strips non-UUID keys (e.g. the
+            // old "diagnostic_test" button bug) on read, but filtering again
+            // here means this function can never again get stuck returning
+            // the same 400 on every sync attempt just because one stray key
+            // slipped into the local checkIns map some other way.
+            val checkins = data.checkIns
+                .filterKeys { habitId -> runCatching { java.util.UUID.fromString(habitId) }.isSuccess }
+                .flatMap { (habitId, days) ->
+                    days.map { day -> CheckinRow(user_id = uid, habit_id = habitId, day = day) }
+                }
             val moods = data.moodHistory.map { (day, mood) ->
                 MoodLogRow(user_id = uid, day = day, mode = mood.name)
             }
