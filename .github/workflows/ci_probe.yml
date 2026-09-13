@@ -1,0 +1,42 @@
+name: CI Probe
+on:
+  push:
+    branches: ["ci-probe"]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Compile and capture errors
+        continue-on-error: true
+        run: |
+          set +e
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8" -Porg.gradle.configuration-cache=false > /tmp/out.txt 2>&1
+          echo "GRADLE_EXIT=$?" > ../probe_result.txt
+          echo "=== FAILING TASKS ===" >> ../probe_result.txt
+          grep -nE "> Task .*FAILED|Execution failed for task" /tmp/out.txt | head -40 >> ../probe_result.txt
+          echo "=== COMPILER DIAGNOSTICS ===" >> ../probe_result.txt
+          grep -nE "^(e: |w: )|error:|Caused by" /tmp/out.txt | head -200 >> ../probe_result.txt
+          echo "=== TAIL ===" >> ../probe_result.txt
+          tail -80 /tmp/out.txt >> ../probe_result.txt
+      - name: Commit probe results
+        run: |
+          cd ..
+          git config user.name "ci-probe"
+          git config user.email "ci-probe@users.noreply.github.com"
+          git add -f probe_result.txt
+          git commit -m "CI probe result" || echo "nothing to commit"
+          git push origin HEAD:ci-probe
