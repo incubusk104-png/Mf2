@@ -99,6 +99,25 @@ class MindsetRepository(context: Context) {
         }
     }
 
+    /**
+     * Marks [habitId] done for today directly against the stored blob —
+     * additive only, never un-checks an already-completed day. Exists
+     * specifically so [com.rork.mindsetframestracker.notifications.HabitCheckInNotifier]
+     * can record the check-in the moment the alarm actually RINGS (the app
+     * process may be dead at that point — a BroadcastReceiver has no
+     * AppViewModel to call into, only a Context), instead of prematurely
+     * marking a habit done back when the user merely set the alarm's time.
+     * Returns true if this call actually changed anything.
+     */
+    fun markHabitDoneToday(habitId: String): Boolean {
+        val current = load()
+        val today = Dates.todayKey()
+        val days = current.checkIns[habitId].orEmpty().toMutableSet()
+        if (!days.add(today)) return false
+        save(current.copy(checkIns = current.checkIns + (habitId to days.toList())))
+        return true
+    }
+
     /** Appends one ActivityRecord and persists — used by Polar / Health Connect / Strava sync. */
     fun saveActivityRecord(record: ActivityRecord) {
         val current = load()
