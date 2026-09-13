@@ -233,6 +233,39 @@ object TimerNotifier {
         )
     }
 
+    /**
+     * Reads the timer event a full-screen launch was started with.
+     *
+     * Reading it back *is* how [AlarmRingingActivity] decides what is ringing.
+     * It used to call `TimerNotifier.eventFromIntent(intent)` while only
+     * [eventFromExtras] existed, which failed to resolve — so the ringing screen
+     * could not compile at all. They are one implementation, not two.
+     */
+    fun eventFromIntent(intent: Intent): TimerCompletionEvent? = eventFromExtras(intent)
+
+    /**
+     * The headline for a ringing [event], shared by the notification and
+     * [AlarmRingingActivity]
+     * so the alert and the screen that opens from it can never disagree about
+     * what finished.
+     */
+    fun ringTitle(event: TimerCompletionEvent): String = when (event.kind) {
+        TimerKind.WALK_TIMER -> "Walk complete"
+        TimerKind.STOPWATCH -> "Target reached"
+    }
+
+    /** Supporting line for a ringing [event], naming the duration reached. */
+    fun ringSubtitle(event: TimerCompletionEvent): String = buildString {
+        append(
+            if (event.kind == TimerKind.WALK_TIMER) {
+                "${formatTimerDuration(event.targetSeconds)} walk finished"
+            } else {
+                "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
+            },
+        )
+        if (event.label.isNotBlank()) append(" — ${event.label}")
+    }
+
     /** Puts a [TimerCompletionEvent] into extras (used by the ringing screen's tests/shares). */
     fun applyEventExtras(intent: Intent, event: TimerCompletionEvent) {
         intent.putExtra(EXTRA_EVENT_ID, event.eventId)
@@ -242,51 +275,6 @@ object TimerNotifier {
         intent.putExtra(EXTRA_TIMER_HABIT_ID, event.habitId)
         intent.putExtra(EXTRA_TIMER_TARGET, event.targetSeconds)
         intent.putExtra(EXTRA_TIMER_ELAPSED, event.elapsedSeconds)
-    }
-
-    /**
-     * Reads a [TimerCompletionEvent] back out of a ringing intent.
-     *
-     * This is the name [AlarmRingingActivity] looks for; it delegates to
-     * [eventFromExtras] so there is exactly ONE reader of these extras. The
-     * producer ([postCompletion]) and the consumer (the ringing screen) must
-     * agree on every key, and a single implementation is what keeps them from
-     * drifting apart.
-     */
-    fun eventFromIntent(intent: Intent): TimerCompletionEvent? = eventFromExtras(intent)
-
-    /**
-     * Headline for the ringing screen.
-     *
-     * A walk timer is measured against a target, so reaching it is an
-     * achievement; a stopwatch merely stopped. Wording both the same would
-     * make a completed 30-minute walk read like a stopwatch that happened to
-     * halt.
-     */
-    fun ringTitle(event: TimerCompletionEvent): String = when (event.kind) {
-        TimerKind.WALK_TIMER -> "Walk complete"
-        TimerKind.STOPWATCH -> "Stopwatch stopped"
-    }
-
-    /**
-     * Subtitle for the ringing screen — what finished, and for a walk timer
-     * with a target, the elapsed time measured against it.
-     */
-    fun ringSubtitle(event: TimerCompletionEvent): String {
-        val label = event.label.ifBlank {
-            when (event.kind) {
-                TimerKind.WALK_TIMER -> "Walk timer"
-                TimerKind.STOPWATCH -> "Stopwatch"
-            }
-        }
-        val elapsed = formatTimerDuration(event.elapsedSeconds)
-        // A stopwatch can be open-ended, so "of 0:00" would be nonsense;
-        // only compare against a target that was actually set.
-        return if (event.targetSeconds > 0) {
-            "$label — $elapsed of ${formatTimerDuration(event.targetSeconds)}"
-        } else {
-            "$label — $elapsed"
-        }
     }
 
     /** True when the app may currently ring full-screen (API 34+: its own grant). */

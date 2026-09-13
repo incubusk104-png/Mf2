@@ -301,16 +301,27 @@ object HabitCheckInNotifier {
             description = "Individual habit reminders that fire at the time you set"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 250, 100, 250)
+            // RING, don't just buzz. IMPORTANCE_HIGH alone does NOT bypass
+            // Do Not Disturb on most OEM skins — the channel also has to
+            // declare that it carries alarms, which is what makes it
+            // eligible for DND's alarm exception and gives it a real alarm
+            // ringtone instead of the default notification blip. Without
+            // this the channel was HIGH-severity but still "just a
+            // notification", so a phone left in DND or Bedtime mode
+            // overnight silently swallowed the reminder. `setBypassDnd`
+            // is deliberately NOT used: it needs a notification-policy
+            // access grant the app doesn't hold, and asking for one is a
+            // worse UX than the user simply setting an alarm sound.
+            // NOTE: there is deliberately no setAudioAttributes() call here.
+            // NotificationChannel exposes no such method (only setSound(Uri,
+            // AudioAttributes) and getAudioAttributes()), so the call that used
+            // to sit here never compiled. The sound *stream* is set by the
+            // setSound(...) below, which is where USAGE_ALARM — i.e. alarm
+            // volume, unaffected by silent mode / DND — actually comes from.
             // USAGE_ALARM plays on the phone's Alarm volume, which most
             // "silent mode" / Do Not Disturb / Bedtime toggles leave
             // untouched — this is what makes the reminder actually ring
             // instead of getting silently swallowed like a normal notification.
-            //
-            // Set the sound's usage during construction, NOT with
-            // `setAudioAttributes()` afterwards: NotificationChannel exposes no
-            // such setter (only a read-only `audioAttributes` property), so
-            // calling one is a compile error — the channel's audio attributes
-            // can only be established through `setSound(uri, attributes)`.
             setSound(
                 RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_ALARM)
                     ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
