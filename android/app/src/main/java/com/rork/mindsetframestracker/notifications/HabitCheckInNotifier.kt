@@ -12,6 +12,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.MainActivity
 import com.rork.mindsetframestracker.R
@@ -51,6 +52,16 @@ object HabitCheckInNotifier {
     sealed class NotifyResult {
         object Posted : NotifyResult()
         object PermissionMissing : NotifyResult()
+        /**
+         * POST_NOTIFICATIONS is granted, but the app (or specifically the
+         * "Habit Reminders" channel) has been turned off at the system
+         * level — via Settings > Apps > notifications, or a MIUI-specific
+         * notification management screen. Android does NOT revoke the
+         * runtime permission when this happens, so this can only be
+         * detected separately from the permission check, and only right
+         * before actually posting.
+         */
+        object Blocked : NotifyResult()
         data class Failed(val error: String) : NotifyResult()
     }
 
@@ -85,8 +96,31 @@ object HabitCheckInNotifier {
             if (!granted) return NotifyResult.PermissionMissing
         }
 
+        // BUG FIX: POST_NOTIFICATIONS being granted is necessary but NOT
+        // sufficient. If the app's notifications get turned off from system
+        // settings after that permission was granted — including MIUI's own
+        // notification-management screen, which is separate from the
+        // Android permission — Android does NOT revoke the permission
+        // grant. The check above still passes, ensureChannel() below still
+        // succeeds, and manager.notify() further down returns completely
+        // normally with no exception. The system just silently discards the
+        // notification before it reaches the shade. That is exactly "the
+        // app said it sent successfully but nothing appears." Checking
+        // NotificationManagerCompat.areNotificationsEnabled() — and, once
+        // the channel exists, that channel's own importance — is the only
+        // way to catch this instead of wrongly reporting success.
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return NotifyResult.Blocked
+        }
+
         return runCatching {
             ensureChannel(context)
+
+            val channel = manager.getNotificationChannel(CHANNEL_ID)
+            if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                return NotifyResult.Blocked
+            }
 
             val tapIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -139,7 +173,6 @@ object HabitCheckInNotifier {
                 .setFullScreenIntent(ringingPendingIntent, true)
                 .build()
 
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(notificationId(habitId), notification)
 
             // Finalize today's check-in the moment the alarm actually rings
