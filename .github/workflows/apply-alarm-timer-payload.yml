@@ -1,16 +1,11 @@
 name: Apply alarm-timer payload
 
 # One-shot helper. Downloads the updated project archive, verifies it by
-# SHA-256, overlays it onto the repository (replacing matching paths and adding
-# the new files), removes this workflow file, and pushes one commit.
-#
-# Two triggers: workflow_dispatch for a manual run, and a push to the marker
-# file so it can be started deterministically right after being added.
+# SHA-256, overlays it onto the repository, removes its own trigger files, and
+# pushes one clean commit to main.
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '.trigger-apply-payload'
 
 permissions:
   contents: write
@@ -26,7 +21,7 @@ jobs:
 
       - name: Download, verify and unpack the updated project
         env:
-          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2-alarm-review/mf2_36_updated.zip?tk=c2l0ZTpjYTYzNmQ0ZC0zNmM2LTQ0MDctOTA1OS0yNGZkYmFiMjNiMjAvZG9jdW1lbnRzL21mMi1hbGFybS1yZXZpZXc6MTc4OTMyNTE0Mw.ZDdiZTIxMDlkNDIzZGZhZjc3ODk2OGY0YjcwYjAxNGI"
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2-alarm-review/mf2_36_updated.zip?tk=c2l0ZTpjYTYzNmQ0ZC0zNmM2LTQ0MDctOTA1OS0yNGZkYmFiMjNiMjAvZG9jdW1lbnRzL21mMi1hbGFybS1yZXZpZXc6MTc4OTMyNTU1OQ.MDZkMmY3NDYxZWU1ZWMwMWRlZDk4NTkxOThmZDAyMWY"
           PAYLOAD_SHA256: "a6afbca06467950f5b65860db4e8b079e84b351fadcc9119964c4003c486bebf"
         run: |
           set -euo pipefail
@@ -37,24 +32,22 @@ jobs:
           unzip -q /tmp/upd.zip -d /tmp/upd
           test -d /tmp/upd/Mf2-main
           cp -a /tmp/upd/Mf2-main/. .
-          rm -f .github/workflows/apply-alarm-timer-payload.yml .trigger-apply-payload
+          rm -f .github/workflows/apply-alarm-timer-payload.yml EMPTY_BASE_FOR_PAYLOAD.md .trigger-apply-payload
           echo "--- resulting change set ---"
           git status --short
           echo "--- key files ---"
           ls -la ALARM_REPORT.md
           ls -la android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmScheduler.kt
 
-      - name: Commit and push
+      - name: Commit and push to main
         run: |
           set -euo pipefail
           git config user.name "incubusk104-png"
           git config user.email "incubusk104@gmail.com"
           git add -A
-          git commit -m "Fix alarm reliability under Doze/revoked exact-alarm grants; add walk timer & stopwatch with one-time completion popup
-
-- single AlarmScheduler core: setAlarmClock -> setExactAndAllowWhileIdle -> setAndAllowWhileIdle -> setWindow, never silently drops an alarm
-- real Activity show-intent, namespaced PendingIntents, safe cancel
-- BootReceiver preserves repeatDaysMask
-- new timer stack + persisted one-time completion event (fires once per event, never on re-render/resume/nav/reboot)"
+          git commit -m "Fix alarm reliability under Doze/revoked exact-alarm grants; add walk timer & stopwatch with one-time completion popup" -m "- single AlarmScheduler core: setAlarmClock -> setExactAndAllowWhileIdle -> setAndAllowWhileIdle -> setWindow, never silently drops an alarm
+          - real Activity show-intent, namespaced PendingIntents, safe cancel
+          - BootReceiver preserves repeatDaysMask
+          - new timer stack + persisted one-time completion event (fires once per event, never on re-render/resume/nav/reboot)"
           git push origin HEAD:main
           git log --oneline -1
