@@ -117,8 +117,21 @@ object HabitAlarmScheduler {
 
         runCatching {
             if (canUseExact) {
+                // AlarmClockInfo's 2nd param is a *show* intent — what the OS
+                // launches if the user taps the alarm-clock icon in the status
+                // bar. It must point at an Activity; the broadcast
+                // `pendingIntent` below (which targets HabitReminderReceiver)
+                // is the wrong PendingIntent type for this slot.
+                val showIntent = PendingIntent.getActivity(
+                    context,
+                    requestCode(habitId),
+                    Intent(context, com.rork.mindsetframestracker.MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
                 alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(triggerAtMillis, pendingIntent),
+                    AlarmManager.AlarmClockInfo(triggerAtMillis, showIntent),
                     pendingIntent,
                 )
             } else {
