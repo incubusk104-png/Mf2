@@ -568,7 +568,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         } else {
                             when (val result = HabitCheckInNotifier.showResult(
                                 context = context,
-                                habitId = "diagnostic_test",
+                                habitId = HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID,
                                 habitName = "Test reminder",
                                 reschedule = false,
                             )) {
