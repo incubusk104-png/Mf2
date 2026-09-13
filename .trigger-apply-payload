@@ -1,0 +1,4 @@
+Trigger for the Apply alarm-timer payload workflow.
+
+This marker makes the payload workflow start deterministically on push.
+The workflow deletes both this file and itself in the same commit it applies.
