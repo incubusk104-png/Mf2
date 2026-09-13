@@ -586,6 +586,26 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                                         Toast.LENGTH_LONG,
                                     ).show()
                                 }
+                                is HabitCheckInNotifier.NotifyResult.Blocked -> {
+                                    // Permission is granted, but the app (or the
+                                    // "Habit Reminders" channel specifically) is
+                                    // switched off at the system level — most
+                                    // often on MIUI's own notification-management
+                                    // screen. Send the user straight to the
+                                    // app's system notification settings instead
+                                    // of just telling them where to look.
+                                    Toast.makeText(
+                                        context,
+                                        "Notifications are switched off for this app at the system level. Opening notification settings — turn the app AND \"Habit Reminders\" on.",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                    runCatching {
+                                        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                }
                                 is HabitCheckInNotifier.NotifyResult.Failed -> {
                                     Toast.makeText(
                                         context,
