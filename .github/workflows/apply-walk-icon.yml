@@ -1,0 +1,41 @@
+name: Apply walk-icon popup fix
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download, verify and unpack payload
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/walk_icon_popup_payload/walk_icon_popup_payload.zip"
+          PAYLOAD_SHA256: "ce220215028e67e8abf4f1b976c72f202b44a1e864e57391b0e9512453e51fec"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/upd.zip "$PAYLOAD_URL"
+          echo "$PAYLOAD_SHA256  /tmp/upd.zip" | sha256sum -c -
+          mkdir -p /tmp/upd
+          unzip -q /tmp/upd.zip -d /tmp/upd
+          test -f /tmp/upd/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/TimerScreen.kt
+          cp -a /tmp/upd/android/. android/
+          rm -f .github/workflows/apply-walk-icon.yml
+          git status --short
+
+      - name: Commit and push to main
+        run: |
+          set -euo pipefail
+          git config user.name "incubusk104-png"
+          git config user.email "incubusk104@gmail.com"
+          git add -A
+          git commit -m "Move the walk icon out of the timer entry card and into the one-time completion popup" -m "- walk badge (DirectionsWalk in a tinted circle) now renders as the popup's icon" -m "- popup shown once per walk event; ledger/acknowledge path untouched" -m "- timer entry card keeps title, subtitle and chevron only" -m "- drop the now-unused filled CheckCircle import" -m "- no change to alarm/timer scheduling, ringing screen or timer/stopwatch placement"
+          git push origin HEAD:main
