@@ -35,6 +35,8 @@ class HabitReminderReceiver : BroadcastReceiver() {
             is HabitCheckInNotifier.NotifyResult.Posted -> Unit
             is HabitCheckInNotifier.NotifyResult.PermissionMissing ->
                 Log.w(TAG, "Habit reminder for '$habitName' not shown: notification permission missing")
+            is HabitCheckInNotifier.NotifyResult.Blocked ->
+                Log.w(TAG, "Habit reminder for '$habitName' not shown: notifications are switched off for this app/channel at the system level")
             is HabitCheckInNotifier.NotifyResult.Failed ->
                 Log.w(TAG, "Habit reminder for '$habitName' failed: ${result.error}")
         }
