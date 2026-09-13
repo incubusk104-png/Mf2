@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
@@ -548,12 +547,25 @@ fun TimerCompletionPopup(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Icon(
-                imageVector = if (isWalk) Icons.Filled.CheckCircle else Icons.Outlined.Timer,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp),
-            )
+            // The walk mark belongs to the walk's own moment, not to a screen:
+            // this is the same circle-and-walking-figure badge that used to sit
+            // on the timer entry card, and it now lives here — inside the popup
+            // that appears once when the walk alarm goes off. A stopwatch goal
+            // (not a walk) keeps the plain timer glyph.
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isWalk) Icons.Outlined.DirectionsWalk else Icons.Outlined.Timer,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         },
         title = {
             Text(if (isWalk) "Walk complete!" else "Goal reached!")
@@ -648,21 +660,12 @@ fun TimerEntryCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.DirectionsWalk,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
+            // No walk badge here any more. The walking figure is not a
+            // browsing-surface affordance: it belongs to the moment the walk
+            // alarm actually goes off, and it is drawn there \u2014 inside the
+            // one-time completion popup. The card stays as the plain entry
+            // point (title + subtitle + chevron) and still opens TimerScreen
+            // exactly as before.
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Walk timer & stopwatch",
