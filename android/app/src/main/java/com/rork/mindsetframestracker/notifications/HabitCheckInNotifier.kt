@@ -22,6 +22,26 @@ object HabitCheckInNotifier {
     const val CHANNEL_ID = "habit_reminder"
     private const val NOTIFICATION_ID_BASE = 3000
 
+    /**
+     * habitId used by the "Send a test reminder now" diagnostic button in
+     * AlarmPermissionPromptDialog. It is NOT a real habit and NOT a valid
+     * UUID.
+     *
+     * BUG FIX: showResult() used to call markHabitDoneToday() for this id
+     * unconditionally, same as any real habit. That wrote a "diagnostic_test"
+     * key into the local checkIns map, and SupabaseSync.pushSnapshot() later
+     * tried to upsert it into the `checkins` table, whose habit_id column is
+     * type uuid — Postgres rejected it with
+     * `invalid input syntax for type uuid: "diagnostic_test"` on every sync
+     * from then on. Because pushSnapshot() returns on the first failed
+     * upsert, this didn't just fail check-in syncing — it silently blocked
+     * settings/mood/backup syncing too, for good, until the bad key was
+     * removed. Recognizing this id and skipping the write fixes it at the
+     * source; MindsetRepository.load() also strips any pre-existing bad
+     * entry so already-affected installs self-heal without clearing data.
+     */
+    const val DIAGNOSTIC_HABIT_ID = "diagnostic_test"
+
     /** Stable notification id for a given habit — shared with snooze/cancel logic. */
     fun notificationId(habitId: String): Int = NOTIFICATION_ID_BASE + habitId.hashCode()
 
@@ -128,9 +148,14 @@ object HabitCheckInNotifier {
             // its own runCatching: if persistence ever hiccups, the
             // notification the user actually sees/hears should still count
             // as successfully posted.
-            runCatching {
-                com.rork.mindsetframestracker.data.MindsetRepository(context).markHabitDoneToday(habitId)
-            }.onFailure { Log.w(TAG, "Failed to record check-in for '$habitName' at ring-time", it) }
+            //
+            // The diagnostic test button is not a real habit — never write a
+            // check-in for it (see DIAGNOSTIC_HABIT_ID doc above).
+            if (habitId != DIAGNOSTIC_HABIT_ID) {
+                runCatching {
+                    com.rork.mindsetframestracker.data.MindsetRepository(context).markHabitDoneToday(habitId)
+                }.onFailure { Log.w(TAG, "Failed to record check-in for '$habitName' at ring-time", it) }
+            }
 
             if (reschedule) {
                 HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
