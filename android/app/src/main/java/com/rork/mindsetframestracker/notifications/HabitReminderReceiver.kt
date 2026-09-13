@@ -36,6 +36,9 @@ class HabitReminderReceiver : BroadcastReceiver() {
                 if (result.doNotDisturbActive) {
                     Log.w(TAG, "Habit reminder for '$habitName' posted, but Do Not Disturb / a Focus mode is active — it may not visibly appear")
                 }
+                if (result.fullScreenIntentUnavailable) {
+                    Log.w(TAG, "Habit reminder for '$habitName' posted without a full-screen intent — USE_FULL_SCREEN_INTENT isn't granted, so this will only show as a normal notification, not a ringing alarm screen")
+                }
             }
             is HabitCheckInNotifier.NotifyResult.PermissionMissing ->
                 Log.w(TAG, "Habit reminder for '$habitName' not shown: notification permission missing")
