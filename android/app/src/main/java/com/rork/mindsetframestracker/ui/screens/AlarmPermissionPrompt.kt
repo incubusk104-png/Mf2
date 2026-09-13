@@ -141,6 +141,20 @@ object AlarmPermissions {
             isIgnoringBatteryOptimizations(context) &&
             hasFullScreenIntentPermission(context)
 
+    /**
+     * True when the alarm-permission dialog actually has something left to
+     * show — either a plain Android permission is missing, OR (critically)
+     * this is a non-Pixel OEM skin whose Autostart/Battery-saver/Pop-up
+     * steps haven't been confirmed yet. [allGranted] alone used to gate the
+     * auto-popup, which meant a MIUI/ColorOS/etc. phone with all the plain
+     * Android permissions already granted would never see the prompt at
+     * all — exactly the "the permission dialog stopped showing up" bug,
+     * even though the OEM-specific steps (the most common real reason a
+     * MIUI alarm goes silent) were still pending.
+     */
+    fun needsAttention(context: Context): Boolean =
+        !allGranted(context) || (needsOemConfirmation() && !OemPermissionState.allConfirmed(context))
+
     fun isMiuiDevice(): Boolean = oemFamily() == OemFamily.MIUI
 
     /**
