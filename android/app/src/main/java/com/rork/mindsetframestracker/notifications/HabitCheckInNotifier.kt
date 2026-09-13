@@ -50,7 +50,21 @@ object HabitCheckInNotifier {
      * "Send a test reminder now" button) tell the user EXACTLY what happened
      * instead of a generic true/false. */
     sealed class NotifyResult {
-        object Posted : NotifyResult()
+        /**
+         * The system accepted the notification with no error — but that is
+         * NOT the same as "the user will actually see it." [doNotDisturbActive]
+         * flags a real, common gap: Do Not Disturb / a Focus mode can be on
+         * at the OS/OEM level (visible as a crossed-out bell icon in the
+         * status bar) and hide a notification from the shade entirely, even
+         * one on an IMPORTANCE_HIGH / CATEGORY_ALARM channel — the alarm
+         * audio-stream trick only guarantees the SOUND bypasses silent mode,
+         * not that every OEM's DND implementation renders the visual entry.
+         * There is no callback for "the shade actually displayed this" —
+         * checking the interruption filter at post-time is the closest a
+         * third-party app can get to warning about this instead of wrongly
+         * implying total success.
+         */
+        data class Posted(val doNotDisturbActive: Boolean) : NotifyResult()
         object PermissionMissing : NotifyResult()
         /**
          * POST_NOTIFICATIONS is granted, but the app (or specifically the
@@ -194,7 +208,10 @@ object HabitCheckInNotifier {
                 HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
             }
         }.fold(
-            onSuccess = { NotifyResult.Posted },
+            onSuccess = {
+                val dndActive = manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+                NotifyResult.Posted(doNotDisturbActive = dndActive)
+            },
             onFailure = { error ->
                 Log.e(TAG, "Failed to post reminder for '$habitName'", error)
                 NotifyResult.Failed("${error.javaClass.simpleName}: ${error.message}")
