@@ -305,7 +305,7 @@ class MainActivity : ComponentActivity() {
         /** Extra that asks the timer to stop before the UI opens. */
         const val EXTRA_STOP_TIMER = "extra_stop_timer"
 
-        /** Value of [EXTRA_OPEN_ROUTE] that opens the walk timer / stopwatch. */
+        /** Value of [EXTRA_OPEN_ROUTE] that opens the timer / stopwatch. */
         const val ROUTE_TIMER = "timer"
     }
 }

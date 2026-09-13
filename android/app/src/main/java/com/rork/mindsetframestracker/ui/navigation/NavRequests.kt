@@ -27,6 +27,16 @@ object NavRequests {
     /** Timer route — matches the `composable(\"timer\")` destination. */
     const val ROUTE_TIMER = "timer"
 
+    /**
+     * Habits route — matches the `composable("habits")` destination.
+     *
+     * The ring's "Timer / stopwatch" action lands here rather than on the
+     * timer screen: the options belong to the habit's own icon, so the user is
+     * taken to the icon (whose one-shot options sheet is waiting) instead of
+     * to a screen with no habit attached to it.
+     */
+    const val ROUTE_HABITS = "habits"
+
     fun request(route: String) {
         _route.value = route
     }

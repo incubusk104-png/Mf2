@@ -51,7 +51,7 @@ object TimerAlarmScheduler {
             triggerAtMillis = deadline,
             pendingIntent = pendingIntent,
             wakeUp = true,
-            // The user is actively waiting on this one (a walk they are on, a
+            // The user is actively waiting on this one (a timer they are on, a
             // stopwatch they are watching) \u2014 it must survive Doze, so the
             // allowWhileIdle fallbacks stay enabled.
             allowWhileIdle = true,

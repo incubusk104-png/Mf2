@@ -54,7 +54,7 @@ import android.util.Log
  * Plain (non-`allowWhileIdle`) `setExact` is deliberately **never** used: it
  * is deferred until the next Doze maintenance window \u2014 up to ~15 minutes of
  * silence in the exact scenario users complain about most (screen off, phone
- * asleep, \"walk at 8:45 PM\").
+ * asleep, \"timer at 8:45 PM\").
  */
 object AlarmScheduler {
 

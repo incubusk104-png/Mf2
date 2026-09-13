@@ -25,7 +25,7 @@ import com.rork.mindsetframestracker.data.formatTimerDuration
  *
  * Two *distinct* notifications, because they answer two different questions:
  *
- * 1. **The completion alert** ([postCompletion]) \u2014 \"your walk timer
+ * 1. **The completion alert** ([postCompletion]) \u2014 \"your timer
  *    finished\". Uses the ALARM audio stream and an alarm-grade channel so it
  *    cuts through silent mode and Do Not Disturb the same way the habit
  *    reminders do, plus a full-screen intent that opens [AlarmRingingActivity]
@@ -135,13 +135,13 @@ object TimerNotifier {
                     runCatching { manager.canUseFullScreenIntent() }.getOrDefault(false)
 
             val title = when (event.kind) {
-                TimerKind.WALK_TIMER -> "Walk complete"
+                TimerKind.TIMER -> "Timer complete"
                 TimerKind.STOPWATCH -> "Target reached"
             }
             val body = buildString {
                 append(
-                    if (event.kind == TimerKind.WALK_TIMER) {
-                        "${formatTimerDuration(event.targetSeconds)} walk finished"
+                    if (event.kind == TimerKind.TIMER) {
+                        "${formatTimerDuration(event.targetSeconds)} timer finished"
                     } else {
                         "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
                     },
@@ -221,7 +221,7 @@ object TimerNotifier {
     fun eventFromExtras(intent: Intent): TimerCompletionEvent? {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID) ?: return null
         val kind = runCatching { TimerKind.valueOf(intent.getStringExtra(EXTRA_TIMER_KIND) ?: "") }
-            .getOrDefault(TimerKind.WALK_TIMER)
+            .getOrDefault(TimerKind.TIMER)
         return TimerCompletionEvent(
             eventId = eventId,
             runId = intent.getStringExtra(EXTRA_TIMER_RUN_ID).orEmpty(),
@@ -250,15 +250,15 @@ object TimerNotifier {
      * what finished.
      */
     fun ringTitle(event: TimerCompletionEvent): String = when (event.kind) {
-        TimerKind.WALK_TIMER -> "Walk complete"
+        TimerKind.TIMER -> "Timer complete"
         TimerKind.STOPWATCH -> "Target reached"
     }
 
     /** Supporting line for a ringing [event], naming the duration reached. */
     fun ringSubtitle(event: TimerCompletionEvent): String = buildString {
         append(
-            if (event.kind == TimerKind.WALK_TIMER) {
-                "${formatTimerDuration(event.targetSeconds)} walk finished"
+            if (event.kind == TimerKind.TIMER) {
+                "${formatTimerDuration(event.targetSeconds)} timer finished"
             } else {
                 "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
             },
@@ -311,7 +311,7 @@ object TimerNotifier {
                     "Timer alarms",
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    description = "Rings when a walk timer or stopwatch target is reached"
+                    description = "Rings when a timer or stopwatch target is reached"
                     enableVibration(true)
                     vibrationPattern = longArrayOf(0, 400, 200, 400)
                     setSound(

@@ -116,6 +116,18 @@ object TimerCompletion {
         if (!habitId.isNullOrBlank()) {
             runCatching { MindsetRepository(context).markHabitDoneToday(habitId) }
                 .onFailure { Log.w(TAG, "Failed to record habit $habitId from timer completion", it) }
+
+            // ── Auto-sync the activity from the connected app ──
+            // The timer/stopwatch the user just finished IS the activity, but
+            // the numbers that count for the habit (steps, distance) live in
+            // Strava / Health Connect / Polar. Leaving a one-shot request here
+            // — rather than syncing inline — keeps this completion path free of
+            // network and OAuth work: a headless alarm-time completion has no
+            // UI to consent from and no guarantee the tokens are fresh. The
+            // Habits screen picks the request up on next resume and pulls the
+            // data for that habit.
+            runCatching { HabitTimerRequests.requestAutoSync(context, habitId) }
+                .onFailure { Log.w(TAG, "Failed to queue activity sync for habit $habitId", it) }
         }
     }
 

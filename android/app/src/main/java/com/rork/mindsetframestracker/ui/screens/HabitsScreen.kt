@@ -30,6 +30,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +42,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.data.Habit
@@ -54,6 +60,7 @@ import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
+import com.rork.mindsetframestracker.notifications.HabitTimerRequests
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
@@ -153,6 +160,73 @@ fun HabitsScreen(
         data.habits.mapNotNull { habit -> habit.iconId?.let { it to habit.reminderMinutes } }.toMap()
     }
 
+    // ── Timer/stopwatch options, opened from the habit icon itself ──
+    // The habit's alarm leaves a one-shot request (see [HabitTimerRequests]);
+    // we read it and CONSUME it in the same breath. Consuming immediately is
+    // what makes the options appear exactly once per ring: a recomposition, a
+    // resume, a navigation or a reboot all find the request already gone.
+    //
+    // Keyed on a resume counter rather than `Unit` because the ringing screen
+    // is a separate activity — when it finishes, this screen is merely
+    // resumed, and a `Unit`-keyed effect would never re-run to notice.
+    var timerOptionsRequest by remember { mutableStateOf<HabitTimerRequests.Request?>(null) }
+    var pendingAutoSyncHabitId by remember { mutableStateOf<String?>(null) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumeTick by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(resumeTick) {
+        HabitTimerRequests.peek(context)?.let { pending ->
+            HabitTimerRequests.consume(context)
+            timerOptionsRequest = pending
+        }
+        pendingAutoSyncHabitId = HabitTimerRequests.peekAutoSync(context)
+    }
+
+    // ── Auto-sync: pull the habit's activity from the connected app ──
+    // A finished timer/stopwatch leaves the habit id behind. We clear the flag
+    // only once the sync has actually been dispatched, so an empty first
+    // composition (habits still loading) cannot silently swallow it.
+    LaunchedEffect(pendingAutoSyncHabitId, data.habits) {
+        val habitId = pendingAutoSyncHabitId ?: return@LaunchedEffect
+        val habit = data.habits.firstOrNull { it.id == habitId } ?: return@LaunchedEffect
+        val iconId = habit.iconId ?: return@LaunchedEffect
+
+        if (!isActivityTrackableIcon(iconId)) {
+            // Nothing to pull for a habit with no activity source — clear it
+            // rather than leave a flag that can never be satisfied.
+            HabitTimerRequests.consumeAutoSync(context)
+            pendingAutoSyncHabitId = null
+            return@LaunchedEffect
+        }
+
+        val activityType = stravaActivityTypeFor(iconId)
+        val synced = if (viewModel.isStravaConnected()) {
+            viewModel.syncStravaActivities(habitId, activityType); true
+        } else if (data.settings.healthConnectConnected) {
+            viewModel.syncHealthConnectToHabit(habitId, activityType); true
+        } else if (viewModel.isPolarConnected()) {
+            viewModel.syncPolarToHabit(habitId, activityType); true
+        } else {
+            false
+        }
+
+        HabitTimerRequests.consumeAutoSync(context)
+        pendingAutoSyncHabitId = null
+        if (synced) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Synced today's activity for ${habit.name}")
+            }
+        }
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -180,13 +254,6 @@ fun HabitsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
-                    // Walk timer & stopwatch entry point. Moved here from the
-                    // Today screen: the timers belong with the habits/tracking
-                    // area, not under the daily check-in header. Renders the
-                    // live countdown while a run is active, otherwise the
-                    // "start a walk timer" affordance — both open TimerScreen.
-                    Spacer(Modifier.height(14.dp))
-                    TimerEntryCard(onOpenTimer = onOpenTimer)
                 }
             },
             onIconTapped = { icon ->
@@ -240,6 +307,19 @@ fun HabitsScreen(
         AlarmPickerDialog(
             habitName = icon.label,
             defaultMinutes = icon.defaultReminderMinutes,
+            onTimerOptions = {
+                // In-app path: the sheet is shown directly. No persisted
+                // hand-off is involved here — that exists only for the
+                // alarm-time flow, which may run with no UI at all.
+                val existing = data.habits.firstOrNull { it.iconId == icon.id }
+                timerOptionsRequest = HabitTimerRequests.Request(
+                    habitId = existing?.id.orEmpty(),
+                    habitName = icon.label,
+                    iconId = icon.id,
+                )
+                alarmPickerIcon = null
+                alarmSetupExistingHabitId = null
+            },
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
@@ -552,6 +632,20 @@ fun HabitsScreen(
             onRestore = { viewModel.restoreSubscription() },
         )
     }
+
+    // ── The timer / stopwatch choice, anchored to its habit icon ──
+    // Opened only from the habit's own alarm (or its alarm dialog). The sheet
+    // names the habit and draws its catalog artwork, so the choice always
+    // reads as belonging to the icon the user was looking at.
+    timerOptionsRequest?.let { request ->
+        HabitTimerOptionsSheet(
+            habitId = request.habitId,
+            habitName = request.habitName,
+            habitIconId = request.iconId,
+            onOpenTimerScreen = onOpenTimer,
+            onDismiss = { timerOptionsRequest = null },
+        )
+    }
 }
 
 // ── Alarm time formatting ───────────────────────────────────────────────────
@@ -598,6 +692,7 @@ private fun AlarmPickerDialog(
     defaultMinutes: Int,
     onDismiss: () -> Unit,
     onConfirm: (reminderMinutes: Int?, repeatMask: Int) -> Unit,
+    onTimerOptions: () -> Unit = {},
 ) {
     val defaultHour = defaultMinutes / 60
     val defaultMinute = defaultMinutes % 60
@@ -639,6 +734,15 @@ private fun AlarmPickerDialog(
                     onClick = { onConfirm(null, repeatMask) },
                     modifier = Modifier.padding(top = 4.dp),
                 ) { Text("Skip — no alarm for this habit") }
+
+                // The alarm is the primary action above. The timers belong to
+                // this same habit, so the choice to time it is offered here
+                // too — it opens the very same options sheet the habit's icon
+                // uses, anchored to this icon.
+                TextButton(
+                    onClick = onTimerOptions,
+                    modifier = Modifier.padding(top = 4.dp),
+                ) { Text("Also track this with a timer / stopwatch") }
             }
         },
         confirmButton = {

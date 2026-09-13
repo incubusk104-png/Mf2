@@ -10,7 +10,7 @@ import com.rork.mindsetframestracker.data.TimerRepository
  * The **one-shot** follow-up for a timer result the user never looked at.
  *
  * Why this exists: the completion alert is a normal notification, so swiping it
- * away is easy \u2014 especially when it arrives as the user is finishing the walk.
+ * away is easy \u2014 especially when it arrives as the user is finishing the timer.
  * Without a follow-up the result is simply lost. With a naive follow-up
  * (\"repeat until dismissed\") the user gets nagged, which is worse.
  *

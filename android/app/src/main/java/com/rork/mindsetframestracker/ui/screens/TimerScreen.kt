@@ -15,11 +15,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import com.rork.mindsetframestracker.R
+import com.rork.mindsetframestracker.data.HabitIconCatalog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -64,7 +71,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rork.mindsetframestracker.data.ActiveTimer
-import com.rork.mindsetframestracker.data.DEFAULT_WALK_TARGET_SECONDS
+import com.rork.mindsetframestracker.data.DEFAULT_TARGET_SECONDS
 import com.rork.mindsetframestracker.data.TIMER_EXTEND_SECONDS
 import com.rork.mindsetframestracker.data.TIMER_PRESET_MINUTES
 import com.rork.mindsetframestracker.data.TimerCompletionEvent
@@ -76,7 +83,7 @@ import com.rork.mindsetframestracker.notifications.TimerController
 import kotlinx.coroutines.delay
 
 /**
- * Walk timer + stopwatch, with the app's **one-popup-per-event** completion
+ * Timer + stopwatch, with the app's **one-popup-per-event** completion
  * behaviour.
  *
  * ## How the "exactly once" guarantee is built (four independent layers)
@@ -103,7 +110,7 @@ import kotlinx.coroutines.delay
  *    up on return — and because layer 2 already consumed it, returning *again*
  *    does not.
  *
- * The upshot for the user: the walk timer pops once when it hits zero, the
+ * The upshot for the user: the timer pops once when it hits zero, the
  * stopwatch pops once when it crosses its target, and neither ever reappears —
  * not on re-render, not on app resume, not after navigating away and back, not
  * after a reboot.
@@ -120,8 +127,8 @@ fun TimerScreen(
 
     var active by remember { mutableStateOf(repo.loadActive()) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var selectedKind by remember { mutableStateOf(active?.kind ?: TimerKind.WALK_TIMER) }
-    var selectedMinutes by remember { mutableIntStateOf(DEFAULT_WALK_TARGET_SECONDS / 60) }
+    var selectedKind by remember { mutableStateOf(active?.kind ?: TimerKind.TIMER) }
+    var selectedMinutes by remember { mutableIntStateOf(DEFAULT_TARGET_SECONDS / 60) }
     var stopwatchTargetMinutes by remember { mutableIntStateOf(0) }
     var showStopConfirm by remember { mutableStateOf(false) }
 
@@ -166,7 +173,7 @@ fun TimerScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(if (selectedKind == TimerKind.WALK_TIMER) "Walk timer" else "Stopwatch") },
+                title = { Text(if (selectedKind == TimerKind.TIMER) "Timer" else "Stopwatch") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Outlined.Close, contentDescription = "Close")
@@ -218,14 +225,14 @@ fun TimerScreen(
                     onStopwatchTargetChange = { stopwatchTargetMinutes = it },
                     onStart = {
                         val targetSeconds = when (selectedKind) {
-                            TimerKind.WALK_TIMER -> selectedMinutes * 60
+                            TimerKind.TIMER -> selectedMinutes * 60
                             TimerKind.STOPWATCH -> stopwatchTargetMinutes * 60
                         }
                         TimerController.start(
                             context = context,
                             kind = selectedKind,
                             targetSeconds = targetSeconds,
-                            label = if (selectedKind == TimerKind.WALK_TIMER) "Walk" else "Stopwatch",
+                            label = if (selectedKind == TimerKind.TIMER) "Timer" else "Stopwatch",
                         )
                         active = repo.loadActive()
                         nowMs = System.currentTimeMillis()
@@ -257,7 +264,7 @@ fun TimerScreen(
     }
 }
 
-/** Walk timer / stopwatch switch. Locked while a run is in progress. */
+/** Timer / stopwatch switch. Locked while a run is in progress. */
 @Composable
 private fun TimerKindTabs(
     selected: TimerKind,
@@ -270,7 +277,7 @@ private fun TimerKindTabs(
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        listOf(TimerKind.WALK_TIMER to "Walk timer", TimerKind.STOPWATCH to "Stopwatch").forEach { (kind, label) ->
+        listOf(TimerKind.TIMER to "Timer", TimerKind.STOPWATCH to "Stopwatch").forEach { (kind, label) ->
             FilterChip(
                 selected = selected == kind,
                 onClick = { if (enabled) onSelect(kind) },
@@ -278,7 +285,7 @@ private fun TimerKindTabs(
                 label = { Text(label) },
                 leadingIcon = {
                     Icon(
-                        imageVector = if (kind == TimerKind.WALK_TIMER) Icons.Outlined.DirectionsWalk
+                        imageVector = if (kind == TimerKind.TIMER) Icons.Outlined.Timer
                         else Icons.Outlined.Timer,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
@@ -292,7 +299,7 @@ private fun TimerKindTabs(
     }
 }
 
-/** Setup state: pick a duration (walk timer) or an optional goal (stopwatch). */
+/** Setup state: pick a duration (timer) or an optional goal (stopwatch). */
 @Composable
 private fun TimerSetupPanel(
     kind: TimerKind,
@@ -305,7 +312,7 @@ private fun TimerSetupPanel(
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = when (kind) {
-                TimerKind.WALK_TIMER -> "How long is this walk?"
+                TimerKind.TIMER -> "How long is this timer?"
                 TimerKind.STOPWATCH -> "Set a goal, or leave it open"
             },
             style = MaterialTheme.typography.titleMedium,
@@ -313,7 +320,7 @@ private fun TimerSetupPanel(
         )
         Spacer(Modifier.height(8.dp))
 
-        if (kind == TimerKind.WALK_TIMER) {
+        if (kind == TimerKind.TIMER) {
             FilterChipsRow(
                 options = TIMER_PRESET_MINUTES.map { it to "${it}m" },
                 isSelected = { it == selectedMinutes },
@@ -359,7 +366,7 @@ private fun TimerSetupPanel(
         ) {
             Icon(Icons.Outlined.PlayArrow, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(if (kind == TimerKind.WALK_TIMER) "Start walk" else "Start stopwatch")
+            Text(if (kind == TimerKind.TIMER) "Start timer" else "Start stopwatch")
         }
     }
 }
@@ -407,7 +414,7 @@ private fun RunningTimerPanel(
     ) {
         Text(
             text = when {
-                timer.kind == TimerKind.WALK_TIMER -> "Walk timer"
+                timer.kind == TimerKind.TIMER -> "Timer"
                 timer.hasTarget -> "Stopwatch \u00b7 goal ${formatTimerDuration(timer.targetSeconds)}"
                 else -> "Stopwatch"
             },
@@ -543,15 +550,15 @@ fun TimerCompletionPopup(
     onSecondary: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val isWalk = event.kind == TimerKind.WALK_TIMER
+    val isTimer = event.kind == TimerKind.TIMER
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            // The walk mark belongs to the walk's own moment, not to a screen:
+            // The timer mark belongs to the timer's own moment, not to a screen:
             // this is the same circle-and-walking-figure badge that used to sit
             // on the timer entry card, and it now lives here — inside the popup
-            // that appears once when the walk alarm goes off. A stopwatch goal
-            // (not a walk) keeps the plain timer glyph.
+            // that appears once when the timer alarm goes off. A stopwatch goal
+            // (not a timer) keeps the plain timer glyph.
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -560,7 +567,7 @@ fun TimerCompletionPopup(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (isWalk) Icons.Outlined.DirectionsWalk else Icons.Outlined.Timer,
+                    imageVector = if (isTimer) Icons.Outlined.Timer else Icons.Outlined.Timer,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp),
@@ -568,13 +575,13 @@ fun TimerCompletionPopup(
             }
         },
         title = {
-            Text(if (isWalk) "Walk complete!" else "Goal reached!")
+            Text(if (isTimer) "Timer done!" else "Goal reached!")
         },
         text = {
             Column {
                 Text(
-                    text = if (isWalk) {
-                        "You walked for ${formatTimerDuration(event.targetSeconds)}."
+                    text = if (isTimer) {
+                        "You timed ${formatTimerDuration(event.targetSeconds)}."
                     } else {
                         "Your stopwatch passed ${formatTimerDuration(event.targetSeconds)} " +
                             "(at ${formatTimerDuration(event.elapsedSeconds)})."
@@ -583,8 +590,8 @@ fun TimerCompletionPopup(
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = if (isWalk) {
-                        "Mark today's walk habit as done?"
+                    text = if (isTimer) {
+                        "Mark this habit as done?"
                     } else {
                         "The stopwatch is still counting if you want to keep going."
                     },
@@ -595,11 +602,11 @@ fun TimerCompletionPopup(
         },
         confirmButton = {
             Button(onClick = onPrimary) {
-                Text(if (isWalk) "Mark done" else "Done")
+                Text(if (isTimer) "Mark done" else "Done")
             }
         },
         dismissButton = {
-            if (isWalk) {
+            if (isTimer) {
                 Row {
                     TextButton(onClick = onSecondary) { Text("Not yet") }
                     TextButton(onClick = onDismiss) { Text("Close") }
@@ -612,68 +619,176 @@ fun TimerCompletionPopup(
 }
 
 /**
- * Entry point for the timers, rendered on the **Habits** screen.
+ * The timer / stopwatch choice, rendered **inside the habit icon** it belongs to.
  *
- * Intentionally not on Today: the timers are their own focused task, and
- * keeping them here means the Home surface stays a pure daily check-in.
+ * This is the app's only way into the timers. It is deliberately not a
+ * screen-level affordance: the options are opened *by the habit itself* —
+ * either by the habit icon's own alarm dialog, or by that habit's alarm
+ * ringing — and the sheet names the habit and draws its catalog artwork at
+ * the top, so the choice is always anchored to the icon the user was looking
+ * at. Nothing on Home, and nothing floating in the Habits header, advertises
+ * the timers.
  *
- * Two states, one card: while a run is live it renders the compact
- * [ActiveTimerStrip] (with the countdown), otherwise it renders a "start a walk
- * timer" affordance. Both open [TimerScreen].
+ * The habit's [habitId] is carried into [TimerController.start] so a run
+ * started this way completes *that habit* when it finishes.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimerEntryCard(
-    onOpenTimer: () -> Unit,
-    modifier: Modifier = Modifier,
+fun HabitTimerOptionsSheet(
+    habitId: String?,
+    habitName: String,
+    habitIconId: String?,
+    onOpenTimerScreen: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val repo = remember { TimerRepository(context) }
-    var timer by remember { mutableStateOf(repo.loadActive()) }
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val iconRes = remember(habitIconId) {
+        habitIconId?.let { HabitIconCatalog.byId(it)?.drawableRes }
+    }
+    val label = habitName.ifBlank { "Timer" }
+    // A habit the user has not saved yet has no id (the alarm dialog can open
+    // the options before the habit exists). Time the run anyway, but do not
+    // claim it belongs to a habit id that is not real.
+    val linkedHabitId = habitId?.takeIf { it.isNotBlank() }
 
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) timer = repo.loadActive()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (iconRes != null) {
+                        Image(
+                            painter = painterResource(id = iconRes),
+                            contentDescription = label,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(30.dp),
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Timer,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Choose how you want to time this",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            HabitTimerOptionRow(
+                icon = Icons.Outlined.Timer,
+                title = "Timer",
+                subtitle = "Counts down and alerts you when it is done",
+                onClick = {
+                    TimerController.start(
+                        context = context,
+                        kind = TimerKind.TIMER,
+                        targetSeconds = DEFAULT_TARGET_SECONDS,
+                        label = label,
+                        habitId = linkedHabitId,
+                    )
+                    onDismiss()
+                    onOpenTimerScreen()
+                },
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            HabitTimerOptionRow(
+                icon = Icons.Outlined.Flag,
+                title = "Stopwatch",
+                subtitle = "Counts up until you stop it — no target, no alarm",
+                onClick = {
+                    TimerController.start(
+                        context = context,
+                        kind = TimerKind.STOPWATCH,
+                        targetSeconds = 0,
+                        label = label,
+                        habitId = linkedHabitId,
+                    )
+                    onDismiss()
+                    onOpenTimerScreen()
+                },
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            Text(
+                text = if (linkedHabitId != null) {
+                    "Finishing this records $label for today."
+                } else {
+                    "Finishing this records the time; pick a habit to log it to one."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+}
 
-    val current = timer
-    if (current != null && !current.completionFired) {
-        ActiveTimerStrip(
-            context = context,
-            onOpenTimer = onOpenTimer,
-            modifier = modifier,
-        )
-        return
-    }
-
+/** One selectable row in [HabitTimerOptionsSheet]. */
+@Composable
+private fun HabitTimerOptionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onOpenTimer),
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // No walk badge here any more. The walking figure is not a
-            // browsing-surface affordance: it belongs to the moment the walk
-            // alarm actually goes off, and it is drawn there \u2014 inside the
-            // one-time completion popup. The card stays as the plain entry
-            // point (title + subtitle + chevron) and still opens TimerScreen
-            // exactly as before.
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Walk timer & stopwatch",
+                    text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Time a walk or track anything",
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -684,95 +799,6 @@ fun TimerEntryCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
-        }
-    }
-}
-
-/**
- * Compact "a timer is running" strip for the Habits screen, so the feature is
- * reachable without hunting for it and the live time is visible at a glance.
- * Tapping it opens [TimerScreen].
- */
-@Composable
-fun ActiveTimerStrip(
-    context: Context,
-    onOpenTimer: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val repo = remember { TimerRepository(context) }
-    var timer by remember { mutableStateOf(repo.loadActive()) }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                timer = repo.loadActive()
-                now = System.currentTimeMillis()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    LaunchedEffect(timer?.id, timer?.status) {
-        while (true) {
-            now = System.currentTimeMillis()
-            delay(1_000L)
-        }
-    }
-
-    val current = timer ?: return
-    Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onOpenTimer),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (current.kind == TimerKind.WALK_TIMER) Icons.Outlined.DirectionsWalk
-                    else Icons.Outlined.Timer,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (current.kind == TimerKind.WALK_TIMER) "Walk timer" else "Stopwatch",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = if (current.status == TimerStatus.PAUSED) "Paused" else "Running",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = if (current.hasTarget) {
-                    formatTimerDuration(current.remainingSecondsAt(now))
-                } else {
-                    formatTimerDuration(current.elapsedAt(now))
-                },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(6.dp))
-            Icon(Icons.Outlined.Replay, contentDescription = "Open timer", modifier = Modifier.size(18.dp))
         }
     }
 }

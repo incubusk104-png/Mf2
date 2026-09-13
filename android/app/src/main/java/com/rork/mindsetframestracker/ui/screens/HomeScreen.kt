@@ -339,7 +339,7 @@ fun HomeScreen(
             }
         }
 
-        // NOTE: the walk timer / stopwatch entry point deliberately does NOT
+        // NOTE: the timer / stopwatch entry point deliberately does NOT
         // live here. Today is the daily check-in surface (mood, prompt, quote,
         // habit checklist); the timers are a separate, focused task and are
         // reached from the Habits screen instead.

@@ -155,8 +155,8 @@ class TimerRepository(context: Context) {
      * completion carries the id of the run that produced it, and the UI only
      * ever shows the popup for a run that appears here. Without this ledger any
      * orphaned record in the pending slot \u2014 a leftover from an older build,
-     * or a half-written event \u2014 would render a "walk complete" popup with no
-     * walk behind it, which is precisely the "why is this on my Home screen?"
+     * or a half-written event \u2014 would render a "timer complete" popup with no
+     * timer behind it, which is precisely the "why is this on my Home screen?"
      * bug this guard exists to prevent.
      */
     @Synchronized

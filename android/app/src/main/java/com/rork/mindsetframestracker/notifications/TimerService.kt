@@ -142,7 +142,7 @@ class TimerService : Service() {
             title = "Timer"
             text = ""
         } else if (timer.hasTarget) {
-            title = if (timer.kind == TimerKind.WALK_TIMER) "Walk timer" else "Stopwatch goal"
+            title = if (timer.kind == TimerKind.TIMER) "Timer" else "Stopwatch goal"
             val left = timer.remainingSecondsAt(now)
             text = if (left > 0) {
                 "${formatTimerDuration(left)} left"
@@ -198,7 +198,7 @@ class TimerService : Service() {
                     "Running timer",
                     NotificationManager.IMPORTANCE_LOW, // silent, no heads-up
                 ).apply {
-                    description = "Shows the time remaining on a walk timer or stopwatch"
+                    description = "Shows the time remaining on a timer or stopwatch"
                     setShowBadge(false)
                 },
             )

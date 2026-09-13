@@ -24,7 +24,7 @@ import java.util.Calendar
  * traded a *rare* failure (a user denying the exact-alarm permission) for a
  * *routine* one: `setInitialDelay()` only sets a **minimum** delay — Android's
  * Doze / App Standby batching is free to defer the job well past that once the
- * delay spans idle, screen-off time, which "walk at 8:45 PM" always does. That
+ * delay spans idle, screen-off time, which "timer at 8:45 PM" always does. That
  * is exactly the reported symptom: 8:45 PM comes and goes with no sound and no
  * vibration, because the job hadn't run yet.
  *
@@ -157,7 +157,7 @@ object HabitAlarmScheduler {
         if (repeatDaysMask == REPEAT_ONCE || repeatDaysMask == REPEAT_DAILY) {
             return cal.timeInMillis
         }
-        // Walk forward (max 7 days) to the next enabled day-of-week.
+        // Step forward (max 7 days) to the next enabled day-of-week.
         repeat(7) {
             // Calendar: SUNDAY=1..SATURDAY=7 → our mask bit: Monday=0..Sunday=6
             val bit = when (cal.get(Calendar.DAY_OF_WEEK)) {

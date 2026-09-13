@@ -61,7 +61,7 @@ object TimerController {
      * Adds [seconds] to a count-down target and immediately resumes.
      *
      * Note this deliberately produces a **new** event id: the event id is
-     * derived from `(run id, kind, target)`, so extending a finished walk
+     * derived from `(run id, kind, target)`, so extending a finished timer
      * legitimately earns its own single completion popup later — and the
      * already-shown popup for the previous target can never repeat.
      */

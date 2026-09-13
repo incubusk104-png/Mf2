@@ -11,7 +11,7 @@ import com.rork.mindsetframestracker.data.TimerRepository
  * armed for a running timer's deadline.
  *
  * Runs in whatever process the OS chooses \u2014 often a fresh, UI-less one, since
- * the app may have been killed hours earlier mid-walk. It therefore touches
+ * the app may have been killed hours earlier mid-timer. It therefore touches
  * nothing but [TimerRepository] and [TimerCompletion], both of which are
  * process-safe.
  *

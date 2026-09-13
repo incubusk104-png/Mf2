@@ -16,14 +16,19 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material3.Button
@@ -36,8 +41,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.rork.mindsetframestracker.R
+import com.rork.mindsetframestracker.data.HabitIconCatalog
+import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerCompletionEvent
+import com.rork.mindsetframestracker.ui.navigation.NavRequests
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import com.rork.mindsetframestracker.ui.theme.AppTheme
 
 /**
@@ -68,6 +82,17 @@ class AlarmRingingActivity : ComponentActivity() {
     private var habitId: String = ""
     private var habitName: String = ""
     private var ringingSubtitle: String = "Time for your habit"
+    /**
+     * The ringing habit's own catalog artwork, or null for a timer
+     * completion.
+     *
+     * The alarm screen used to draw one generic alarm glyph for
+     * everything. Showing the habit's own icon is what makes this read as
+     * *that habit's* alarm rather than an anonymous system alarm — and it
+     * is the same artwork the timer/stopwatch options sheet draws, so the
+     * ring and the choice that follows it look like one continuous flow.
+     */
+    private var habitIconRes: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,6 +110,45 @@ class AlarmRingingActivity : ComponentActivity() {
         } else {
             habitId = intent.getStringExtra("habitId") ?: run { finish(); return }
             habitName = intent.getStringExtra("habitName") ?: "Habit"
+
+            // Resolve this habit's own icon from the saved data. Done on IO
+            // because the repository reads DataStore; failure just falls back
+            // to the generic alarm glyph rather than blocking the ring.
+            habitIconRes = runCatching {
+                runBlocking(Dispatchers.IO) {
+                    MindsetRepository(this@AlarmRingingActivity)
+                        .load()
+                        .habits
+                        .firstOrNull { it.id == habitId }
+                        ?.iconId
+                        ?.let { HabitIconCatalog.byId(it)?.drawableRes }
+                }
+            }.getOrNull()
+
+            // ── Arm the one-shot timer/stopwatch options ───────────────
+            // The user asked for the choice to appear "once the alarm was
+            // ringing and notified", anchored to the habit icon. The alarm
+            // rang in a process that may have no UI and this screen is
+            // dismissible, so the request is left on disk for the Habits
+            // screen to pick up and consume exactly once — it survives this
+            // activity being closed, the app being backgrounded, and a
+            // reboot. Writing it here (rather than only in the notifier)
+            // covers the ringing screen being launched straight from the
+            // full-screen intent.
+            HabitTimerRequests.request(
+                context = this,
+                habitId = habitId,
+                habitName = habitName,
+                iconId = runCatching {
+                    runBlocking(Dispatchers.IO) {
+                        MindsetRepository(this@AlarmRingingActivity)
+                            .load()
+                            .habits
+                            .firstOrNull { it.id == habitId }
+                            ?.iconId
+                    }
+                }.getOrNull(),
+            )
         }
 
         showOverLockScreen()
@@ -97,12 +161,22 @@ class AlarmRingingActivity : ComponentActivity() {
                     AlarmRingingScreen(
                         habitName = habitName,
                         subtitle = ringingSubtitle,
-                        // Snoozing a walk timer is meaningless (there is no
-                        // "later" for a completed walk), so it is a habit-only
+                        habitIconRes = habitIconRes,
+                        // Snoozing a timer is meaningless (there is no
+                        // "later" for a completed timer), so it is a habit-only
                         // affordance.
                         showSnooze = ringingEvent == null,
                         onDismiss = { finishRinging() },
                         onSnooze = { snoozeAndFinish() },
+                        // A ringing habit is the moment to start timing it.
+                        // Routed to the HABITS tab, not the timer screen: the
+                        // timer/stopwatch options live inside the habit's own
+                        // icon, where this ring's one-shot request is already
+                        // waiting to be consumed.
+                        onTimerOptions = {
+                            NavRequests.request(NavRequests.ROUTE_HABITS)
+                            finishRinging()
+                        },
                     )
                 }
             }
@@ -216,9 +290,11 @@ class AlarmRingingActivity : ComponentActivity() {
 private fun AlarmRingingScreen(
     habitName: String,
     subtitle: String,
+    habitIconRes: Int?,
     showSnooze: Boolean,
     onDismiss: () -> Unit,
     onSnooze: () -> Unit,
+    onTimerOptions: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -228,12 +304,31 @@ private fun AlarmRingingScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            imageVector = Icons.Filled.Alarm,
-            contentDescription = null,
-            modifier = Modifier.height(72.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
+        // The habit's own artwork when we know it, otherwise the generic
+        // alarm glyph — a timer completion has no habit to draw.
+        if (habitIconRes != null) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(id = habitIconRes),
+                    contentDescription = habitName,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(58.dp),
+                )
+            }
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Alarm,
+                contentDescription = null,
+                modifier = Modifier.height(72.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
         Text(
             text = habitName,
             style = MaterialTheme.typography.headlineMedium,
@@ -257,6 +352,13 @@ private fun AlarmRingingScreen(
                     onClick = onSnooze,
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 ) { Text("Snooze 5 min") }
+
+                // Habit alarms only: the timers belong to the habit, so the
+                // choice is offered here, from the habit's own alarm.
+                OutlinedButton(
+                    onClick = onTimerOptions,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                ) { Text("Timer / stopwatch") }
             }
         }
     }

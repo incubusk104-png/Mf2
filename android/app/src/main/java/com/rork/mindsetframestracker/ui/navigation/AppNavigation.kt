@@ -168,7 +168,7 @@ private fun ConnectivityStatusIcon(
  *
  * ## When the popup may appear \u2014 and when it must not
  *
- * The popup reports the end of a walk the user was on. It must therefore only
+ * The popup reports the end of a timer the user was on. It must therefore only
  * ever exist for a run the user actually started, and only while that result is
  * still current. That is enforced one layer down, by
  * [TimerRepository.loadPopupEvent], which this host reads through instead of
@@ -178,7 +178,7 @@ private fun ConnectivityStatusIcon(
  *    started-run ledger is *not* something the user did \u2014 an orphaned record
  *    left by an older build, or a half-written event. It is discarded here, so
  *    merely opening the app (landing on Home, or anywhere else) can never
- *    produce a popup for a walk that was never set.
+ *    produce a popup for a timer that was never set.
  *  - **No live result, no popup.** A completion older than
  *    [com.rork.mindsetframestracker.data.TIMER_POPUP_GRACE_MILLIS] is expired
  *    rather than shown late.
@@ -189,7 +189,7 @@ private fun ConnectivityStatusIcon(
  *
  * Note the host deliberately stays at the app root: a run that finishes while
  * the user is on Home *should* announce itself there. What must never happen is
- * a popup with no walk behind it \u2014 which is the failure this gate removes.
+ * a popup with no timer behind it \u2014 which is the failure this gate removes.
  *
  * ## Why the popup cannot repeat
  *
@@ -567,7 +567,7 @@ fun AppNavigation(viewModel: AppViewModel) {
                     )
                 }
                 composable("habits") {
-                    // The walk timer / stopwatch entry point lives on Habits
+                    // The timer / stopwatch entry point lives on Habits
                     // (not Today), so the route is wired through here.
                     HabitsScreen(
                         viewModel = viewModel,
@@ -576,7 +576,7 @@ fun AppNavigation(viewModel: AppViewModel) {
                         },
                     )
                 }
-                // Walk timer / stopwatch. Its own full screen (with its own
+                // Timer / stopwatch. Its own full screen (with its own
                 // top bar) rather than a tab: it is a focused, modal-ish task,
                 // and the one-time completion popup needs a predictable
                 // destination to return to.
