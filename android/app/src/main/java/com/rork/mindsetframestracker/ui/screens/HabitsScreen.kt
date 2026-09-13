@@ -277,7 +277,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 if (viewModel.addHabitObject(habit)) {
                     if (chosenMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
-                        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                        if (AlarmPermissions.needsAttention(context)) showAlarmPermissionPrompt = true
                     }
                     viewModel.queueSync()
                     scope.launch {
@@ -509,7 +509,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     // ── ARM THE ALARM (only if one was actually set) ──
                     if (reminderMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
-                        if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
+                        if (AlarmPermissions.needsAttention(context)) showAlarmPermissionPrompt = true
                     }
 
                     // ── SYNC TO CLOUD ──
