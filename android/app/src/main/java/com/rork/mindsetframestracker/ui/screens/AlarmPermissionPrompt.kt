@@ -667,7 +667,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                 // screenshot-per-setting round trip.
                 OutlinedButton(
                     onClick = {
-                        val report = AlarmDiagnostics.report(context)
+                        val report = HabitCheckInNotifier.diagnosticsReport(context)
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Alarm diagnostics", report))
                         Toast.makeText(context, "Diagnostics copied — paste them wherever you need to share them.", Toast.LENGTH_LONG).show()
