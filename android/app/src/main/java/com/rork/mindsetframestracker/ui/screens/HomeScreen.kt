@@ -160,6 +160,7 @@ import java.util.Locale
 fun HomeScreen(
     viewModel: AppViewModel,
     onGoToHabits: () -> Unit,
+    onOpenTimer: () -> Unit,
 ) {
     val data by viewModel.state.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
@@ -336,6 +337,14 @@ fun HomeScreen(
                         }
                     },
                 )
+            }
+        }
+
+        item(key = "timer") {
+            // Walk timer / stopwatch entry point. Sits directly under the header
+            // so a running timer's countdown is the first thing visible.
+            EntranceItem(index = 1) {
+                TimerEntryCard(onOpenTimer = onOpenTimer)
             }
         }
 

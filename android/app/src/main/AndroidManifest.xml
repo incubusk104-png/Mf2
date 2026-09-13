@@ -25,6 +25,15 @@
     <!-- Offline detection for cloud backup — lets the app queue syncs instead of failing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Walk timer / stopwatch. These are foreground-service permissions for the
+         service that keeps a running timer alive and shows its remaining time.
+         `specialUse` is deliberately the type: Android has no dedicated "timer"
+         foreground-service type, and the alternative `shortService` is capped at
+         3 minutes, which a 20-minute walk (and every preset above 3 minutes)
+         would exceed and get killed by. The subtype property below is the
+         machine-readable justification the store review process asks for. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Re-schedule the daily reminder alarm after a device reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Habit reminders fire at an exact time. On Android 12 (API 31/32) this
@@ -265,6 +274,35 @@
         <!-- Handles "Snooze 5 min" tapped on a habit reminder notification -->
         <receiver
             android:name=".notifications.HabitSnoozeReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
+        <!-- ── Walk timer / stopwatch ───────────────────────────────────────────
+             The service keeps a running timer visible (ongoing notification with
+             the live remaining time) and is the in-process safety net that rings
+             the completion alert if the AlarmManager path is blocked by an OEM
+             force-stop. It is started ONLY while a timer actually runs and stops
+             itself the moment the timer pauses, finishes or is cleared. -->
+        <service
+            android:name=".notifications.TimerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a user-started walk timer or stopwatch running and shows its remaining time until the user stops it." />
+        </service>
+
+        <!-- Fired by the AlarmManager alarm armed for a running timer's exact
+             deadline. This is the wake-up that must survive Doze. -->
+        <receiver
+            android:name=".notifications.TimerAlarmReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
+        <!-- One-shot follow-up: nudges once, and only once, when a completed
+             timer's result was never opened. -->
+        <receiver
+            android:name=".notifications.TimerReminderReceiver"
             android:exported="false"
             android:enabled="true" />
 

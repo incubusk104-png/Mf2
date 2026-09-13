@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.MindsetRepository
+import com.rork.mindsetframestracker.data.REPEAT_DAILY
 import org.json.JSONObject
 
 /**
@@ -96,11 +97,18 @@ class BootReceiver : BroadcastReceiver() {
                 if (!habitJson.has("reminderMinutes") || habitJson.isNull("reminderMinutes")) continue
                 val reminderMinutes = habitJson.optInt("reminderMinutes", -1)
                 if (reminderMinutes < 0) continue
+                // Carry the repeat mask across as well. Re-arming from this
+                // fallback with the default REPEAT_DAILY silently converted a
+                // Mon/Wed/Fri (or custom) reminder into a *daily* one for any
+                // device that ever took this path — the user's chosen days
+                // were quietly lost on reboot.
+                val repeatDaysMask = habitJson.optInt("repeatDaysMask", REPEAT_DAILY)
 
                 val habit = Habit(
                     id = id,
                     name = name,
                     reminderMinutes = reminderMinutes,
+                    repeatDaysMask = repeatDaysMask,
                 )
                 HabitAlarmScheduler.schedule(context, habit)
                 count++

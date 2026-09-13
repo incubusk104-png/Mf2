@@ -1,11 +1,10 @@
 package com.rork.mindsetframestracker.notifications
 
-import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.notifications.CheckInReceiver.Companion.EXTRA_REMINDER_MINUTES
 import java.util.Calendar
 import java.util.Date
@@ -18,19 +17,17 @@ import java.util.Date
  *    notifies when today's habits are still incomplete.
  * 3. The Sunday-evening weekly recap ("You checked in 5/7 days this week").
  *
- * Uses an exact alarm ([AlarmManager.setAlarmClock]) only when the app holds
- * the exact-alarm permission ([AlarmManager.canScheduleExactAlarms]); on
- * Android 14+ that permission is denied by default, so we fall back to an
- * inexact windowed alarm which needs no permission and is accurate enough
- * for a daily reminder.
+ * Uses the strongest alarm this device currently allows — see
+ * [AlarmScheduler] for the fallback ladder. An exact alarm
+ * ([AlarmManager.setAlarmClock]) needs the exact-alarm permission
+ * ([AlarmManager.canScheduleExactAlarms]); without it we degrade to
+ * `setExactAndAllowWhileIdle`, then to a 15-minute inexact window, rather than
+ * scheduling nothing at all.
  *
  * Each receiver reschedules itself for the next day after each fire, so the
  * alarms stay aligned to the clock even across daylight-saving transitions.
  */
 class NotificationScheduler(private val context: Context) {
-
-    private val alarmManager =
-        context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     /** Schedules (or reschedules) the daily reminder at [minutes] past midnight. */
     fun scheduleDailyReminder(minutes: Int) {
@@ -38,6 +35,7 @@ class NotificationScheduler(private val context: Context) {
         scheduleAt(
             label = "Daily reminder",
             minutes = minutes,
+            requestCode = REQUEST_CODE,
             pendingIntent = checkInIntent(minutes),
         )
     }
@@ -53,6 +51,7 @@ class NotificationScheduler(private val context: Context) {
         scheduleAt(
             label = "Streak alert",
             minutes = minutes,
+            requestCode = STREAK_ALERT_REQUEST_CODE,
             pendingIntent = streakAlertIntent(minutes),
         )
     }
@@ -93,6 +92,7 @@ class NotificationScheduler(private val context: Context) {
         scheduleAt(
             label = "Evening reflection",
             minutes = EVENING_REFLECTION_MINUTES,
+            requestCode = EVENING_REFLECTION_REQUEST_CODE,
             pendingIntent = eveningReflectionIntent(),
         )
     }
@@ -129,57 +129,30 @@ class NotificationScheduler(private val context: Context) {
         )
     }
 
-    private fun scheduleAt(label: String, minutes: Int, pendingIntent: PendingIntent) {
+    /**
+     * Arms one recurring reminder and logs which mechanism actually took it.
+     *
+     * [requestCode] is only used to build the alarm-clock show-intent, so the
+     * status-bar alarm icon opens *this app* instead of doing nothing (the old
+     * code passed the broadcast PendingIntent as the show-intent, which Android
+     * cannot launch as an Activity — see [AlarmScheduler]).
+     */
+    private fun scheduleAt(
+        label: String,
+        minutes: Int,
+        requestCode: Int,
+        pendingIntent: PendingIntent,
+    ) {
         val triggerAtMillis = nextTriggerTime(minutes)
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
-
-        runCatching {
-            if (canUseExact) {
-                alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(triggerAtMillis, pendingIntent),
-                    pendingIntent,
-                )
-            } else {
-                // No exact-alarm permission: fire within a 15-minute window
-                // around the target time. Fine for a daily reminder.
-                alarmManager.setWindow(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    WINDOW_MILLIS,
-                    pendingIntent,
-                )
-            }
-        }
-            .onSuccess {
-                Log.i(TAG, "$label scheduled for ${formatTime(minutes)} (exact=$canUseExact)")
-            }
-            .onFailure { error ->
-                Log.w(TAG, "Failed to schedule $label", error)
-            }
-    }
-
-    /** One-shot alarm at an absolute epoch time; windowed when exact is unavailable. */
-    private fun scheduleOneShot(label: String, triggerAtMillis: Long, pendingIntent: PendingIntent) {
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
-        runCatching {
-            if (canUseExact) {
-                alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(triggerAtMillis, pendingIntent),
-                    pendingIntent,
-                )
-            } else {
-                alarmManager.setWindow(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    WINDOW_MILLIS,
-                    pendingIntent,
-                )
-            }
-        }
-            .onSuccess { Log.i(TAG, "$label scheduled for ${Date(triggerAtMillis)}") }
-            .onFailure { error -> Log.w(TAG, "Failed to schedule $label", error) }
+        val precision = AlarmScheduler.schedule(
+            context = context,
+            triggerAtMillis = triggerAtMillis,
+            pendingIntent = pendingIntent,
+            wakeUp = true,
+            allowWhileIdle = true,
+            showIntent = AlarmScheduler.showIntent(context, requestCode),
+        )
+        Log.i(TAG, "$label scheduled for ${formatTime(minutes)} (precision=$precision)")
     }
 
     private fun cancelAlarm(receiver: Class<*>, action: String, requestCode: Int) {

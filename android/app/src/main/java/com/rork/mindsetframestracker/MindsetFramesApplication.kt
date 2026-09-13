@@ -2,6 +2,7 @@ package com.rork.mindsetframestracker
 
 import android.app.Application
 import android.util.Log
+import com.rork.mindsetframestracker.notifications.TimerCompletion
 import java.io.File
 
 /**
@@ -19,6 +20,15 @@ class MindsetFramesApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installGlobalCrashLogger()
+        // Restore the walk timer / stopwatch after a process restart.
+        // This is the one case no BroadcastReceiver can cover: if the app was
+        // force-stopped, Android drops its pending alarms WITHOUT sending
+        // BOOT_COMPLETED, so a timer that expired while we were dead would
+        // otherwise never fire its alert or leave its completion popup pending.
+        // Re-arming here means an interrupted walk still reports its result —
+        // once — the next time the app opens.
+        runCatching { TimerCompletion.reconcileOnColdStart(this) }
+            .onFailure { Log.w(TAG, "Timer cold-start reconcile failed", it) }
     }
 
     private fun installGlobalCrashLogger() {

@@ -28,9 +28,11 @@ import com.rork.mindsetframestracker.auth.HuaweiAuthClient
 import com.rork.mindsetframestracker.auth.HuaweiServicesConfig
 import com.rork.mindsetframestracker.auth.HuaweiSignInResult
 import com.rork.mindsetframestracker.data.currentMood
+import com.rork.mindsetframestracker.notifications.TimerController
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.LocalAppStrings
 import com.rork.mindsetframestracker.ui.navigation.AppNavigation
+import com.rork.mindsetframestracker.ui.navigation.NavRequests
 import com.rork.mindsetframestracker.ui.stringsFor
 import com.rork.mindsetframestracker.ui.theme.AppTheme
 import java.io.File
@@ -69,6 +71,9 @@ class MainActivity : ComponentActivity() {
         // Consume an auth deep link delivered with the launch intent (cold
         // start from the email web-bridge).
         runCatching { handleAuthIntent(intent) }
+
+        // Running-timer notification: opens (or stops) the timer on tap.
+        runCatching { handleTimerIntent(intent) }
 
         try {
             enableEdgeToEdge()
@@ -120,6 +125,36 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         runCatching { handleAuthIntent(intent) }
+        runCatching { handleTimerIntent(intent) }
+    }
+
+    /**
+     * Handles the running-timer notification's tap and its "Stop" action.
+     *
+     * Both arrive as *Activity* intents (the notification uses
+     * `PendingIntent.getActivity`), so unlike the auth deep links there is no
+     * URI to parse — just two extras:
+     *
+     *  - [EXTRA_OPEN_ROUTE] = [ROUTE_TIMER] → open the timer screen
+     *  - [EXTRA_STOP_TIMER] = true → stop the run first
+     *
+     * The route is parked in [NavRequests] rather than navigated directly: on a
+     * cold start this runs before the Compose nav graph exists, and the state
+     * channel means it still routes correctly once it does.
+     */
+    private fun handleTimerIntent(intent: Intent?) {
+        val route = intent?.getStringExtra(EXTRA_OPEN_ROUTE) ?: return
+        if (route != ROUTE_TIMER) return
+        if (intent.getBooleanExtra(EXTRA_STOP_TIMER, false)) {
+            runCatching { TimerController.stop(this) }
+                .onFailure { Log.w("MainActivity", "Stop-timer action failed: ${it.message}") }
+        }
+        NavRequests.request(ROUTE_TIMER)
+        // Consume the extras so a later re-delivery of this same intent (task
+        // re-parenting, recents relaunch) can't re-trigger the stop or navigate
+        // the user back to the timer a second time.
+        intent.removeExtra(EXTRA_STOP_TIMER)
+        intent.removeExtra(EXTRA_OPEN_ROUTE)
     }
 
     /**
@@ -261,6 +296,17 @@ class MainActivity : ComponentActivity() {
             pendingScheduleAfterPermission = scheduleIfGranted
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    companion object {
+        /** Extra carrying a route to open (e.g. the timer) once the UI is up. */
+        const val EXTRA_OPEN_ROUTE = "extra_open_route"
+
+        /** Extra that asks the timer to stop before the UI opens. */
+        const val EXTRA_STOP_TIMER = "extra_stop_timer"
+
+        /** Value of [EXTRA_OPEN_ROUTE] that opens the walk timer / stopwatch. */
+        const val ROUTE_TIMER = "timer"
     }
 }
 

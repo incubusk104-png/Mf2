@@ -44,7 +44,6 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(HabitCheckInNotifier.notificationId(habitId))
 
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val reminderIntent = Intent(context, HabitReminderReceiver::class.java).apply {
             action = HabitAlarmScheduler.ACTION_HABIT_REMINDER
             putExtra(HabitReminderReceiver.EXTRA_HABIT_ID, habitId)
@@ -62,26 +61,25 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
         )
 
         val triggerAtMillis = System.currentTimeMillis() + SNOOZE_DELAY_MILLIS
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
 
-        runCatching {
-            if (canUseExact) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent,
-                )
-            } else {
-                alarmManager.setWindow(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    WINDOW_MILLIS,
-                    pendingIntent,
-                )
-            }
-        }
-            .onSuccess { Log.d(TAG, "Snoozed '$habitName' for 5 minutes (exact=$canUseExact)") }
-            .onFailure { error -> Log.w(TAG, "Failed to snooze '$habitName'", error) }
+        // Routed through the shared AlarmScheduler. The permission is now
+        // re-checked at this call site: a grant the user revoked since the
+        // original alarm was armed used to make setExactAndAllowWhileIdle throw
+        // SecurityException straight into the old runCatching, which meant the
+        // snooze was silently never armed at all — the user tapped "Snooze 5
+        // min" and simply never heard from it again. The fallback ladder below
+        // keeps the re-fire alive even without the grant.
+        val precision = AlarmScheduler.schedule(
+            context = context,
+            triggerAtMillis = triggerAtMillis,
+            pendingIntent = pendingIntent,
+            wakeUp = true,
+            allowWhileIdle = true,
+            showIntent = AlarmScheduler.showIntent(
+                context,
+                habitId.hashCode() + SNOOZE_REQUEST_CODE_OFFSET,
+            ),
+        )
+        Log.d(TAG, "Snoozed '$habitName' for 5 minutes (precision=$precision)")
     }
 }

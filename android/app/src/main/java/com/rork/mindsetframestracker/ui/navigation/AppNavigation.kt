@@ -40,13 +40,21 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -58,6 +66,11 @@ import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.components.AuthPromptSheet
+import com.rork.mindsetframestracker.data.TimerRepository
+import com.rork.mindsetframestracker.data.TimerStatus
+import com.rork.mindsetframestracker.notifications.TimerController
+import com.rork.mindsetframestracker.notifications.TimerService
+import com.rork.mindsetframestracker.ui.screens.TimerCompletionPopup
 import com.rork.mindsetframestracker.ui.components.SetNewPasswordSheet
 import com.rork.mindsetframestracker.ui.components.SyncStatusBanner
 import com.rork.mindsetframestracker.ui.components.moodBackdrop
@@ -67,6 +80,7 @@ import com.rork.mindsetframestracker.ui.screens.InsightsScreen
 import com.rork.mindsetframestracker.ui.screens.OnboardingScreen
 import com.rork.mindsetframestracker.ui.screens.SettingsScreen
 import com.rork.mindsetframestracker.ui.screens.SplashScreen
+import com.rork.mindsetframestracker.ui.screens.TimerScreen
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
 import com.rork.mindsetframestracker.util.rememberIsOnline
@@ -146,6 +160,94 @@ private fun ConnectivityStatusIcon(
     }
 }
 
+/**
+ * Root-level owner of the **one-time** timer completion popup.
+ *
+ * Lives outside the `NavHost` so the popup appears wherever the user is when a
+ * timer finishes, and so exactly one composable can ever decide to show it.
+ *
+ * ## Why the popup cannot repeat
+ *
+ * The dialog is rendered from [TimerRepository.loadPendingEvent] — a persisted
+ * record, not transient UI state. Rendering it immediately calls
+ * [TimerController.acknowledgeEvent], which appends the event's id to an
+ * append-only handled-ledger on disk and clears the pending slot. From that
+ * instant the event can no longer be produced, no matter how often this
+ * composable recomposes, how many times the Activity resumes, how the user
+ * navigates, or whether the phone is rebooted mid-session.
+ *
+ * Concretely, each of the usual ways a Compose popup "comes back" is closed
+ * off:
+ *
+ *  - **Recomposition / re-render** — nothing here is keyed on a value that a
+ *    recomposition can re-arm; the pending record is read once per resume and
+ *    cleared as soon as the dialog appears.
+ *  - **App resume / `ON_RESUME`** — the resume handler *reloads* the pending
+ *    event (which is how a completion that fired while backgrounded still
+ *    surfaces) but the ledger makes a second resume find nothing.
+ *  - **Navigation** — the host sits above the nav graph, so returning to a
+ *    screen does not re-create it with a stale event.
+ *  - **Rotation / process death** — the ledger is in SharedPreferences, so
+ *    even a kill between the alarm and the tap cannot double-fire.
+ */
+@Composable
+private fun TimerCompletionHost(
+    context: android.content.Context,
+    onOpenHabits: () -> Unit,
+) {
+    val repo = remember { TimerRepository(context) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var pendingEvent by remember { mutableStateOf(repo.loadPendingEvent()) }
+
+    // Re-read on every resume. This is the *only* way an event that fired while
+    // the app was in the background reaches the screen — and because showing it
+    // consumes it, the next resume finds nothing.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                pendingEvent = repo.loadPendingEvent()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // A short in-app fallback tick, so a timer that completes while the user is
+    // looking at the app pops immediately instead of waiting for a resume. It
+    // deliberately does NOT fire the completion itself — that is the alarm
+    // receiver / service / TimerScreen's job — it only re-reads the result.
+    LaunchedEffect(Unit) {
+        while (true) {
+            val next = repo.loadPendingEvent()
+            if (next?.eventId != pendingEvent?.eventId) pendingEvent = next
+            kotlinx.coroutines.delay(1_000L)
+        }
+    }
+
+    val event = pendingEvent ?: return
+
+    // Acknowledge immediately on first composition of the dialog: this is the
+    // single line that turns "pending" into "shown once, forever".
+    LaunchedEffect(event.eventId) {
+        TimerController.acknowledgeEvent(context, event.eventId)
+        pendingEvent = null
+    }
+
+    TimerCompletionPopup(
+        event = event,
+        onPrimary = {
+            pendingEvent = null
+            onOpenHabits()
+        },
+        onSecondary = { pendingEvent = null },
+        onDismiss = { pendingEvent = null },
+    )
+}
+
+/**
+ * Root composable: the bottom-bar shell and the nav graph, plus the app-wide
+ * host for the one-time timer completion popup.
+ */
 @Composable
 fun AppNavigation(viewModel: AppViewModel) {
     val navController: NavHostController = rememberNavController()
@@ -157,6 +259,8 @@ fun AppNavigation(viewModel: AppViewModel) {
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     val showAuthPrompt by viewModel.showAuthPrompt.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
+    val context = LocalContext.current
+
 
     // ── Health Connect permission launcher ────────────────────────────
     // Registered here (top of the composable, before any conditional
@@ -201,6 +305,20 @@ fun AppNavigation(viewModel: AppViewModel) {
         if (currentRoute == "home") {
             delay(900)
             viewModel.maybeShowAuthPrompt()
+        }
+    }
+
+    // Requests that arrive from outside Compose — a tapped notification, or the
+    // running-timer notification's Stop action. Handled here (not in the
+    // screens) because this is the only place that owns the NavController, and
+    // consumed immediately so the navigation can never replay on a later
+    // recomposition.
+    val requestedRoute by NavRequests.route.collectAsStateWithLifecycle()
+    LaunchedEffect(requestedRoute) {
+        val target = requestedRoute ?: return@LaunchedEffect
+        NavRequests.consume()
+        if (currentRoute != target) {
+            navController.navigate(target) { launchSingleTop = true }
         }
     }
 
@@ -421,9 +539,31 @@ fun AppNavigation(viewModel: AppViewModel) {
                                 restoreState = true
                             }
                         },
+                        onOpenTimer = {
+                            navController.navigate("timer") { launchSingleTop = true }
+                        },
                     )
                 }
                 composable("habits") { HabitsScreen(viewModel = viewModel) }
+                // Walk timer / stopwatch. Its own full screen (with its own
+                // top bar) rather than a tab: it is a focused, modal-ish task,
+                // and the one-time completion popup needs a predictable
+                // destination to return to.
+                composable("timer") {
+                    TimerScreen(
+                        onBack = {
+                            if (navController.previousBackStackEntry != null) navController.popBackStack()
+                            else navController.navigate("home") { launchSingleTop = true }
+                        },
+                        onOpenHabits = {
+                            navController.navigate("habits") {
+                                popUpTo("home") { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                }
                 composable("weekly") { WeeklyScreen(viewModel = viewModel) }
                 composable("insights") { InsightsScreen(viewModel = viewModel) }
                 composable("settings") { SettingsScreen(viewModel = viewModel) }
@@ -439,6 +579,30 @@ fun AppNavigation(viewModel: AppViewModel) {
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 10.dp),
+            )
+
+            // ── One-time timer completion popup ──────────────────────────────────
+            // Hosted at the app root, not inside TimerScreen, for two reasons:
+            //
+            // 1. A timer can finish while the user is on ANY tab (or with the app
+            //    backgrounded, if the alarm fired); the popup must appear wherever
+            //    they are, not only if they happened to leave the timer screen open.
+            // 2. Exactly one composable owns the event, so two screens can never
+            //    both decide to show it.
+            //
+            // The dialog is driven purely by the persisted pending record, and
+            // acknowledging it writes the event id into an append-only ledger — so
+            // it shows once per event and never again, across recomposition,
+            // navigation, resume, rotation or a reboot.
+            TimerCompletionHost(
+                context = context,
+                onOpenHabits = {
+                    navController.navigate("habits") {
+                        popUpTo("home") { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
             )
         }
     }

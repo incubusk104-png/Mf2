@@ -112,45 +112,20 @@ object HabitAlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
+        val canUseExact = AlarmScheduler.canScheduleExact(context)
 
-        runCatching {
-            if (canUseExact) {
-                // AlarmClockInfo's 2nd param is a *show* intent — what the OS
-                // launches if the user taps the alarm-clock icon in the status
-                // bar. It must point at an Activity; the broadcast
-                // `pendingIntent` below (which targets HabitReminderReceiver)
-                // is the wrong PendingIntent type for this slot.
-                val showIntent = PendingIntent.getActivity(
-                    context,
-                    requestCode(habitId),
-                    Intent(context, com.rork.mindsetframestracker.MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-                alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(triggerAtMillis, showIntent),
-                    pendingIntent,
-                )
-            } else {
-                // No exact-alarm permission: fire within a 15-minute window
-                // around the target time rather than not at all.
-                alarmManager.setWindow(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    WINDOW_MILLIS,
-                    pendingIntent,
-                )
-            }
-        }
-            .onSuccess {
-                Log.d(TAG, "Reminder for '$habitName' scheduled (exact=$canUseExact) at $triggerAtMillis")
-            }
-            .onFailure { error ->
-                Log.w(TAG, "Failed to schedule reminder for '$habitName'", error)
-            }
+        AlarmScheduler.schedule(
+            context = context,
+            triggerAtMillis = triggerAtMillis,
+            pendingIntent = pendingIntent,
+            wakeUp = true,
+            allowWhileIdle = true,
+            // A real Activity show-intent. The old code passed the *broadcast*
+            // PendingIntent here, which Android cannot launch as an Activity,
+            // so the status-bar alarm icon did nothing when tapped.
+            showIntent = AlarmScheduler.showIntent(context, requestCode(habitId)),
+        )
+        Log.d(TAG, "Reminder for '$habitName' scheduled (exact=$canUseExact) at $triggerAtMillis")
     }
 
     private fun reminderIntent(context: Context, habitId: String, habitName: String): Intent =
