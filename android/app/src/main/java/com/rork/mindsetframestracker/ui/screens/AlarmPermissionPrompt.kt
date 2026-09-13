@@ -129,19 +129,65 @@ object AlarmPermissions {
             isIgnoringBatteryOptimizations(context) &&
             hasFullScreenIntentPermission(context)
 
-    fun isMiuiDevice(): Boolean =
-        Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true) ||
-            Build.MANUFACTURER.equals("Redmi", ignoreCase = true) ||
-            Build.MANUFACTURER.equals("POCO", ignoreCase = true)
+    fun isMiuiDevice(): Boolean = oemFamily() == OemFamily.MIUI
+
+    /**
+     * Which "aggressive background management" family this device belongs
+     * to. Android exposes no public API to read any of these OEM toggles,
+     * so [OemPermissionState] tracks the user's own confirmation instead —
+     * see that object for why.
+     */
+    fun oemFamily(): OemFamily {
+        val manufacturer = Build.MANUFACTURER.orEmpty()
+        val brand = Build.BRAND.orEmpty()
+        fun oneOf(vararg names: String) =
+            names.any { manufacturer.equals(it, ignoreCase = true) || brand.equals(it, ignoreCase = true) }
+        return when {
+            oneOf("Xiaomi", "Redmi", "POCO") -> OemFamily.MIUI
+            oneOf("OPPO", "Realme", "OnePlus") -> OemFamily.COLOROS
+            oneOf("vivo", "iQOO") -> OemFamily.FUNTOUCH
+            oneOf("HUAWEI", "Honor") -> OemFamily.HUAWEI_HONOR
+            oneOf("samsung") -> OemFamily.SAMSUNG
+            oneOf("google") -> OemFamily.STOCK // Pixel — no extra background killing on top of AOSP
+            manufacturer.isBlank() || manufacturer.contains("unknown", ignoreCase = true) -> OemFamily.STOCK
+            else -> OemFamily.OTHER // Asus, Lenovo, Motorola, Sony, ZTE, Nokia/HMD, etc.
+        }
+    }
+
+    /**
+     * True for every OEM skin known (or reasonably assumed) to layer its own
+     * autostart/background-battery restrictions on top of stock Android —
+     * i.e. everyone except Pixel/stock. This — not a hardcoded MIUI check —
+     * is what decides whether the manual-confirmation rows are shown.
+     */
+    fun needsOemConfirmation(): Boolean = oemFamily() != OemFamily.STOCK
+
+    /** Short label for the manual-confirmation section's copy. */
+    fun oemSkinName(): String = when (oemFamily()) {
+        OemFamily.MIUI -> "MIUI/HyperOS"
+        OemFamily.COLOROS -> "ColorOS"
+        OemFamily.FUNTOUCH -> "Funtouch/OriginOS"
+        OemFamily.HUAWEI_HONOR -> "EMUI/MagicOS"
+        OemFamily.SAMSUNG -> "One UI"
+        OemFamily.OTHER -> "your phone's"
+        OemFamily.STOCK -> "Android"
+    }
 }
 
+enum class OemFamily { MIUI, COLOROS, FUNTOUCH, HUAWEI_HONOR, SAMSUNG, OTHER, STOCK }
+
 /**
- * NEW: the three MIUI-only toggles have no public "is it on?" API, so we
- * track the user's own confirmation instead. This is what makes the warning
- * triangles actually disappear once the user has gone through Settings and
- * turned each one on — previously they were hardcoded to always show.
+ * The three OEM-specific background-management toggles (autostart, battery
+ * saver, background pop-up) have no public "is it on?" API on ANY skin, so
+ * we track the user's own confirmation instead. This is what makes the
+ * warning triangles actually disappear once the user has gone through
+ * Settings and turned each one on — previously they were hardcoded to
+ * always show, and were only ever asked for on Xiaomi devices.
  */
-object MiuiPermissionState {
+object OemPermissionState {
+    // Prefs file/key names kept as-is (originally MIUI-only) so anyone
+    // upgrading from an older build doesn't lose confirmations they already
+    // made.
     private const val PREFS = "miui_permission_state"
     private const val KEY_AUTOSTART = "autostart_confirmed"
     private const val KEY_BATTERY_SAVER = "battery_saver_confirmed"
@@ -174,6 +220,55 @@ object MiuiPermissionState {
             .putBoolean(KEY_POPUP, false)
             .apply()
     }
+}
+
+/** Tries each (package, class) candidate in turn; true if any launched. */
+private fun tryComponents(context: Context, candidates: List<Pair<String, String>>, extras: Intent.() -> Unit = {}): Boolean =
+    candidates.any { (pkg, cls) ->
+        runCatching {
+            val intent = Intent().apply {
+                component = android.content.ComponentName(pkg, cls)
+                extras()
+            }
+            context.startActivity(intent)
+        }.isSuccess
+    }
+
+/** Opens this device's autostart/background-launch manager, whatever OEM it is. */
+private fun openOemAutostartSettings(context: Context) {
+    val opened = when (AlarmPermissions.oemFamily()) {
+        OemFamily.MIUI -> tryComponents(
+            context,
+            listOf(
+                "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                "com.miui.securitycenter" to "com.miui.securitycenter.permission.AutoStartManagementActivity",
+            ),
+        ) { putExtra("extra_pkgname", context.packageName) }
+        OemFamily.COLOROS -> tryComponents(
+            context,
+            listOf(
+                "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+                "com.coloros.safecenter" to "com.coloros.safecenter.startupapp.StartupAppListActivity",
+                "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
+            ),
+        )
+        OemFamily.FUNTOUCH -> tryComponents(
+            context,
+            listOf(
+                "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+                "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager",
+            ),
+        )
+        OemFamily.HUAWEI_HONOR -> tryComponents(
+            context,
+            listOf(
+                "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+                "com.huawei.systemmanager" to "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity",
+            ),
+        )
+        else -> false // Samsung/other: no separate autostart manager, battery page below covers it
+    }
+    if (!opened) openAppDetailsSettings(context)
 }
 
 private fun openMiuiAutostartSettings(context: Context) {
@@ -248,9 +343,9 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
 
     // NEW: user-confirmed MIUI toggle state — this is what makes the
     // warnings actually clear once the user has been through Settings.
-    var autostartConfirmed by remember { mutableStateOf(MiuiPermissionState.isAutostartConfirmed(context)) }
-    var batterySaverConfirmed by remember { mutableStateOf(MiuiPermissionState.isBatterySaverConfirmed(context)) }
-    var popupConfirmed by remember { mutableStateOf(MiuiPermissionState.isPopupConfirmed(context)) }
+    var autostartConfirmed by remember { mutableStateOf(OemPermissionState.isAutostartConfirmed(context)) }
+    var batterySaverConfirmed by remember { mutableStateOf(OemPermissionState.isBatterySaverConfirmed(context)) }
+    var popupConfirmed by remember { mutableStateOf(OemPermissionState.isPopupConfirmed(context)) }
 
     var notifPermanentlyDenied by remember {
         mutableStateOf(
@@ -301,7 +396,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
 
     // Only truly "all set" once the verifiable Android permissions AND the
     // user's own MIUI confirmations (when on a MIUI device) are both done.
-    val allGoodOverall = allGood && (!isMiui || MiuiPermissionState.allConfirmed(context))
+    val allGoodOverall = allGood && (!isMiui || OemPermissionState.allConfirmed(context))
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -376,7 +471,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         confirmed = autostartConfirmed,
                         onOpenSettings = { openMiuiAutostartSettings(context) },
                         onConfirm = {
-                            MiuiPermissionState.setAutostartConfirmed(context, true)
+                            OemPermissionState.setAutostartConfirmed(context, true)
                             autostartConfirmed = true
                         },
                     )
@@ -386,7 +481,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         confirmed = batterySaverConfirmed,
                         onOpenSettings = { openMiuiBatterySaverSettings(context) },
                         onConfirm = {
-                            MiuiPermissionState.setBatterySaverConfirmed(context, true)
+                            OemPermissionState.setBatterySaverConfirmed(context, true)
                             batterySaverConfirmed = true
                         },
                     )
@@ -396,7 +491,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                         confirmed = popupConfirmed,
                         onOpenSettings = { openMiuiPopupPermissionSettings(context) },
                         onConfirm = {
-                            MiuiPermissionState.setPopupConfirmed(context, true)
+                            OemPermissionState.setPopupConfirmed(context, true)
                             popupConfirmed = true
                         },
                     )
@@ -404,7 +499,7 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                     if (autostartConfirmed || batterySaverConfirmed || popupConfirmed) {
                         TextButton(
                             onClick = {
-                                MiuiPermissionState.resetAll(context)
+                                OemPermissionState.resetAll(context)
                                 autostartConfirmed = false
                                 batterySaverConfirmed = false
                                 popupConfirmed = false
@@ -519,7 +614,7 @@ private fun PermissionRow(
  * Two actions instead of one: "Check" opens the OEM Settings page, and once
  * the row has been opened at least once, "Mark as done" appears so the user
  * can explicitly confirm it and clear the warning — persisted across app
- * restarts via [MiuiPermissionState].
+ * restarts via [OemPermissionState].
  */
 @Composable
 private fun ConfirmablePermissionRow(
