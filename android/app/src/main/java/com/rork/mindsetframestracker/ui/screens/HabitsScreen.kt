@@ -249,9 +249,6 @@ fun HabitsScreen(viewModel: AppViewModel) {
                         ?.copy(reminderMinutes = chosenMinutes, repeatDaysMask = repeatMask)
                     if (chosenMinutes != null && updated != null) {
                         HabitAlarmScheduler.schedule(context, updated)
-                        // Confirming an alarm auto-records today's check-in
-                        // for this habit — no extra tap needed.
-                        viewModel.markHabitDoneToday(existingHabitId)
                     } else if (updated != null) {
                         // Switched back to "no alarm" — cancel any previously
                         // scheduled alarm for this habit instead of leaving
@@ -261,7 +258,7 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             if (chosenMinutes != null)
-                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}. Marked done for today."
+                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}"
                             else
                                 "Alarm removed for this habit.",
                         )
@@ -281,9 +278,6 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     if (chosenMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
                         if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
-                        // Confirming an alarm auto-records today's check-in
-                        // for this habit — no extra tap needed.
-                        viewModel.markHabitDoneToday(habit.id)
                     }
                     viewModel.queueSync()
                     scope.launch {
@@ -516,9 +510,6 @@ fun HabitsScreen(viewModel: AppViewModel) {
                     if (reminderMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
                         if (!AlarmPermissions.allGranted(context)) showAlarmPermissionPrompt = true
-                        // Confirming an alarm auto-records today's check-in
-                        // for this habit — no extra tap needed.
-                        viewModel.markHabitDoneToday(habit.id)
                     }
 
                     // ── SYNC TO CLOUD ──
