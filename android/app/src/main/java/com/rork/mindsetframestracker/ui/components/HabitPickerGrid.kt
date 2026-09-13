@@ -97,11 +97,17 @@ fun HabitPickerGrid(
                 onClick = {
                     when {
                         icon.isTodoList -> onTodoListTapped()
-                        isSelected -> onHabitRemoved(icon.id)
+                        // Tapping an already-added habit now opens the alarm
+                        // editor (re-edit / re-arm its reminder) instead of
+                        // deleting it — deletion moved to a dedicated tap on
+                        // the checkmark badge below, so it's a deliberate
+                        // action instead of the card's default behaviour.
+                        isSelected -> onSetupAlarmTapped(icon)
                         else -> onIconTapped(icon)
                     }
                 },
                 onSetupAlarmClick = { onSetupAlarmTapped(icon) },
+                onRemoveClick = { onHabitRemoved(icon.id) },
             )
         }
     }
@@ -130,6 +136,7 @@ private fun HabitCardTile(
     hasNoAlarmSet: Boolean = false,
     actualReminderMinutes: Int? = null,
     onSetupAlarmClick: () -> Unit = {},
+    onRemoveClick: () -> Unit = {},
 ) {
     val tileBg = cardBackground(icon, isDark)
     val textColor = cardTextColor(icon, isDark)
@@ -227,7 +234,7 @@ private fun HabitCardTile(
                 .padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 12.dp),
         )
 
-        // ── Top-right: green check badge ──
+        // ── Top-right: green check badge — tap to remove this habit ──
         if (isSelected && !icon.isTodoList) {
             Box(
                 modifier = Modifier
@@ -235,12 +242,16 @@ private fun HabitCardTile(
                     .padding(10.dp)
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF4CAF50)),
+                    .background(Color(0xFF4CAF50))
+                    // Independently clickable — consumes the tap so it never
+                    // falls through to the card's own onClick (which now
+                    // opens the alarm editor for selected habits).
+                    .clickable(onClick = onRemoveClick),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.Check,
-                    contentDescription = "Added",
+                    contentDescription = "Added — tap to remove",
                     tint = Color.White,
                     modifier = Modifier.size(14.dp),
                 )
