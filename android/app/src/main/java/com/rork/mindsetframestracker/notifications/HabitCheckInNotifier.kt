@@ -122,6 +122,16 @@ object HabitCheckInNotifier {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(notificationId(habitId), notification)
 
+            // Finalize today's check-in the moment the alarm actually rings
+            // — this is the "record" the user's habit-tracking is built on,
+            // not a guess made back when they merely picked a time. Kept in
+            // its own runCatching: if persistence ever hiccups, the
+            // notification the user actually sees/hears should still count
+            // as successfully posted.
+            runCatching {
+                com.rork.mindsetframestracker.data.MindsetRepository(context).markHabitDoneToday(habitId)
+            }.onFailure { Log.w(TAG, "Failed to record check-in for '$habitName' at ring-time", it) }
+
             if (reschedule) {
                 HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
             }
