@@ -1,0 +1,27 @@
+compile_exit=0
+compile_exit=0
+--- kotlin errors ---
+(none)
+--- build result ---
+BUILD SUCCESSFUL in 3m 23s
+--- tail ---
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:950:21 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1107:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1108:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1200:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1202:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1207:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1209:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/ActivitySourcePicker.kt:299:67 'val Icons.Filled.DirectionsRun: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsRun.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/AuthPromptSheet.kt:537:57 'val LocalClipboardManager: ProvidableCompositionLocal<ClipboardManager>' is deprecated. Use LocalClipboard instead which supports suspend functions.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/AlarmPermissionPrompt.kt:410:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/HomeScreen.kt:616:36 'fun rememberSwipeToDismissBoxState(initialValue: SwipeToDismissBoxValue = ..., confirmValueChange: (SwipeToDismissBoxValue) -> Boolean = ..., positionalThreshold: (Float) -> Float = ...): SwipeToDismissBoxState' is deprecated. confirmValueChange is deprecated without replacement. Rather than relying on a callback to veto state changes, the anchor set should not include disallowed anchors. See androidx.compose.foundation.samples.AnchoredDraggableDynamicAnchorsSample for an example of using dynamic anchors over confirmValueChange.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt:1904:42 'val Icons.Outlined.Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Logout.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt:1973:50 'val Icons.Outlined.Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Logout.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/TimerScreen.kt:281:88 'val Icons.Outlined.DirectionsWalk: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.DirectionsWalk.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/TimerScreen.kt:563:62 'val Icons.Outlined.DirectionsWalk: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.DirectionsWalk.
+w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/TimerScreen.kt:744:92 'val Icons.Outlined.DirectionsWalk: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.DirectionsWalk.
+
+BUILD SUCCESSFUL in 3m 23s
+17 actionable tasks: 17 executed
+Configuration cache entry stored.
