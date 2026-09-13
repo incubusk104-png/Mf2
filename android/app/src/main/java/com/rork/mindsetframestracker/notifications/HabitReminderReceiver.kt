@@ -32,7 +32,11 @@ class HabitReminderReceiver : BroadcastReceiver() {
             habitName,
             reschedule = !isSnoozeRefire,
         )) {
-            is HabitCheckInNotifier.NotifyResult.Posted -> Unit
+            is HabitCheckInNotifier.NotifyResult.Posted -> {
+                if (result.doNotDisturbActive) {
+                    Log.w(TAG, "Habit reminder for '$habitName' posted, but Do Not Disturb / a Focus mode is active — it may not visibly appear")
+                }
+            }
             is HabitCheckInNotifier.NotifyResult.PermissionMissing ->
                 Log.w(TAG, "Habit reminder for '$habitName' not shown: notification permission missing")
             is HabitCheckInNotifier.NotifyResult.Blocked ->
