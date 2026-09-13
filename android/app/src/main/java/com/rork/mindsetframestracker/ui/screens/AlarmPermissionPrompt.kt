@@ -573,18 +573,43 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                                 reschedule = false,
                             )) {
                                 is HabitCheckInNotifier.NotifyResult.Posted -> {
-                                    if (result.doNotDisturbActive) {
-                                        Toast.makeText(
-                                            context,
-                                            "Sent — but Do Not Disturb / a Focus mode is ON right now (see the crossed-out bell in your status bar). That can hide it from the shade even though sending succeeded. Turn it off, or allow this app through it, then try again.",
-                                            Toast.LENGTH_LONG,
-                                        ).show()
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "Test reminder sent — check your notification shade now.",
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
+                                    when {
+                                        result.doNotDisturbActive -> {
+                                            Toast.makeText(
+                                                context,
+                                                "Sent — but Do Not Disturb / a Focus mode is ON right now (see the crossed-out bell in your status bar). That can hide it from the shade even though sending succeeded. Turn it off, or allow this app through it, then try again.",
+                                                Toast.LENGTH_LONG,
+                                            ).show()
+                                        }
+                                        result.fullScreenIntentUnavailable -> {
+                                            // API 34+: USE_FULL_SCREEN_INTENT is its own
+                                            // special-access grant, separate from every
+                                            // other permission already checked. Without
+                                            // it the reminder still posts as a normal
+                                            // notification (that's the point of the fix)
+                                            // but won't ring as a full alarm screen —
+                                            // send the user straight to the one settings
+                                            // screen that grants it.
+                                            Toast.makeText(
+                                                context,
+                                                "Sent as a normal notification — but full-screen alarm behavior needs a separate permission on this Android version. Opening that setting now.",
+                                                Toast.LENGTH_LONG,
+                                            ).show()
+                                            runCatching {
+                                                val intent = Intent(
+                                                    android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                                    android.net.Uri.parse("package:${context.packageName}"),
+                                                )
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                        else -> {
+                                            Toast.makeText(
+                                                context,
+                                                "Test reminder sent — check your notification shade now.",
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
                                     }
                                 }
                                 is HabitCheckInNotifier.NotifyResult.PermissionMissing -> {
