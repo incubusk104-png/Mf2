@@ -60,7 +60,7 @@ object TimerNotifier {
      * [AlarmRingingActivity] declares no such constants: it is the *habit*-
      * reminder ringing screen and only ever reads `habitId` / `habitName`. The
      * references were unresolved, so the whole class failed to compile.)
-     * Keeping the names on our own `applyEventExtras` / `eventFromIntent` pair
+     * Keeping the names on our own `applyEventExtras` / `eventFromExtras` pair
      * means the producer and the consumer of these extras can never drift.
      */
     private const val EXTRA_EVENT_ID = "extra_event_id"
@@ -218,7 +218,7 @@ object TimerNotifier {
     }
 
     /** Reads back a timer from the extras [AlarmRingingActivity] was launched with. */
-    fun eventFromIntent(intent: Intent): TimerCompletionEvent? {
+    fun eventFromExtras(intent: Intent): TimerCompletionEvent? {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID) ?: return null
         val kind = runCatching { TimerKind.valueOf(intent.getStringExtra(EXTRA_TIMER_KIND) ?: "") }
             .getOrDefault(TimerKind.WALK_TIMER)
@@ -234,26 +234,36 @@ object TimerNotifier {
     }
 
     /**
-     * Headline for the full-screen ring, so the ringing screen says what
-     * actually finished instead of a bare "Time for your habit". Mirrors the
-     * notification title built in [postCompletion].
+     * Reads the timer event a full-screen launch was started with.
+     *
+     * Reading it back *is* how [AlarmRingingActivity] decides what is ringing.
+     * It used to call `TimerNotifier.eventFromIntent(intent)` while only
+     * [eventFromExtras] existed, which failed to resolve — so the ringing screen
+     * could not compile at all. They are one implementation, not two.
+     */
+    fun eventFromIntent(intent: Intent): TimerCompletionEvent? = eventFromExtras(intent)
+
+    /**
+     * The headline for a ringing [event], shared by the notification and
+     * [AlarmRingingActivity]
+     * so the alert and the screen that opens from it can never disagree about
+     * what finished.
      */
     fun ringTitle(event: TimerCompletionEvent): String = when (event.kind) {
         TimerKind.WALK_TIMER -> "Walk complete"
         TimerKind.STOPWATCH -> "Target reached"
     }
 
-    /**
-     * One-line detail under the ring headline, mirroring the notification body
-     * built in [postCompletion].
-     */
-    fun ringSubtitle(event: TimerCompletionEvent): String {
-        val detail = if (event.kind == TimerKind.WALK_TIMER) {
-            "${formatTimerDuration(event.targetSeconds)} walk finished"
-        } else {
-            "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
-        }
-        return if (event.label.isNotBlank()) "$detail \u2014 ${event.label}" else detail
+    /** Supporting line for a ringing [event], naming the duration reached. */
+    fun ringSubtitle(event: TimerCompletionEvent): String = buildString {
+        append(
+            if (event.kind == TimerKind.WALK_TIMER) {
+                "${formatTimerDuration(event.targetSeconds)} walk finished"
+            } else {
+                "Stopwatch passed ${formatTimerDuration(event.targetSeconds)}"
+            },
+        )
+        if (event.label.isNotBlank()) append(" — ${event.label}")
     }
 
     /** Puts a [TimerCompletionEvent] into extras (used by the ringing screen's tests/shares). */
@@ -274,7 +284,7 @@ object TimerNotifier {
         return runCatching { manager.canUseFullScreenIntent() }.getOrDefault(true)
     }
 
-    /** True when Do Not Disturb / An Focus mode is filtering notifications right now. */
+    /** True when Do Not Disturb / a Focus mode is filtering notifications right now. */
     fun isDoNotDisturbActive(context: Context): Boolean {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         return manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
