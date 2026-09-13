@@ -573,11 +573,19 @@ fun AlarmPermissionPromptDialog(onDismiss: () -> Unit) {
                                 reschedule = false,
                             )) {
                                 is HabitCheckInNotifier.NotifyResult.Posted -> {
-                                    Toast.makeText(
-                                        context,
-                                        "Test reminder sent — check your notification shade now.",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
+                                    if (result.doNotDisturbActive) {
+                                        Toast.makeText(
+                                            context,
+                                            "Sent — but Do Not Disturb / a Focus mode is ON right now (see the crossed-out bell in your status bar). That can hide it from the shade even though sending succeeded. Turn it off, or allow this app through it, then try again.",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Test reminder sent — check your notification shade now.",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
                                 }
                                 is HabitCheckInNotifier.NotifyResult.PermissionMissing -> {
                                     Toast.makeText(
