@@ -19,6 +19,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.rork.mindsetframestracker.auth.HuaweiAppUpdateChecker
 import com.rork.mindsetframestracker.auth.HuaweiAuthClient
 import com.rork.mindsetframestracker.auth.HuaweiServicesConfig
@@ -266,6 +270,20 @@ private fun AppRoot(
     onNotificationPermissionNeeded: (scheduleIfGranted: () -> Unit) -> Unit,
 ) {
     val data by viewModel.state.collectAsStateWithLifecycle()
+
+    // Re-sync from disk every time the app comes back to the foreground.
+    // The alarm/snooze receivers write habit completions straight to
+    // MindsetRepository with no ViewModel reference of their own — without
+    // this, a habit marked done by a ringing alarm wouldn't show as done in
+    // an already-open app until it was force-restarted.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.reloadFromDisk()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(data.settings.onboardingDone) {
         if (data.settings.onboardingDone) {
