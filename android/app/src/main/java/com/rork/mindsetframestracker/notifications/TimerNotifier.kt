@@ -51,12 +51,24 @@ object TimerNotifier {
 
     private const val NOTIFICATION_ID_BASE = 4000
 
-    /** Falls back to [android.content.Context.NOTIFICATION_SERVICE]'s default importance. */
+    /**
+     * Intent extras describing the timer event a notification refers to.
+     *
+     * These live here, privately, and every reference in this file goes
+     * through them — including the full-screen `ringingIntent` below. (That
+     * block previously read `AlarmRingingActivity.EXTRA_TIMER_*`, but
+     * [AlarmRingingActivity] declares no such constants: it is the *habit*-
+     * reminder ringing screen and only ever reads `habitId` / `habitName`. The
+     * references were unresolved, so the whole class failed to compile.)
+     * Keeping the names on our own `applyEventExtras` / `eventFromExtras` pair
+     * means the producer and the consumer of these extras can never drift.
+     */
     private const val EXTRA_EVENT_ID = "extra_event_id"
     private const val EXTRA_TIMER_KIND = "extra_timer_kind"
     private const val EXTRA_TIMER_LABEL = "extra_timer_label"
     private const val EXTRA_TIMER_HABIT_ID = "extra_timer_habit_id"
     private const val EXTRA_TIMER_TARGET = "extra_timer_target"
+    private const val EXTRA_TIMER_ELAPSED = "extra_timer_elapsed"
 
     /** Stable notification id for an event \u2014 re-posting updates, never stacks. */
     fun notificationId(eventId: String): Int = NOTIFICATION_ID_BASE + (eventId.hashCode() and 0x3FFF)
@@ -88,12 +100,12 @@ object TimerNotifier {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
             val ringingIntent = Intent(context, AlarmRingingActivity::class.java).apply {
-                putExtra(AlarmRingingActivity.EXTRA_TIMER_EVENT_ID, event.eventId)
-                putExtra(AlarmRingingActivity.EXTRA_TIMER_KIND, event.kind.name)
-                putExtra(AlarmRingingActivity.EXTRA_TIMER_LABEL, event.label)
-                putExtra(AlarmRingingActivity.EXTRA_TIMER_HABIT_ID, event.habitId)
-                putExtra(AlarmRingingActivity.EXTRA_TIMER_TARGET, event.targetSeconds)
-                putExtra(AlarmRingingActivity.EXTRA_TIMER_ELAPSED, event.elapsedSeconds)
+                putExtra(EXTRA_EVENT_ID, event.eventId)
+                putExtra(EXTRA_TIMER_KIND, event.kind.name)
+                putExtra(EXTRA_TIMER_LABEL, event.label)
+                putExtra(EXTRA_TIMER_HABIT_ID, event.habitId)
+                putExtra(EXTRA_TIMER_TARGET, event.targetSeconds)
+                putExtra(EXTRA_TIMER_ELAPSED, event.elapsedSeconds)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP

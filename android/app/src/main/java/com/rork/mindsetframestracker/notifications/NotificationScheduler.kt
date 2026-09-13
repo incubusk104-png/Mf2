@@ -1,10 +1,10 @@
 package com.rork.mindsetframestracker.notifications
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.notifications.CheckInReceiver.Companion.EXTRA_REMINDER_MINUTES
 import java.util.Calendar
 import java.util.Date
@@ -28,6 +28,25 @@ import java.util.Date
  * alarms stay aligned to the clock even across daylight-saving transitions.
  */
 class NotificationScheduler(private val context: Context) {
+
+    /**
+     * The system [AlarmManager], resolved on demand.
+     *
+     * Both call sites below — `setWindow` for the weekly recap and `cancel` for
+     * the teardown paths — referenced a bare `alarmManager` that this class
+     * never declared. Together with the missing `android.app.AlarmManager`
+     * import that is what made `:app:compileReleaseKotlin` fail with
+     * `Unresolved reference 'alarmManager'` / `'AlarmManager'`, and the
+     * `Cannot infer type for type parameter 'R'` / `'T'` errors that fell out
+     * of the same unresolved receiver in the `runCatching { … }` chains.
+     *
+     * Resolved through `Context.ALARM_SERVICE` here rather than routed via
+     * [AlarmScheduler]: the weekly recap deliberately stays on an inexact
+     * windowed alarm (see [scheduleWeeklyRecap]), so it must not be promoted to
+     * the alarm-clock ladder that [AlarmScheduler.schedule] would pick.
+     */
+    private val alarmManager: AlarmManager
+        get() = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
     /** Schedules (or reschedules) the daily reminder at [minutes] past midnight. */
     fun scheduleDailyReminder(minutes: Int) {
