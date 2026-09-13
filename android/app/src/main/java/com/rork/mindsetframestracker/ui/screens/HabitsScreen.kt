@@ -96,7 +96,10 @@ import java.util.UUID
  *    to re-arm every alarm from the persisted data.
  */
 @Composable
-fun HabitsScreen(viewModel: AppViewModel) {
+fun HabitsScreen(
+    viewModel: AppViewModel,
+    onOpenTimer: () -> Unit,
+) {
     val data by viewModel.state.collectAsStateWithLifecycle()
     val hasAccess = data.settings.hasFeatureAccess()
     val currentTier = data.settings.subscriptionTier()
@@ -161,7 +164,11 @@ fun HabitsScreen(viewModel: AppViewModel) {
                 .padding(innerPadding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 96.dp),
             header = {
-                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                ) {
                     Text(
                         text = "Your habits",
                         style = MaterialTheme.typography.headlineMedium,
@@ -173,6 +180,13 @@ fun HabitsScreen(viewModel: AppViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
+                    // Walk timer & stopwatch entry point. Moved here from the
+                    // Today screen: the timers belong with the habits/tracking
+                    // area, not under the daily check-in header. Renders the
+                    // live countdown while a run is active, otherwise the
+                    // "start a walk timer" affordance — both open TimerScreen.
+                    Spacer(Modifier.height(14.dp))
+                    TimerEntryCard(onOpenTimer = onOpenTimer)
                 }
             },
             onIconTapped = { icon ->

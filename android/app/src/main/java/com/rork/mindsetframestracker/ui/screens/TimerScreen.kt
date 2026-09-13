@@ -600,7 +600,10 @@ fun TimerCompletionPopup(
 }
 
 /**
- * Home-screen entry point for the timers.
+ * Entry point for the timers, rendered on the **Habits** screen.
+ *
+ * Intentionally not on Today: the timers are their own focused task, and
+ * keeping them here means the Home surface stays a pure daily check-in.
  *
  * Two states, one card: while a run is live it renders the compact
  * [ActiveTimerStrip] (with the countdown), otherwise it renders a "start a walk
@@ -683,7 +686,7 @@ fun TimerEntryCard(
 }
 
 /**
- * Compact "a timer is running" strip for the Home screen, so the feature is
+ * Compact "a timer is running" strip for the Habits screen, so the feature is
  * reachable without hunting for it and the live time is visible at a glance.
  * Tapping it opens [TimerScreen].
  */

@@ -102,7 +102,9 @@ Plus:
 | `ui/screens/TimerScreen.kt` | The walk timer + stopwatch UI, `TimerCompletionPopup`, `ActiveTimerStrip`, `TimerEntryCard`. |
 | `ui/navigation/NavRequests.kt` | One-shot deep-link channel for cold-start notification taps. |
 
-**Modified:** `AndroidManifest.xml` (permissions `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`; registers `TimerService`, `TimerAlarmReceiver`, `TimerReminderReceiver`), `ui/navigation/AppNavigation.kt` (route `"timer"`, `TimerCompletionHost`, deep-link handling), `MainActivity.kt` (`handleTimerIntent`, `EXTRA_OPEN_ROUTE`/`EXTRA_STOP_TIMER`, `ROUTE_TIMER`), `MindsetFramesApplication.kt` (cold-start reconcile), `ui/screens/HomeScreen.kt` (timer card under the header).
+**Modified:** `AndroidManifest.xml` (permissions `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`; registers `TimerService`, `TimerAlarmReceiver`, `TimerReminderReceiver`), `ui/navigation/AppNavigation.kt` (route `"timer"`, `TimerCompletionHost`, deep-link handling, `onOpenTimer` wired through Habits), `MainActivity.kt` (`handleTimerIntent`, `EXTRA_OPEN_ROUTE`/`EXTRA_STOP_TIMER`, `ROUTE_TIMER`), `MindsetFramesApplication.kt` (cold-start reconcile), `ui/screens/HabitsScreen.kt` (timer card in the header area).
+
+> **Placement note (later revision).** `TimerEntryCard` was first placed on the **Today / Home** screen directly under the header. That was wrong: Today is the daily check-in surface (mood, prompt, quote, checklist) and a timer card sitting in it read as a stray widget. The entry point now lives on the **Habits** screen, next to the tracking content it belongs to. `HomeScreen` no longer takes an `onOpenTimer` parameter and renders no timer UI. The `"timer"` route, the alarm/service wiring and the one-time completion popup are unchanged by this move — the popup host still sits above the `NavHost`, so it appears no matter which screen the user is on when a timer finishes.
 
 ---
 

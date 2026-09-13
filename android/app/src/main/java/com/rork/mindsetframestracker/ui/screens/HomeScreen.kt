@@ -160,7 +160,6 @@ import java.util.Locale
 fun HomeScreen(
     viewModel: AppViewModel,
     onGoToHabits: () -> Unit,
-    onOpenTimer: () -> Unit,
 ) {
     val data by viewModel.state.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
@@ -340,14 +339,10 @@ fun HomeScreen(
             }
         }
 
-        item(key = "timer") {
-            // Walk timer / stopwatch entry point. Sits directly under the header
-            // so a running timer's countdown is the first thing visible.
-            EntranceItem(index = 1) {
-                TimerEntryCard(onOpenTimer = onOpenTimer)
-            }
-        }
-
+        // NOTE: the walk timer / stopwatch entry point deliberately does NOT
+        // live here. Today is the daily check-in surface (mood, prompt, quote,
+        // habit checklist); the timers are a separate, focused task and are
+        // reached from the Habits screen instead.
         item(key = "mood") {
             EntranceItem(index = 1) {
                 Column {

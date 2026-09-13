@@ -539,12 +539,18 @@ fun AppNavigation(viewModel: AppViewModel) {
                                 restoreState = true
                             }
                         },
+                    )
+                }
+                composable("habits") {
+                    // The walk timer / stopwatch entry point lives on Habits
+                    // (not Today), so the route is wired through here.
+                    HabitsScreen(
+                        viewModel = viewModel,
                         onOpenTimer = {
                             navController.navigate("timer") { launchSingleTop = true }
                         },
                     )
                 }
-                composable("habits") { HabitsScreen(viewModel = viewModel) }
                 // Walk timer / stopwatch. Its own full screen (with its own
                 // top bar) rather than a tab: it is a focused, modal-ish task,
                 // and the one-time completion popup needs a predictable
