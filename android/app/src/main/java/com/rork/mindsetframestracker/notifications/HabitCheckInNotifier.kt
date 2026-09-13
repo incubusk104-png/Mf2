@@ -293,4 +293,88 @@ object HabitCheckInNotifier {
         }
         manager.createNotificationChannel(channel)
     }
+
+    /**
+     * One-shot dump of every flag that can independently hide a habit
+     * reminder, across every layer that's had to be checked one at a time
+     * across previous rounds of debugging: runtime permission, app/channel
+     * notification settings, Do Not Disturb, the Android 14+
+     * full-screen-intent grant, exact-alarm scheduling, and battery
+     * optimization. Every one of these can be off while every other one is
+     * on — a green checkmark on one setting says nothing about the rest.
+     *
+     * Deliberately placed here rather than in its own file: a standalone
+     * "AlarmDiagnostics.kt" file has repeatedly failed to make it into the
+     * actual build even though it appeared to exist in exports of the
+     * project, so this lives inside a file that has synced correctly every
+     * time so far.
+     */
+    fun diagnosticsReport(context: Context): String {
+        val sb = StringBuilder()
+        sb.appendLine("Mindset Frames alarm diagnostics")
+        sb.appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} — Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        sb.appendLine()
+
+        val postNotificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true // not applicable before API 33
+        }
+        sb.appendLine("POST_NOTIFICATIONS granted: $postNotificationsGranted")
+
+        val notifManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val appNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        sb.appendLine("App notifications enabled (system-level toggle): $appNotificationsEnabled")
+
+        val channelForReport = notifManager.getNotificationChannel(CHANNEL_ID)
+        if (channelForReport == null) {
+            sb.appendLine("\"Habit Reminders\" channel: not created yet (will be created on first reminder)")
+        } else {
+            sb.appendLine("\"Habit Reminders\" channel importance: ${importanceName(channelForReport.importance)}")
+            sb.appendLine("\"Habit Reminders\" channel sound usage: ${channelForReport.audioAttributes?.usage ?: "none"}")
+        }
+
+        val interruptionFilter = notifManager.currentInterruptionFilter
+        sb.appendLine("Do Not Disturb / Focus mode active: ${interruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL} (filter=${filterName(interruptionFilter)})")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            sb.appendLine("Full-screen intent (ringing alarm screen) allowed: ${notifManager.canUseFullScreenIntent()}")
+        } else {
+            sb.appendLine("Full-screen intent allowed: yes (not gated before Android 14)")
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            sb.appendLine("Exact alarms allowed: ${alarmManager.canScheduleExactAlarms()}")
+        } else {
+            sb.appendLine("Exact alarms allowed: yes (not gated before Android 12)")
+        }
+
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val ignoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+        sb.appendLine("Battery optimization disabled for this app: $ignoringBatteryOptimizations")
+
+        return sb.toString()
+    }
+
+    private fun importanceName(importance: Int): String = when (importance) {
+        NotificationManager.IMPORTANCE_NONE -> "NONE (blocked)"
+        NotificationManager.IMPORTANCE_MIN -> "MIN"
+        NotificationManager.IMPORTANCE_LOW -> "LOW"
+        NotificationManager.IMPORTANCE_DEFAULT -> "DEFAULT"
+        NotificationManager.IMPORTANCE_HIGH -> "HIGH"
+        NotificationManager.IMPORTANCE_MAX -> "MAX"
+        else -> "UNKNOWN ($importance)"
+    }
+
+    private fun filterName(filter: Int): String = when (filter) {
+        NotificationManager.INTERRUPTION_FILTER_ALL -> "ALL (DND off)"
+        NotificationManager.INTERRUPTION_FILTER_PRIORITY -> "PRIORITY"
+        NotificationManager.INTERRUPTION_FILTER_NONE -> "NONE (total silence)"
+        NotificationManager.INTERRUPTION_FILTER_ALARMS -> "ALARMS only"
+        NotificationManager.INTERRUPTION_FILTER_UNKNOWN -> "UNKNOWN"
+        else -> "UNKNOWN ($filter)"
+    }
 }
