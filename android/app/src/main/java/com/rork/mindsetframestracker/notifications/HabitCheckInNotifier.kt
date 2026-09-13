@@ -224,7 +224,7 @@ object HabitCheckInNotifier {
             // Record whether the OS will actually DELIVER it. notify() returns
             // normally even when the notification is silently dropped (app
             // notifications off, or the channel set to NONE), so a clean call
-            // here is not evidence the user saw or heard anything \u2014 this
+            // here is not evidence the user saw or heard anything — this
             // line is what makes the difference visible in a bug report
             // instead of leaving "I set it and nothing happened".
             if (habitId != DIAGNOSTIC_HABIT_ID) {
@@ -296,7 +296,7 @@ object HabitCheckInNotifier {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Habit Reminders",
-            NotificationManager.IMPORTANCE_HIGH,  // heads-up + sound + vibrate
+            NotificationManager.IMPORTANCE_HIGH, // heads-up + sound + vibrate
         ).apply {
             description = "Individual habit reminders that fire at the time you set"
             enableVibration(true)
@@ -312,12 +312,11 @@ object HabitCheckInNotifier {
             // is deliberately NOT used: it needs a notification-policy
             // access grant the app doesn't hold, and asking for one is a
             // worse UX than the user simply setting an alarm sound.
-            // NOTE: there is deliberately no setAudioAttributes() call here.
-            // NotificationChannel exposes no such method (only setSound(Uri,
-            // AudioAttributes) and getAudioAttributes()), so the call that used
-            // to sit here never compiled. The sound *stream* is set by the
-            // setSound(...) below, which is where USAGE_ALARM — i.e. alarm
-            // volume, unaffected by silent mode / DND — actually comes from.
+            // The alarm usage for this channel is declared by the
+            // setSound() call below, which passes a USAGE_ALARM
+            // AudioAttributes. NotificationChannel exposes no setter for
+            // audio attributes (that builder lives on MediaPlayer), so the
+            // call that used to sit here did not compile.
             // USAGE_ALARM plays on the phone's Alarm volume, which most
             // "silent mode" / Do Not Disturb / Bedtime toggles leave
             // untouched — this is what makes the reminder actually ring
@@ -410,7 +409,7 @@ object HabitCheckInNotifier {
     }
 
     private fun filterName(filter: Int): String = when (filter) {
-        NotificationManager.INTERRUPTION_FILTER_ALL -> "ALL (DND off)"
+        NotificationManager.INTERRUPTION_FILTER_ALL -> "AL\ (DND off)"
         NotificationManager.INTERRUPTION_FILTER_PRIORITY -> "PRIORITY"
         NotificationManager.INTERRUPTION_FILTER_NONE -> "NONE (total silence)"
         NotificationManager.INTERRUPTION_FILTER_ALARMS -> "ALARMS only"
