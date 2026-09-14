@@ -49,8 +49,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import com.rork.mindsetframestracker.ui.screens.HabitTimerOptionsSheet
 import com.rork.mindsetframestracker.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,9 +58,10 @@ import kotlinx.coroutines.withContext
  * like an actual alarm clock, not a heads-up notification that a phone in
  * silent/Do-Not-Disturb/Bedtime mode can swallow without a sound.
  *
- * Rings on the ALARM audio stream (separate from the notification/ringer
- * stream most silence toggles mute) and vibrates in a loop until the user
- * dismisses or snoozes it, or [AUTO_STOP_MILLIS] elapses.
+ * The ring's **sound and vibration are owned by [AlarmRingService]**, not by
+ * this screen — see that class for why. This Activity is only the view of an
+ * alarm that is already ringing, which is what keeps the ring alive when this
+ * screen cannot launch (Android 14+ revokes USE_FULL_SCREEN_INTENT by default).
  */
 class AlarmRingingActivity : ComponentActivity() {
 
@@ -94,9 +93,9 @@ class AlarmRingingActivity : ComponentActivity() {
     private var habitIconRes: Int? = null
 
     /**
-     * True when this ring is a habit reminder — i.e. when the timer/stopwatch
-     * choice belongs to this screen. Habit reminders only: a timer completion
-     * has nothing to choose, and must never offer to start a second run.
+     * True when this ring is a habit reminder — i.e. when this screen should
+     * resolve the habit's own artwork for it. Habit reminders only: a timer
+     * completion has no habit to draw.
      */
     private var timerOptionsReady = false
 
@@ -117,28 +116,9 @@ class AlarmRingingActivity : ComponentActivity() {
             habitId = intent.getStringExtra("habitId") ?: run { finish(); return }
             habitName = intent.getStringExtra("habitName") ?: "Habit"
 
-            // The habit's own alarm is ringing, so this screen owns the
-            // timer/stopwatch choice and shows it automatically once the ring
-            // has started — no tap required.
+            // This is a habit's own alarm ringing, so this screen resolves that
+            // habit's artwork below.
             timerOptionsReady = true
-
-            // ── The one-shot timer/stopwatch request ────────────────────────
-            // Written here from the Intent extras, before anything else touches
-            // the ring, so the choice is already waiting when the popup opens.
-            // A plain SharedPreferences write: deliberately NO repository read
-            // and no blocking on this path, because decoding the whole app blob
-            // on the main thread inside onCreate is what used to delay — and
-            // occasionally kill — the ring itself. (It was wrapped in
-            // runBlocking(Dispatchers.IO) here before.) The newest ring wins,
-            // which is what HabitTimerRequests.request documents.
-            if (habitId.isNotEmpty()) {
-                HabitTimerRequests.request(
-                    context = this,
-                    habitId = habitId,
-                    habitName = habitName,
-                    iconId = null,
-                )
-            }
         }
 
         showOverLockScreen()
@@ -190,51 +170,27 @@ class AlarmRingingActivity : ComponentActivity() {
                         showSnooze = ringingEvent == null,
                         onDismiss = { finishRinging() },
                         onSnooze = { snoozeAndFinish() },
-                        // A fallback for reachability only: the popup below
-                        // appears on its own the moment the ring starts. This
-                        // button routes to the HABITS tab (not the timer
-                        // screen) so the habit's icon — the thing the choice
-                        // belongs to — is what the user lands on.
+                        // A fallback for reachability only: the timer/stopwatch
+                        // popup appears on its own at the app root the moment
+                        // this alarm rings. This button routes to the HABITS tab
+                        // (not the timer screen) so the habit's icon — the thing
+                        // the choice belongs to — is what the user lands on.
                         onTimerOptions = {
                             NavRequests.request(NavRequests.ROUTE_HABITS)
                             finishRinging()
                         },
                     )
 
-                    // ── The timer / stopwatch popup ─────────────────────
-                    // Shown automatically the instant this alarm rings — the
-                    // same moment its notification appears — so the user picks
-                    // timer or stopwatch without tapping anything. It is
-                    // anchored to the ringing habit's own icon.
-                    if (timerOptionsReady) {
-                        val context = LocalContext.current
-                        val request = remember { HabitTimerRequests.peek(context) }
-                        var dismissed by remember { mutableStateOf(false) }
-                        if (request != null && !dismissed) {
-                            HabitTimerOptionsSheet(
-                                habitId = request.habitId,
-                                habitName = request.habitName.ifBlank { habitName },
-                                habitIconId = request.iconId ?: resolvedIconId,
-                                onOpenTimerScreen = {
-                                    // TimerController.start already opened the
-                                    // run; route the app at the timer screen
-                                    // so the user lands on it as the ring ends.
-                                    NavRequests.request(NavRequests.ROUTE_TIMER)
-                                    finishRinging()
-                                },
-                                onDismiss = { dismissed = true },
-                            )
-                            // Clear the on-disk flag the moment the choice is
-                            // shown, so it can never come back: a
-                            // recomposition, a resume, a navigation or a
-                            // reboot all find the request already consumed.
-                            // The sheet stays on screen from the value already
-                            // read, so this ring still shows it exactly once.
-                            LaunchedEffect(request.habitId) {
-                                HabitTimerRequests.consume(context)
-                            }
-                        }
-                    }
+                    // NOTE: the timer/stopwatch popup used to be rendered right
+                    // here. It now lives at the app root (HabitTimerOptionsHost
+                    // in AppNavigation), because this screen is launched through
+                    // the reminder's full-screen intent — and on Android 14+
+                    // USE_FULL_SCREEN_INTENT is revoked by default, so the
+                    // notification posts with no full-screen intent and this
+                    // Activity never launches at all. Hosting the choice here
+                    // made it depend on a grant the user had no reason to have
+                    // given: the alarm rang, and the popup never appeared.
+                    // The `onTimerOptions` button above stays as a fallback.
                 }
             }
         }
@@ -243,14 +199,14 @@ class AlarmRingingActivity : ComponentActivity() {
     /**
      * A second alarm arriving while this screen is already up is delivered HERE
      * rather than as a new Activity, because this Activity is declared
-     * `singleInstance` \u2014 the OS reuses the running instance.
+     * `singleInstance` — the OS reuses the running instance.
      *
      * Without this override the screen kept showing the FIRST alarm's habit and
-     * name while a *different* alarm was ringing, and \u2014 because the
-     * timer/stopwatch request is written from the Intent \u2014 the new ring's
+     * name while a *different* alarm was ringing, and — because the
+     * timer/stopwatch request is written from the Intent — the new ring's
      * timer/stopwatch popup was never requested at all. Recreating re-runs
-     * onCreate against the new Intent, so the screen, the ring and the one-shot
-     * request all describe the alarm that is actually ringing.
+     * onCreate against the new Intent, so the screen and the ring both describe
+     * the alarm that is actually ringing.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

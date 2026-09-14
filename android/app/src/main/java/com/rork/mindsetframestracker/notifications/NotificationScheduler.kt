@@ -17,12 +17,12 @@ import java.util.Date
  *    notifies when today's habits are still incomplete.
  * 3. The Sunday-evening weekly recap ("You checked in 5/7 days this week").
  *
- * Uses the strongest alarm this device currently allows — see
- * [AlarmScheduler] for the fallback ladder. An exact alarm
- * ([AlarmManager.setAlarmClock]) needs the exact-alarm permission
- * ([AlarmManager.canScheduleExactAlarms]); without it we degrade to
- * `setExactAndAllowWhileIdle`, then to a 15-minute inexact window, rather than
- * scheduling nothing at all.
+ * Uses the strongest **app-owned** alarm this device currently allows — see
+ * [AlarmScheduler] for the fallback ladder. An exact alarm needs the
+ * exact-alarm permission ([AlarmManager.canScheduleExactAlarms]); without it we
+ * degrade to `setExactAndAllowWhileIdle`, then to a 15-minute inexact window,
+ * rather than scheduling nothing at all. No alarm here registers with the
+ * system Clock app.
  *
  * Each receiver reschedules itself for the next day after each fire, so the
  * alarms stay aligned to the clock even across daylight-saving transitions.
@@ -43,7 +43,7 @@ class NotificationScheduler(private val context: Context) {
      * Resolved through `Context.ALARM_SERVICE` here rather than routed via
      * [AlarmScheduler]: the weekly recap deliberately stays on an inexact
      * windowed alarm (see [scheduleWeeklyRecap]), so it must not be promoted to
-     * the alarm-clock ladder that [AlarmScheduler.schedule] would pick.
+     * the exact ladder that [AlarmScheduler.schedule] would pick.
      */
     private val alarmManager: AlarmManager
         get() = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -97,11 +97,6 @@ class NotificationScheduler(private val context: Context) {
     }
 
     /**
-     * Schedules the one-shot trial payment reminder at [triggerAtMillis]
-     * (typically 24 hours before the trial converts to a paid plan). The
-     * notifier re-verifies the trial at fire time, so a stale alarm is safe.
-     */
-    /**
      * Schedules (or reschedules) the nightly evening reflection prompt — a
      * quiet companion question that lands around 9:15 PM. The receiver
      * reschedules itself daily so the ritual stays perpetual.
@@ -151,10 +146,9 @@ class NotificationScheduler(private val context: Context) {
     /**
      * Arms one recurring reminder and logs which mechanism actually took it.
      *
-     * [requestCode] is only used to build the alarm-clock show-intent, so the
-     * status-bar alarm icon opens *this app* instead of doing nothing (the old
-     * code passed the broadcast PendingIntent as the show-intent, which Android
-     * cannot launch as an Activity — see [AlarmScheduler]).
+     * [requestCode] identifies which reminder this is; the arming itself goes
+     * through [AlarmScheduler], which arms an app-owned exact alarm and never
+     * registers with the system Clock app.
      */
     private fun scheduleAt(
         label: String,
@@ -169,7 +163,6 @@ class NotificationScheduler(private val context: Context) {
             pendingIntent = pendingIntent,
             wakeUp = true,
             allowWhileIdle = true,
-            showIntent = AlarmScheduler.showIntent(context, requestCode),
         )
         Log.i(TAG, "$label scheduled for ${formatTime(minutes)} (precision=$precision)")
     }

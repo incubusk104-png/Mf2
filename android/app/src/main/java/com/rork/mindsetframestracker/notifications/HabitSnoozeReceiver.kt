@@ -83,10 +83,6 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
             pendingIntent = pendingIntent,
             wakeUp = true,
             allowWhileIdle = true,
-            showIntent = AlarmScheduler.showIntent(
-                context,
-                habitId.hashCode() + SNOOZE_REQUEST_CODE_OFFSET,
-            ),
         )
         Log.d(TAG, "Snoozed '$habitName' for 5 minutes (precision=$precision)")
     }

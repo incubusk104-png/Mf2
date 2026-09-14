@@ -68,8 +68,10 @@ import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.components.AuthPromptSheet
 import com.rork.mindsetframestracker.data.TimerRepository
 import com.rork.mindsetframestracker.data.TimerStatus
+import com.rork.mindsetframestracker.notifications.HabitTimerRequests
 import com.rork.mindsetframestracker.notifications.TimerController
 import com.rork.mindsetframestracker.notifications.TimerService
+import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.ui.screens.TimerCompletionPopup
 import com.rork.mindsetframestracker.ui.components.SetNewPasswordSheet
 import com.rork.mindsetframestracker.ui.components.SyncStatusBanner
@@ -81,10 +83,13 @@ import com.rork.mindsetframestracker.ui.screens.OnboardingScreen
 import com.rork.mindsetframestracker.ui.screens.SettingsScreen
 import com.rork.mindsetframestracker.ui.screens.SplashScreen
 import com.rork.mindsetframestracker.ui.screens.TimerScreen
+import com.rork.mindsetframestracker.ui.screens.HabitTimerOptionsSheet
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
 import com.rork.mindsetframestracker.util.rememberIsOnline
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 
@@ -161,12 +166,100 @@ private fun ConnectivityStatusIcon(
 }
 
 /**
+ * Root-level owner of the **timer / stopwatch popup for a ringing habit alarm**.
+ *
+ * ## Why the popup is hosted here and not in the ringing screen
+ *
+ * [com.rork.mindsetframestracker.notifications.AlarmRingingActivity] is launched
+ * through the reminder's *full-screen intent*. From Android 14 (API 34)
+ * `USE_FULL_SCREEN_INTENT` is revoked by default for apps whose primary purpose
+ * isn't alarms/calls — it is granted on a *separate* "Special app access"
+ * screen, not the permissions list. When it is missing,
+ * [com.rork.mindsetframestracker.notifications.HabitCheckInNotifier] correctly
+ * posts the notification **without** a full-screen intent, which means that
+ * Activity never launches at all.
+ *
+ * Hosting the choice inside that screen therefore made it silently depend on a
+ * grant the user had no reason to have given — the alarm rang, the
+ * notification appeared, and the timer/stopwatch popup never came up. Hosted
+ * here on the app root, it appears on its own at the moment the alarm rings
+ * whenever the app is in the foreground, and the one-shot request it reads
+ * survives a ring that happens while the app is in the background — so the
+ * user still gets it the moment they next open the app.
+ *
+ * ## Appearing exactly once per ring
+ *
+ * The request is written to disk when the ring happens (see
+ * [HabitTimerRequests]) and **consumed here the instant the sheet is shown**,
+ * so recomposition, resume, navigation, rotation and reboot all find nothing.
+ * The sheet keeps rendering from the value already read, so this ring still
+ * shows it exactly once.
+ */
+@Composable
+private fun HabitTimerOptionsHost(
+    onOpenTimerScreen: () -> Unit,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var request by remember { mutableStateOf(HabitTimerRequests.peek(context)) }
+
+    // Re-read on every resume: this is how a ring that happened while the app
+    // was backgrounded still surfaces, and the consume below is why a second
+    // resume finds nothing.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                request = HabitTimerRequests.peek(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val pending = request ?: return
+
+    // Consume the moment the choice is shown, so it can never come back. The
+    // sheet below keeps rendering from the value already read, so this ring
+    // still shows it exactly once.
+    LaunchedEffect(pending.habitId) {
+        HabitTimerRequests.consume(context)
+    }
+
+    // The ringing habit's own catalog artwork. Resolved off the main thread —
+    // decoding the app blob synchronously in composition is exactly the
+    // main-thread stall that has to stay off the ring path. The sheet falls
+    // back to its generic timer glyph for the first frame.
+    var iconId by remember(pending.habitId) { mutableStateOf(pending.iconId) }
+    if (pending.iconId == null) {
+        LaunchedEffect(pending.habitId) {
+            iconId = withContext(Dispatchers.IO) {
+                runCatching {
+                    MindsetRepository(context).load().habits
+                        .firstOrNull { it.id == pending.habitId }?.iconId
+                }.getOrNull()
+            }
+        }
+    }
+
+    HabitTimerOptionsSheet(
+        habitId = pending.habitId,
+        habitName = pending.habitName.ifBlank { "Habit" },
+        habitIconId = iconId,
+        onOpenTimerScreen = {
+            request = null
+            onOpenTimerScreen()
+        },
+        onDismiss = { request = null },
+    )
+}
+
+/**
  * Root-level owner of the **one-time** timer completion popup.
  *
  * Lives outside the `NavHost` so the popup appears wherever the user is when a
  * timer finishes, and so exactly one composable can ever decide to show it.
  *
- * ## When the popup may appear \u2014 and when it must not
+ * ## When the popup may appear — and when it must not
  *
  * The popup reports the end of a timer the user was on. It must therefore only
  * ever exist for a run the user actually started, and only while that result is
@@ -175,7 +268,7 @@ private fun ConnectivityStatusIcon(
  * raw [TimerRepository.loadPendingEvent]:
  *
  *  - **No started run, no popup.** A completion whose run id is absent from the
- *    started-run ledger is *not* something the user did \u2014 an orphaned record
+ *    started-run ledger is *not* something the user did — an orphaned record
  *    left by an older build, or a half-written event. It is discarded here, so
  *    merely opening the app (landing on Home, or anywhere else) can never
  *    produce a popup for a timer that was never set.
@@ -189,7 +282,7 @@ private fun ConnectivityStatusIcon(
  *
  * Note the host deliberately stays at the app root: a run that finishes while
  * the user is on Home *should* announce itself there. What must never happen is
- * a popup with no timer behind it \u2014 which is the failure this gate removes.
+ * a popup with no timer behind it — which is the failure this gate removes.
  *
  * ## Why the popup cannot repeat
  *
@@ -287,7 +380,7 @@ fun AppNavigation(viewModel: AppViewModel) {
     val context = LocalContext.current
 
 
-    // ── Health Connect permission launcher ────────────────────────────
+    // ── Health Connect permission launcher ─────────────────────────────
     // Registered here (top of the composable, before any conditional
     // return) so it lives for the entire Activity lifecycle — a
     // requirement of rememberLauncherForActivityResult. When the
@@ -612,7 +705,7 @@ fun AppNavigation(viewModel: AppViewModel) {
                     .padding(bottom = 10.dp),
             )
 
-            // ── One-time timer completion popup ──────────────────────────────────
+            // ── One-time timer completion popup ──────────────────────────
             // Hosted at the app root, not inside TimerScreen, for two reasons:
             //
             // 1. A timer can finish while the user is on ANY tab (or with the app
@@ -625,6 +718,17 @@ fun AppNavigation(viewModel: AppViewModel) {
             // acknowledging it writes the event id into an append-only ledger — so
             // it shows once per event and never again, across recomposition,
             // navigation, resume, rotation or a reboot.
+            // ── Timer / stopwatch choice for a ringing habit alarm ───────
+            // Appears on its own the moment a habit's alarm rings — the same
+            // moment its notification shows — and is hosted at the root so it
+            // does not depend on the full-screen-intent grant that
+            // AlarmRingingActivity needs to launch at all.
+            HabitTimerOptionsHost(
+                onOpenTimerScreen = {
+                    navController.navigate("timer") { launchSingleTop = true }
+                },
+            )
+
             TimerCompletionHost(
                 context = context,
                 onOpenHabits = {

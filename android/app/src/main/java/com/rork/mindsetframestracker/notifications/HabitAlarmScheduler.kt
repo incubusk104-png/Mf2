@@ -13,8 +13,8 @@ import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import java.util.Calendar
 
 /**
- * Schedules, cancels, and reschedules per-habit reminders via
- * **[AlarmManager.setAlarmClock]** — the same mechanism [NotificationScheduler]
+ * Schedules, cancels, and reschedules per-habit reminders through the shared
+ * [AlarmScheduler] — the same mechanism [NotificationScheduler]
  * already uses for the daily check-in, streak alert, and evening reflection.
  *
  * ## Why this is AlarmManager again, not WorkManager
@@ -28,10 +28,11 @@ import java.util.Calendar
  * is exactly the reported symptom: 8:45 PM comes and goes with no sound and no
  * vibration, because the job hadn't run yet.
  *
- * `AlarmManager.setAlarmClock()` is the one Android primitive that's
- * explicitly exempt from Doze/App-Standby deferral — it's the same API the
- * system Clock app uses (hence the status-bar alarm-clock icon). On API 31+ we
- * check [AlarmManager.canScheduleExactAlarms] first and fall back to a
+ * The `allowWhileIdle` exact alarm [AlarmScheduler] arms is the one Android
+ * primitive that's explicitly exempt from Doze/App-Standby deferral, and it
+ * does **not** hand the alarm to the system Clock app (the old
+ * `setAlarmClock()` arming did — that is why the ring used to read as the
+ * phone's personal clock app). On API 31+ we check [AlarmManager.canScheduleExactAlarms] first and fall back to a
  * 15-minute [AlarmManager.setWindow] the same way [NotificationScheduler]
  * already does, so the app never crashes and a reminder still fires close to
  * on time even without the permission.
@@ -120,10 +121,6 @@ object HabitAlarmScheduler {
             pendingIntent = pendingIntent,
             wakeUp = true,
             allowWhileIdle = true,
-            // A real Activity show-intent. The old code passed the *broadcast*
-            // PendingIntent here, which Android cannot launch as an Activity,
-            // so the status-bar alarm icon did nothing when tapped.
-            showIntent = AlarmScheduler.showIntent(context, requestCode(habitId)),
         )
         Log.d(TAG, "Reminder for '$habitName' scheduled (exact=$canUseExact) at $triggerAtMillis")
     }

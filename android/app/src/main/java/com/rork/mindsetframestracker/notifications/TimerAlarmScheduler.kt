@@ -11,7 +11,7 @@ import com.rork.mindsetframestracker.data.TimerRepository
  * Arms and cancels the single AlarmManager alarm that backs a running timer.
  *
  * Unlike the recurring habit reminders, a timer needs **one** wake-up at one
- * absolute instant, so there is no re-arming chain here \u2014 the timer's own
+ * absolute instant, so there is no re-arming chain here — the timer's own
  * state is the schedule. When the user pauses, extends or stops the timer the
  * old alarm is cancelled and (for pause/extend) a fresh one is armed from the
  * new deadline, which is why every mutation in the UI funnels through
@@ -52,12 +52,9 @@ object TimerAlarmScheduler {
             pendingIntent = pendingIntent,
             wakeUp = true,
             // The user is actively waiting on this one (a timer they are on, a
-            // stopwatch they are watching) \u2014 it must survive Doze, so the
+            // stopwatch they are watching) — it must survive Doze, so the
             // allowWhileIdle fallbacks stay enabled.
             allowWhileIdle = true,
-            // A real *activity* show-intent, so the status-bar alarm icon the
-            // alarm clock draws actually opens the app when tapped.
-            showIntent = AlarmScheduler.showIntent(context, REQUEST_CODE),
         )
 
         Log.i(TAG, "Timer ${timer.kind} armed at $deadline (precision=$precision)")

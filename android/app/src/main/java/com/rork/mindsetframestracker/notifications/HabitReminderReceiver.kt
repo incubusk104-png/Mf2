@@ -6,7 +6,7 @@ import android.content.Intent
 import android.util.Log
 
 /**
- * Fired by the [android.app.AlarmManager] alarm-clock alarm that
+ * Fired by the app's own [android.app.AlarmManager] alarm that
  * [HabitAlarmScheduler] scheduled for the user's chosen habit-reminder time
  * (or by [HabitSnoozeReceiver]'s 5-minute snooze re-fire).
  *
@@ -41,6 +41,23 @@ class HabitReminderReceiver : BroadcastReceiver() {
             reschedule = !isSnoozeRefire,
         )) {
             is HabitCheckInNotifier.NotifyResult.Posted -> {
+                // The alarm actually reached the user, so this is the moment the
+                // timer/stopwatch choice becomes due. Written HERE, on the
+                // notification path, rather than from AlarmRingingActivity:
+                // that screen only launches when USE_FULL_SCREEN_INTENT is
+                // granted (Android 14+ revokes it by default), so a ring that
+                // never reached it used to leave no request behind and the
+                // popup never appeared. A plain SharedPreferences write - no
+                // repository read, so nothing is added to the ring path.
+                runCatching {
+                    HabitTimerRequests.request(
+                        context = context,
+                        habitId = habitId,
+                        habitName = habitName,
+                        iconId = null,
+                    )
+                }.onFailure { Log.w(TAG, "Could not record the timer/stopwatch request", it) }
+
                 if (result.doNotDisturbActive) {
                     Log.w(TAG, "Habit reminder for '$habitName' posted, but Do Not Disturb / a Focus mode is active — it may not visibly appear")
                 }
