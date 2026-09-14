@@ -1,0 +1,86 @@
+name: Apply timer popup fix v2
+
+# Throwaway helper. The previous attempt proved the payload COMPILES
+# (exit=0) but committed nothing, because its commit step ran
+# `git checkout -- .` and discarded the overlay before staging. This one does
+# not revert anything: it overlays, compiles, stages and pushes. The compile
+# gate and the real "e: " lines in the job summary are unchanged.
+#
+# Also clears two leftovers on main: diag.txt (written by the previous
+# attempt) and .github/workflows/ci-apply.yml, a TEMPORARY helper whose own
+# description says it should be removed, yet it declares a branch-level
+# `push:` trigger with `contents: write` and re-pushes a stale payload on
+# EVERY push to main. Leaving it live risks it overwriting this fix.
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./android/gradlew
+
+      - name: Download, verify and overlay the payload
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/files/947c2acd-8be5-45e8-ab54-74d76f50e119/mf2_timer_payload.zip"
+          PAYLOAD_SHA256: "6f6fe078ef155c2ebe5416425810d1041b61407e68b2b6ce40e4999fcfb76311"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/upd.zip "$PAYLOAD_URL"
+          echo "$PAYLOAD_SHA256  /tmp/upd.zip" | sha256sum -c -
+          mkdir -p /tmp/upd && unzip -q /tmp/upd.zip -d /tmp/upd
+          test -d /tmp/upd/mf2_v7
+          cp -a /tmp/upd/mf2_v7/. .
+          rm -f .github/workflows/apply-timer-popup2.yml
+          echo "--- overlaid (should list the 8 changed files) ---"
+          git status --short
+
+      - name: Compile release Kotlin and capture diagnostics
+        run: |
+          set +e
+          (cd android && ./gradlew :app:compileReleaseKotlin --console=plain --no-daemon -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8" -Porg.gradle.configuration-cache=false) > /tmp/compile.log 2>&1
+          code=$?
+          {
+            echo "exit=$code"
+            grep -E "^e: " /tmp/compile.log || echo "(no e: lines)"
+            grep -E "Unresolved reference|Cannot infer|error:|Execution failed|BUILD SUCCESSFUL|BUILD FAILED" /tmp/compile.log | head -60 || true
+          } > /tmp/diag.txt
+          cat /tmp/diag.txt
+          cat /tmp/diag.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push ONLY if the compile passed
+        run: |
+          set -euo pipefail
+          if ! grep -q "^exit=0$" /tmp/diag.txt; then
+            echo "::error::Compile FAILED - nothing pushed to main. See the job summary for the real e: lines."
+            exit 1
+          fi
+          echo "Compile passed: exit=0"
+          git config user.name "mf2-agent"
+          git config user.email "mf2-agent@users.noreply.github.com"
+          rm -f diag.txt
+          git rm -q --ignore-unmatch .github/workflows/ci-apply.yml diag.txt
+          git add -A android/app/src/main .github/workflows
+          echo "--- staged ---"
+          git diff --cached --stat
+          git commit -m "Show the timer/stopwatch popup when the alarm rings; move the ring path off the main thread" -m "The timer/stopwatch choice is no longer offered inside the alarm set-up dialog. It is now its own one-shot popup that appears automatically the moment a habit alarm rings, anchored to that habit's icon, and consumes its on-disk request on first show so it cannot repeat on re-render, resume, navigation or reboot." -m "Crash fix: AlarmRingingActivity resolved the habit icon with runBlocking(Dispatchers.IO) inside onCreate - on the main thread, before the alarm could ring. Moved to a LaunchedEffect on Dispatchers.IO after the first frame. Also guarded the remaining uncaught-exception paths that could kill the process (TimerService onStartCommand foreground promotion, the TimerService tick loop, and the alarm/timer/snooze/reminder receivers)." || echo "nothing staged"
+          git push origin HEAD:main
