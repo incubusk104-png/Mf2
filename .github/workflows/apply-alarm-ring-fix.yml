@@ -1,0 +1,49 @@
+name: Apply alarm ring fix
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download, verify and overlay the payload
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/files/840f6af5-d884-4e8e-ba8b-9fb50d30b611/mf2fix.zip?tk=ZmlsZTo4NDBmNmFmNS1kODg0LTRlOGUtYmE4Yi05ZmI1MGQzMGI2MTE6MTc4OTM4NzE5NA.YmQxOGRlZWU0YjRjYWI3ZDk1ZDVlY2JjNTIyZjA4YWY"
+          PAYLOAD_SHA256: "8f28a7e2d1b88a8fa818a5b0d0e8e050cce17b7623ce06933276d72144727ce9"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/upd.zip "$PAYLOAD_URL"
+          echo "$PAYLOAD_SHA256  /tmp/upd.zip" | sha256sum -c -
+          mkdir -p /tmp/upd
+          unzip -q /tmp/upd.zip -d /tmp/upd
+          test -f /tmp/upd/android/app/src/main/AndroidManifest.xml
+          test -f /tmp/upd/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingService.kt
+          rm -f android/app/src/main/java/com/rork/mindsetframestracker/notifications/Alarmdiagnostics.kt
+          cp -a /tmp/upd/. .
+          rm -f .github/workflows/apply-alarm-ring-fix.yml
+          echo "--- tree shape BEFORE staging ---"
+          git status --short
+
+      - name: Commit and push to main
+        run: |
+          set -euo pipefail
+          git config user.name "mf2-agent"
+          git config user.email "mf2-agent@users.noreply.github.com"
+          git add -A .
+          echo "--- staged ---"
+          git status --short
+          git commit \
+            -m "Fix alarm not ringing: move the ring out of the ringing screen" \
+            -m "The alarm sound and vibration were created inside AlarmRingingActivity.onCreate, tying the whole ring to that Activity launching. On Android 14+ USE_FULL_SCREEN_INTENT is revoked by default for apps that are not primarily alarms; HabitCheckInNotifier correctly skips the full-screen intent then, so the notification posted with no ringing screen and, because the audio lived in that screen, no sound at all." \
+            -m "AlarmRingService now owns the ring (alarm-stream MediaPlayer plus looping vibration), started from the notification path, so a missing full-screen-intent grant costs the UI and never the sound." \
+            -m "Also: AlarmRingingActivity is singleInstance with no onNewIntent override, so a second alarm reused the first alarm's habit and never wrote the new timer request. BootReceiver.onReceive was the last unguarded receiver. Removed the unused Alarmdiagnostics.kt."
+          git push origin HEAD:main
