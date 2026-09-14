@@ -1,0 +1,51 @@
+name: Apply ring fix
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Download and verify payload
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_ringfix/mf2_ringfix.zip"
+          PAYLOAD_SHA256: "7ce9473c86e17409663630e8d6dedd609ca71490624cece0fc9fda64e5f1543f"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/upd.zip "$PAYLOAD_URL"
+          echo "$PAYLOAD_SHA256  /tmp/upd.zip" | sha256sum -c -
+          mkdir -p /tmp/upd && unzip -q /tmp/upd.zip -d /tmp/upd
+          test -d /tmp/upd/Mf2fix
+          cp -a /tmp/upd/Mf2fix/. .
+          rm -f .github/workflows/apply-ringfix.yml
+          git status --short
+      - name: Compile (gate - main is only touched if this passes)
+        id: compile
+        run: |
+          set +e
+          cd android
+          ./gradlew :app:compileReleaseKotlin --console=plain --no-daemon > /tmp/compile.log 2>&1
+          echo "GRADLE_EXIT=$?" >> "$GITHUB_OUTPUT$è
+          grep -E "^e: " /tmp/compile.log | head -40
+          exit 0
+      - name: Commit and push when green
+        if: steps.compile.outputs.GRADLE_EXIT == '0'
+        run: |
+          set -euo pipefail
+          git config user.name "mf2-ringfix-bot"
+          git config user.email "mf2-ringfix-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix the crash while the alarm rings; make the timer/stopwatch popup a working full stack" -m "- Alarms and timers no longer use R.drawable.splash_icon as the notification small icon. splash_icon is a layer-list whose bitmap layer points at @mipmap/ic_launcher, an anydpi-v26 adaptive icon with no bitmap to decode, so BitmapDrawable layer inflation failed while the notification was being built - inside AlarmRingService.onCreate and inside the alarm receiver, both of which turn a throw into a process kill. The four alarm-path notifiers now use a flat alpha-only vector, ic_notification." -m "- AlarmRingService guards every lifecycle callback (onCreate, onStartCommand, onDestroy) and retries the foreground promotion, so a failure costs the ongoing notification rather than the process." -m "- AlarmRingingActivity guards showOverLockScreen and onNewIntent, and its dependency on the full-screen-intent grant no longer affects the ring." -m "- HabitTimerOptionsHost now polls the one-shot ring request instead of waiting for ON_RESUME, so the timer/stopwatch choice appears on its own the moment the alarm rings even when the app is already foregrounded and the ring screen cannot launch. It is consumed on first show, so it appears once per ring." -m "- HabitsScreen no longer also consumes that request, removing the race between two owners of the same one-shot request. It keeps sole ownership of the activity auto-sync." -m "- The ring screen no longer offers a timer/stopwatch button, matching the requirement that the choice arrives on its own and belongs to the habit icon."
+          git push origin HEAD:main
