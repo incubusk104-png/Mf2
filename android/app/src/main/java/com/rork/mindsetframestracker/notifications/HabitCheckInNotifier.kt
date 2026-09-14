@@ -221,6 +221,23 @@ object HabitCheckInNotifier {
 
             manager.notify(notificationId(habitId), notification)
 
+            // ── Ring ─────────────────────────────────────────────────────
+            // The alarm sound is started from here, the notification path, and
+            // NOT from AlarmRingingActivity. That distinction is the whole fix:
+            // the full-screen intent below is only attached when
+            // canUseFullScreenIntent() is granted, and on Android 14+ that
+            // permission is revoked by default for apps that aren't primarily
+            // alarms — the notification still posts, but with no ringing screen.
+            // While the audio lived inside that screen, a missing grant meant
+            // the reminder appeared and made no sound at all. Now the sound is
+            // independent of it: at worst the user loses the full-screen UI,
+            // never the ring.
+            AlarmRingService.start(
+                context,
+                habitId = habitId,
+                eventId = null,
+            )
+
             // Record whether the OS will actually DELIVER it. notify() returns
             // normally even when the notification is silently dropped (app
             // notifications off, or the channel set to NONE), so a clean call

@@ -34,6 +34,13 @@
          machine-readable justification the store review process asks for. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- AlarmRingService plays the alarm audio on a foreground service so the
+         ring cannot be cut short by the OS the moment the app leaves the
+         foreground. `mediaPlayback` is the accurate type here: the service's
+         whole job is to keep an audio stream alive. It is a normal,
+         auto-granted permission (unlike specialUse, which needs a subtype
+         justification) because the service genuinely plays media. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Re-schedule the daily reminder alarm after a device reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Habit reminders fire at an exact time. On Android 12 (API 31/32) this
@@ -291,6 +298,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps a user-started timer or stopwatch running and shows its remaining time until the user stops it." />
         </service>
+
+        <!-- ── The alarm sound ────────────────────────────────────────
+             Owns the actual RING (MediaPlayer on the ALARM stream + looping
+             vibration) for every alarm in the app. Started from the
+             notification path — HabitCheckInNotifier / TimerNotifier — so the
+             sound does not depend on AlarmRingingActivity being granted
+             full-screen-intent access. On Android 14+ that grant is revoked by
+             default for non-alarm apps, which is exactly why the reminder
+             could appear with no sound. -->
+        <service
+            android:name=".notifications.AlarmRingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- Fired by the AlarmManager alarm armed for a running timer's exact
              deadline. This is the wake-up that must survive Doze. -->

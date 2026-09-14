@@ -162,6 +162,13 @@ object TimerNotifier {
                 builder.setFullScreenIntent(ringingPendingIntent, true)
             }
             manager.notify(notificationId(event.eventId), builder.build())
+            // Start the audible ring HERE, on the notification path — not from
+            // AlarmRingingActivity. The screen is only launched full-screen when
+            // USE_FULL_SCREEN_INTENT is granted (API 34+ gates it behind its own
+            // special-access setting), so tying the sound to that launch meant a
+            // missing grant produced exactly the reported symptom: the
+            // notification appears, and nothing ever rings.
+            AlarmRingService.start(context, habitId = event.habitId, eventId = event.eventId)
             Log.i(TAG, "Posted completion alert for ${event.eventId}")
         }.onFailure { Log.e(TAG, "Failed to post completion alert for ${event.eventId}", it) }
     }

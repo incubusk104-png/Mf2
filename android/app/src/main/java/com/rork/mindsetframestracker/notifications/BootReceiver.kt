@@ -25,6 +25,17 @@ import org.json.JSONObject
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Guarded like every other alarm receiver: a throw out of onReceive
+        // kills the process. This one fires during boot (and on app update),
+        // when the device is at its busiest — the worst possible moment to take
+        // an uncaught exception — and it is the ONLY path that re-arms habit
+        // alarms after a reboot, so a crash here leaves every alarm dead until
+        // the app is next opened.
+        runCatching { rescheduleAll(context, intent) }
+            .onFailure { Log.w(TAG, "Boot reschedule failed", it) }
+    }
+
+    private fun rescheduleAll(context: Context, intent: Intent) {
         val action = intent.action
         if (action != Intent.ACTION_BOOT_COMPLETED &&
             action != Intent.ACTION_MY_PACKAGE_REPLACED

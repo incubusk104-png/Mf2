@@ -4,16 +4,10 @@ import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -72,8 +66,6 @@ import kotlinx.coroutines.withContext
  */
 class AlarmRingingActivity : ComponentActivity() {
 
-    private var mediaPlayer: MediaPlayer? = null
-    private var vibrator: Vibrator? = null
     private val autoStopHandler = Handler(Looper.getMainLooper())
     private val autoStopRunnable = Runnable { finishRinging() }
 
@@ -150,7 +142,17 @@ class AlarmRingingActivity : ComponentActivity() {
         }
 
         showOverLockScreen()
-        startRinging()
+        // The ring is owned by AlarmRingService, NOT by this screen. The audio
+        // used to be created here — and only existed if this Activity was
+        // actually allowed to launch, which on Android 14+ silently degrades to
+        // "notification shows, nothing rings" whenever USE_FULL_SCREEN_INTENT
+        // isn't granted. Starting it here as well is harmless (the service is
+        // idempotent) and keeps the ring alive if the screen is recreated.
+        AlarmRingService.start(
+            this,
+            habitId = habitId.ifEmpty { null },
+            eventId = ringingEvent?.eventId,
+        )
         autoStopHandler.postDelayed(autoStopRunnable, AUTO_STOP_MILLIS)
 
         setContent {
@@ -238,6 +240,24 @@ class AlarmRingingActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * A second alarm arriving while this screen is already up is delivered HERE
+     * rather than as a new Activity, because this Activity is declared
+     * `singleInstance` \u2014 the OS reuses the running instance.
+     *
+     * Without this override the screen kept showing the FIRST alarm's habit and
+     * name while a *different* alarm was ringing, and \u2014 because the
+     * timer/stopwatch request is written from the Intent \u2014 the new ring's
+     * timer/stopwatch popup was never requested at all. Recreating re-runs
+     * onCreate against the new Intent, so the screen, the ring and the one-shot
+     * request all describe the alarm that is actually ringing.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        recreate()
+    }
+
     /** Ensures the alarm UI appears even from a locked screen with the display off. */
     private fun showOverLockScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -256,47 +276,16 @@ class AlarmRingingActivity : ComponentActivity() {
         }
     }
 
-    private fun startRinging() {
-        runCatching {
-            val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-                setDataSource(this@AlarmRingingActivity, alarmUri)
-                isLooping = true
-                prepare()
-                start()
-            }
-        }
-
-        runCatching {
-            val pattern = longArrayOf(0, 500, 500)
-            vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(pattern, 0)
-            }
-        }
-    }
+    // NOTE: the audio (MediaPlayer on the ALARM stream) and the looping
+    // vibration used to live here as startRinging(). They moved to
+    // AlarmRingService so the ring no longer depends on this Activity being
+    // launched — and so the synchronous prepare() of the ringtone stops blocking
+    // the main thread during an alarm-triggered cold start.
 
     private fun stopRinging() {
         autoStopHandler.removeCallbacks(autoStopRunnable)
-        runCatching { mediaPlayer?.stop() }
-        runCatching { mediaPlayer?.release() }
-        mediaPlayer = null
-        runCatching { vibrator?.cancel() }
+        // Silence the service that owns the audio.
+        AlarmRingService.stop(this)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         // Cancel the notification that raised this ring: the timer's own event id
         // for a timer, the habit's id for a reminder. A timer has no habit, so
