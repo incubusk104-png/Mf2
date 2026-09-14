@@ -851,6 +851,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _tipMessage = MutableStateFlow<String?>(null)
     val tipMessage: StateFlow<String?> = _tipMessage.asStateFlow()
 
+    /**
+     * The tip product the user is currently buying. TipBilling launches the
+     * payment sheet through the classic startActivityForResult path, so
+     * MainActivity.onActivityResult needs this to attribute the result — and
+     * to retry the purchase after an IAP environment resolution (e.g. the
+     * user signs in to Huawei ID from the isEnvReady prompt).
+     */
+    var pendingTipProductId: String = ""
+        private set
+
+    /** Remember which product the in-flight tip purchase belongs to. */
+    fun onTipPurchaseStarted(productId: String) {
+        pendingTipProductId = productId
+    }
+
+    /**
+     * Retries the tip purchase after the IAP environment became ready (the
+     * user completed the sign-in / HMS Core resolution launched by
+     * [com.rork.mindsetframestracker.billing.TipBilling.checkEnvironment]).
+     * No-op when there is no pending product.
+     */
+    fun retryPendingTipPurchase(activity: android.app.Activity) {
+        val productId = pendingTipProductId
+        if (productId.isBlank()) return
+        pendingTipProductId = ""
+        com.rork.mindsetframestracker.billing.TipBilling.purchase(
+            activity = activity,
+            productId = productId,
+            onError = { message -> onTipPurchaseResult(message) },
+        )
+    }
+
     /** Called from MainActivity.onActivityResult with a user-facing result message, or null for a silent cancel. */
     fun onTipPurchaseResult(message: String?) {
         _tipMessage.value = message

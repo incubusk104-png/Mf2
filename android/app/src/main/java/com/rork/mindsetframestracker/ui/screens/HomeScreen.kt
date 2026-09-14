@@ -965,6 +965,7 @@ fun HomeScreen(
                 showTipSheet = false
                 activity?.let { act ->
                     tipPurchaseInFlight = true
+                    viewModel.onTipPurchaseStarted(productId)
                     TipBilling.purchase(
                         activity = act,
                         productId = productId,

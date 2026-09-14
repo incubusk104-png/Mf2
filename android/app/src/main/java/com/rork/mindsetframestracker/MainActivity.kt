@@ -279,6 +279,17 @@ class MainActivity : ComponentActivity() {
             } else {
                 android.util.Log.w("MainActivity", "IAP environment resolution was cancelled/failed")
             }
+        } else if (requestCode == com.rork.mindsetframestracker.billing.TipBilling.ENV_READY_REQUEST_CODE) {
+            // Tip IAP environment resolution completed (e.g. user signed in
+            // to Huawei ID from the isEnvReady prompt). Resume the pending
+            // tip purchase instead of dead-ending with a 60002/60050 error.
+            if (resultCode == RESULT_OK) {
+                android.util.Log.i("MainActivity", "Tip IAP environment is now ready — retrying pending purchase")
+                appViewModel.retryPendingTipPurchase(this)
+            } else {
+                android.util.Log.w("MainActivity", "Tip IAP environment resolution was cancelled/failed")
+                appViewModel.onTipPurchaseResult(null)
+            }
         }
     }
 
