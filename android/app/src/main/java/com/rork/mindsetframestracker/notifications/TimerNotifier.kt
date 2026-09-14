@@ -150,7 +150,7 @@ object TimerNotifier {
             }
 
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.splash_icon)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setContentIntent(contentIntent)
@@ -202,7 +202,7 @@ object TimerNotifier {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val notification = NotificationCompat.Builder(context, CHANNEL_ID_REMINDER)
-                .setSmallIcon(R.drawable.splash_icon)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Still there?")
                 .setContentText("Your ${event.label.ifBlank { "timer" }} result is waiting")
                 .setContentIntent(contentIntent)

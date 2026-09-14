@@ -201,7 +201,7 @@ object HabitCheckInNotifier {
                 manager.canUseFullScreenIntent()
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.splash_icon)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(habitName)
                 .setContentText("Time for your habit")
                 .setContentIntent(contentIntent)

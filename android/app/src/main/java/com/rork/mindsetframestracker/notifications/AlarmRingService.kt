@@ -75,6 +75,16 @@ class AlarmRingService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+
+    /**
+     * True once [stopRinging] has released the player.
+     *
+     * Read by the prepared-listener below. The listener fires late (on the main
+     * thread, after the ringtone has been decoded), by which time the auto-stop
+     * or a "Dismiss" tap may already have released the player — and calling
+     * `start()` on a released MediaPlayer throws.
+     */
+    @Volatile private var released = false
     private val handler = Handler(Looper.getMainLooper())
     private val autoStop = Runnable { stopSelfSafely() }
 
@@ -91,7 +101,26 @@ class AlarmRingService : Service() {
         // notification within ~5 seconds \u2014 and this service only ever exists
         // while an alarm is ringing, so there is no earlier moment to do it.
         createChannel()
-        startForeground(ONGOING_NOTIFICATION_ID, buildOngoingNotification())
+        // Guarded: an exception thrown out of a service lifecycle callback is
+        // exactly what the OS turns into its "app keeps stopping" process kill.
+        // buildOngoingNotification() is the only non-trivial work here, so if it
+        // ever fails the worthwhile thing to lose is a silent ongoing
+        // notification — never the audible ring or the alarm notification that
+        // HabitCheckInNotifier / TimerNotifier have already posted.
+        runCatching {
+            startForeground(ONGOING_NOTIFICATION_ID, buildOngoingNotification())
+        }.onFailure { Log.w(TAG, "Could not promote the ring service to foreground", it) }
+    }
+
+    /**
+     * Android 15+ (API 35) calls this when the `mediaPlayback` foreground-service
+     * timeout elapses. Ringing is a legitimate user-visible reason to keep
+     * running, but the safe answer is to stop cleanly rather than let the OS
+     * kill the process — a kill here is indistinguishable to the user from
+     * "the app crashed while the alarm was ringing".
+     */
+    override fun onTimeout(startId: Int) {
+        stopSelfSafely()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -117,30 +146,56 @@ class AlarmRingService : Service() {
     }
 
     private fun startRinging() {
+        // A fresh ring on a reused service instance must be able to start audio
+        // again, so clear the released latch before preparing.
+        released = false
         runCatching {
             val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-                setDataSource(this@AlarmRingService, alarmUri)
-                isLooping = true
-                // prepareAsync(), NOT prepare(): this is a service but still the
-                // main thread of the process, and a blocking decode here delays
-                // the ring itself. The sound simply starts when the ringtone is
-                // decoded.
-                setOnPreparedListener { it.start() }
-                setOnErrorListener { _, what, extra ->
-                    Log.w(TAG, "Ringtone playback error (what=$what extra=$extra)")
-                    true
+            val player = MediaPlayer()
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            player.isLooping = true
+            // The listener is registered BEFORE setDataSource/prepareAsync, and
+            // deliberately on the player object itself rather than inside an
+            // `apply { }` block that ends with prepareAsync(). That ordering IS
+            // the fix:
+            //
+            // `MediaPlayer.setDataSource(context, uri)` reaches the ringtone
+            // through a content resolver and calls `prepare()` internally, and
+            // `prepareAsync()` can likewise complete synchronously when the
+            // source resolves instantly. In both cases onPrepared fires during
+            // the `apply { }` block — at which point the listener registered at
+            // its end is still null. The callback never ran, `start()` was never
+            // called, and the player was assigned to the field one line later
+            // than the moment it mattered. The result was an alarm that rang
+            // silently while every log line claimed success.
+            player.setOnPreparedListener { mp ->
+                // The ring window may have expired (auto-stop) or the user may
+                // have dismissed the alarm while the ringtone was still being
+                // decoded. `start()` on a released MediaPlayer throws
+                // IllegalStateException on the main thread — an immediate crash
+                // while the alarm is ringing. Re-check and decline.
+                if (released || mediaPlayer == null) {
+                    runCatching { mp.release() }
+                    return@setOnPreparedListener
                 }
-                prepareAsync()
+                runCatching { mp.start() }
+                    .onFailure { Log.w(TAG, "Could not start the decoded ringtone", it) }
             }
+            player.setOnErrorListener { _, what, extra ->
+                Log.w(TAG, "Ringtone playback error (what=$what extra=$extra)")
+                true
+            }
+            player.setDataSource(this@AlarmRingService, alarmUri)
+            // Publish the field BEFORE preparing: if onPrepared fires
+            // synchronously, the guard above must already see a non-null field.
             mediaPlayer = player
+            player.prepareAsync()
         }.onFailure { Log.w(TAG, "Could not start ringtone", it) }
 
         runCatching {
@@ -170,6 +225,10 @@ class AlarmRingService : Service() {
     }
 
     private fun stopRinging() {
+        // Latched BEFORE the reference is dropped: a prepared-listener callback
+        // already queued on the main thread must be able to see that this player
+        // is being torn down and decline to start it.
+        released = true
         runCatching { mediaPlayer?.stop() }
         runCatching { mediaPlayer?.release() }
         mediaPlayer = null
@@ -201,7 +260,7 @@ class AlarmRingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.splash_icon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Alarm ringing")
             .setContentText("Tap to open")
             .setContentIntent(contentIntent)

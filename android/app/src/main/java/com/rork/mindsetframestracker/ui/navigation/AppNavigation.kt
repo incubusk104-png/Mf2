@@ -201,27 +201,60 @@ private fun HabitTimerOptionsHost(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var request by remember { mutableStateOf(HabitTimerRequests.peek(context)) }
+    // Whether the app is genuinely in front of the user, tracked as *state*
+    // driven by lifecycle callbacks rather than read as
+    // `lifecycle.currentState` during composition: that property is not snapshot
+    // state, so reading it would not re-run composition when the activity
+    // resumes — the sheet would simply never appear on the resume it was
+    // waiting for.
+    var resumed by remember { mutableStateOf(false) }
+    // Read once on creation so a ring that is already pending when the app
+    // starts (the alarm woke a dead process, or it rang while the app was
+    // closed) is delivered on the first resume instead of being missed.
+    var pending by remember { mutableStateOf(HabitTimerRequests.peek(context)) }
 
-    // Re-read on every resume: this is how a ring that happened while the app
-    // was backgrounded still surfaces, and the consume below is why a second
-    // resume finds nothing.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                request = HabitTimerRequests.peek(context)
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    resumed = true
+                    // Pick the request up ONLY when no sheet is already on
+                    // screen. Assigning unconditionally would clobber a sheet
+                    // the user is looking at, so every trip through the ringing
+                    // activity and back would restart it.
+                    if (pending == null) {
+                        pending = HabitTimerRequests.peek(context)
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> resumed = false
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val pending = request ?: return
+    val current = pending ?: return
+
+    // Only render — and only consume — once the app is genuinely RESUMED.
+    // ON_START and ON_RESUME are separate callbacks and this host sits at the
+    // root of the tree, so on a cold start it composes while the activity is
+    // still merely STARTED. A ring arriving in that window would otherwise
+    // render the sheet and burn the request over the app's own launch, and a
+    // dialog shown against a not-yet-RESUMED owner is exactly the kind of
+    // window-token mismatch that some OEM skins turn into a crash right as the
+    // alarm rings.
+    //
+    // Deferring both the consume and the render keeps the once-per-ring promise
+    // intact: the request stays on disk until it is actually shown, and a ring
+    // that lands while the app is backgrounded is delivered the moment the user
+    // brings the app forward rather than being silently discarded.
+    if (!resumed) return
 
     // Consume the moment the choice is shown, so it can never come back. The
     // sheet below keeps rendering from the value already read, so this ring
     // still shows it exactly once.
-    LaunchedEffect(pending.habitId) {
+    LaunchedEffect(current.habitId) {
         HabitTimerRequests.consume(context)
     }
 
@@ -229,27 +262,27 @@ private fun HabitTimerOptionsHost(
     // decoding the app blob synchronously in composition is exactly the
     // main-thread stall that has to stay off the ring path. The sheet falls
     // back to its generic timer glyph for the first frame.
-    var iconId by remember(pending.habitId) { mutableStateOf(pending.iconId) }
-    if (pending.iconId == null) {
-        LaunchedEffect(pending.habitId) {
+    var iconId by remember(current.habitId) { mutableStateOf(current.iconId) }
+    if (current.iconId == null) {
+        LaunchedEffect(current.habitId) {
             iconId = withContext(Dispatchers.IO) {
                 runCatching {
                     MindsetRepository(context).load().habits
-                        .firstOrNull { it.id == pending.habitId }?.iconId
+                        .firstOrNull { it.id == current.habitId }?.iconId
                 }.getOrNull()
             }
         }
     }
 
     HabitTimerOptionsSheet(
-        habitId = pending.habitId,
-        habitName = pending.habitName.ifBlank { "Habit" },
+        habitId = current.habitId,
+        habitName = current.habitName.ifBlank { "Habit" },
         habitIconId = iconId,
         onOpenTimerScreen = {
-            request = null
+            pending = null
             onOpenTimerScreen()
         },
-        onDismiss = { request = null },
+        onDismiss = { pending = null },
     )
 }
 

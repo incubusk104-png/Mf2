@@ -187,7 +187,7 @@ class TimerService : Service() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID_ONGOING)
-            .setSmallIcon(R.drawable.splash_icon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(contentIntent)
