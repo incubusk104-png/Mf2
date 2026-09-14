@@ -660,13 +660,28 @@ class SupabaseSync(context: Context) {
      * sheet must fail CLOSED (hide the Founding Member card) when the check
      * cannot be completed, and it can only do that if "the server said no"
      * and "the server said nothing" are not collapsed into one value.
+     *
+     * [region] and [cap] describe WHICH bucket was measured and how big it is.
+     * The cap is per country/region (500 by default), so it is not a constant
+     * the client may assume — it comes back from the server with every answer.
+     * [soldOut] is the server's own read on whether this region's target is
+     * met, which is what lets the sheet hide the card rather than grey it out.
      */
     sealed interface FoundingEligibility {
-        data class Eligible(val remaining: Int) : FoundingEligibility
+        data class Eligible(
+            val remaining: Int,
+            val region: String,
+            val cap: Int,
+        ) : FoundingEligibility
+
         data class NotEligible(
             val remaining: Int,
             val alreadyClaimed: Boolean,
+            val region: String,
+            val cap: Int,
+            val soldOut: Boolean,
         ) : FoundingEligibility
+
         data object Unavailable : FoundingEligibility
     }
 
@@ -675,6 +690,9 @@ class SupabaseSync(context: Context) {
         val eligible: Boolean = false,
         val claimed: Boolean = false,
         val remaining: Int = 0,
+        val cap: Int = 0,
+        val region: String = "",
+        val soldOut: Boolean = false,
     )
 
     @Serializable
@@ -685,14 +703,36 @@ class SupabaseSync(context: Context) {
     )
 
     /**
-     * Asks the founding-member-eligibility Edge Function whether this install
-     * may still claim one of the 100 global founding slots.
+     * The region bucket this install's claims are counted against.
      *
-     * The server is the source of truth — this call only decides whether the
-     * Founding Member card is worth rendering. Every failure mode (not
-     * configured, offline, non-2xx, malformed body, thrown request) returns
-     * [FoundingEligibility.Unavailable] so the caller hides the card instead of
-     * offering a purchase that may no longer be claimable.
+     * Mirrors the SQL function founding_member_region() and regionFor() in the
+     * founding-member-eligibility edge function: upper-cased, trimmed, and
+     * folded to [UNKNOWN_REGION] when there is nothing to work with. Keep the
+     * three copies in step — if the client reports a different bucket than the
+     * server counts, a user can be shown the card for a region that is already
+     * full (or hidden from one that still has room).
+     *
+     * Locale.getDefault().country is the SIM-free device region, which is the
+     * right signal here: it follows the user's chosen language/region rather
+     * than wherever their carrier happens to be registered.
+     */
+    fun currentRegion(): String {
+        val trimmed = Locale.getDefault().country.orEmpty().trim().uppercase()
+        return trimmed.ifEmpty { UNKNOWN_REGION }
+    }
+
+    /**
+     * Asks the founding-member-eligibility Edge Function whether this install
+     * may still claim one of its region's founding slots.
+     *
+     * The cap is PER COUNTRY/REGION (500 by default), so the country is sent
+     * with the request — without it the server would measure every caller
+     * against the same catch-all bucket. The server stays the source of truth:
+     * this call only decides whether the Founding Member card is worth
+     * rendering. Every failure mode (not configured, offline, non-2xx,
+     * malformed body, thrown request) returns [FoundingEligibility.Unavailable]
+     * so the caller hides the card instead of offering a purchase that may no
+     * longer be claimable.
      */
     suspend fun checkFoundingMemberEligibility(): FoundingEligibility {
         if (!isConfigured) return FoundingEligibility.Unavailable
@@ -701,6 +741,7 @@ class SupabaseSync(context: Context) {
                 header("apikey", anonKey)
                 header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
                 parameter("user_id", sessionUserId ?: deviceId)
+                parameter("country", currentRegion())
             }
             if (!response.status.isSuccess()) {
                 Log.i(TAG, "founding eligibility check failed: ${response.status}")
@@ -708,11 +749,18 @@ class SupabaseSync(context: Context) {
             }
             val parsed = response.body<FoundingEligibilityBody>()
             if (parsed.eligible) {
-                FoundingEligibility.Eligible(parsed.remaining)
+                FoundingEligibility.Eligible(
+                    remaining = parsed.remaining,
+                    region = parsed.region,
+                    cap = parsed.cap,
+                )
             } else {
                 FoundingEligibility.NotEligible(
                     remaining = parsed.remaining,
                     alreadyClaimed = parsed.claimed,
+                    region = parsed.region,
+                    cap = parsed.cap,
+                    soldOut = parsed.soldOut,
                 )
             }
         } catch (e: Exception) {
@@ -741,7 +789,7 @@ class SupabaseSync(context: Context) {
                 setBody(
                     FoundingClaimBody(
                         user_id = sessionUserId ?: deviceId,
-                        country = Locale.getDefault().country.orEmpty(),
+                        country = currentRegion(),
                         plan_id = planId,
                     ),
                 )
@@ -1019,6 +1067,14 @@ class SupabaseSync(context: Context) {
         private const val KEY_LAST_SYNC = "last_sync_at_ms"
         private const val KEY_CONSUMED_AUTH_LINK = "consumed_auth_link"
         private const val TAG = "SupabaseSync"
+
+        /**
+         * Region bucket for anything unresolvable. 'ZZ' is ISO-3166's own
+         * "unknown" value, so it is conventional rather than invented here.
+         * Mirrors founding_member_region() in SQL and regionFor() in the edge
+         * function — all three must agree.
+         */
+        private const val UNKNOWN_REGION = "ZZ"
         private const val PULL_ERROR = "Couldn't restore your data. Check your connection and try again."
     }
 }

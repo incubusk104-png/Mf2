@@ -115,6 +115,35 @@ private enum class FoundingCardState {
     Unavailable,
 }
 
+// ── Products ───────────────────────────────────────────────────────────────
+// Live AppGallery product ids. Keep in step with SubscriptionBilling.KNOWN_
+// PRODUCT_IDS and Entitlements.tierForProductId.
+private const val PRODUCT_REGULAR_YEARLY = "mindset_premium_yearly"
+private const val PRODUCT_REGULAR_MONTHLY = "mindset_premium_monthly"
+private const val PRODUCT_FOUNDING_YEARLY = "mindset_premium_founding_yearly"
+private const val PRODUCT_FOUNDING_MONTHLY = "mindset_premium_founding_monthly"
+
+/**
+ * Founding-member target per country/region. Display fallback only, used when
+ * the server did not report a cap back — the server owns the real number
+ * (founding_member_cap_for_region(), default 500), and it is the server's
+ * answer that decides whether the card renders at all.
+ */
+private const val DEFAULT_FOUNDING_TARGET = 500
+
+/**
+ * USD anchors used only when the AppGallery price query cannot answer, so the
+ * row is never blank. Mirrors web/src/lib/pricing.ts. The store price from
+ * SubscriptionBilling.queryPrices() always wins when it is available, because
+ * that is the number the buyer is actually charged.
+ */
+private const val ANCHOR_REGULAR_YEARLY = "\$34.99"
+private const val ANCHOR_REGULAR_MONTHLY = "\$4.99"
+
+/** Store price when AppGallery answered, else the marketing anchor. */
+private fun priceLabel(storePrices: Map<String, String>, productId: String, anchor: String): String =
+    storePrices[productId]?.takeIf { it.isNotBlank() } ?: anchor
+
 /**
  * Premium upgrade sheet — polished with a clear Free vs Premium comparison
  * table, feature breakdown by tier, and native Huawei IAP purchase buttons.
@@ -143,12 +172,13 @@ fun PremiumSheet(
     var purchaseError by remember { mutableStateOf<String?>(null) }
 
     // ── Founding Member gate ───────────────────────────────────────────────
-    // This block used to render unconditionally behind a hardcoded "first 100
-    // only" line, so buyer #101 was shown a button that could never be
-    // honoured. The cap is enforced server-side by the
-    // founding-member-eligibility Edge Function (100 slots, global); the sheet
-    // now only offers the card when that endpoint positively says a slot is
-    // still free.
+    // This endpoint is the ONLY gate on the Founding Member block. It used to
+    // render unconditionally behind a hardcoded "first 100 only" line, so the
+    // last buyer was shown a button that could never be honoured. The cap is
+    // now enforced server-side PER COUNTRY/REGION (500 by default) by the
+    // founding-member-eligibility Edge Function, and the sheet offers the card
+    // only when that endpoint positively says a slot is still free in the
+    // caller's own region.
     //
     // Fail-closed by construction: every path that is not a positive
     // [FoundingCardState.Eligible] — sold out, already claimed, cloud sync
@@ -161,6 +191,13 @@ fun PremiumSheet(
     // lambda itself would restart the network call on every recomposition,
     // because the callers pass a fresh lambda instance each time.
     var foundingCard by remember { mutableStateOf(FoundingCardState.Checking) }
+    // Per-region target + how many are left in THIS region, as reported by the
+    // server. Both are shown on the card, so the "first N" copy is the real
+    // number for the user's own country rather than a hardcoded global figure.
+    var foundingCap by remember { mutableStateOf(DEFAULT_FOUNDING_TARGET) }
+    var foundingRemaining by remember { mutableStateOf(0) }
+    // Live AppGallery prices keyed by product id. Empty until the store answers.
+    var storePrices by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val currentProbe by rememberUpdatedState(foundingEligibility)
     LaunchedEffect(Unit) {
         val probe = currentProbe
@@ -171,12 +208,42 @@ fun PremiumSheet(
         foundingCard = runCatching { probe() }
             .map { result ->
                 when (result) {
-                    is SupabaseSync.FoundingEligibility.Eligible -> FoundingCardState.Eligible
-                    is SupabaseSync.FoundingEligibility.NotEligible -> FoundingCardState.NotEligible
+                    is SupabaseSync.FoundingEligibility.Eligible -> {
+                        foundingCap = result.cap.takeIf { it > 0 } ?: DEFAULT_FOUNDING_TARGET
+                        foundingRemaining = result.remaining
+                        FoundingCardState.Eligible
+                    }
+                    is SupabaseSync.FoundingEligibility.NotEligible -> {
+                        foundingCap = result.cap.takeIf { it > 0 } ?: DEFAULT_FOUNDING_TARGET
+                        foundingRemaining = result.remaining
+                        FoundingCardState.NotEligible
+                    }
                     is SupabaseSync.FoundingEligibility.Unavailable -> FoundingCardState.Unavailable
                 }
             }
             .getOrElse { FoundingCardState.Unavailable }
+    }
+
+    // Localized prices for every product this sheet can offer. AGC prices each
+    // product in the buyer's own currency, so this is the number the user is
+    // actually charged — always preferable to the hardcoded anchor above. It
+    // matters most on the regular plans: once a region's founding target is met
+    // the sheet falls back to them, and they must show the real regular price.
+    LaunchedEffect(Unit) {
+        storePrices = when (
+            val result = SubscriptionBilling.queryPrices(
+                context,
+                listOf(
+                    PRODUCT_REGULAR_YEARLY,
+                    PRODUCT_REGULAR_MONTHLY,
+                    PRODUCT_FOUNDING_YEARLY,
+                    PRODUCT_FOUNDING_MONTHLY,
+                ),
+            )
+        ) {
+            is SubscriptionBilling.PriceResult.Available -> result.prices
+            SubscriptionBilling.PriceResult.Unavailable -> emptyMap()
+        }
     }
 
     ModalBottomSheet(
@@ -327,8 +394,11 @@ fun PremiumSheet(
                 onClick = {
                     val act = activity ?: return@Button
                     purchaseError = null
-                    onPurchaseStarted("mindset_premium_yearly")
-                    SubscriptionBilling.purchase(act, "mindset_premium_yearly") { message ->
+                    onPurchaseStarted(PRODUCT_REGULAR_YEARLY)
+                    // Routes to the Huawei IAP purchase flow for the REGULAR
+                    // yearly product. This is the fallback the whole sheet
+                    // leans on once a region's founding target is met.
+                    SubscriptionBilling.purchase(act, PRODUCT_REGULAR_YEARLY) { message ->
                         purchaseError = message
                     }
                 },
@@ -347,7 +417,8 @@ fun PremiumSheet(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Best value — save over 40%",
+                        text = priceLabel(storePrices, PRODUCT_REGULAR_YEARLY, ANCHOR_REGULAR_YEARLY) +
+                            " · best value",
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -356,8 +427,8 @@ fun PremiumSheet(
                 onClick = {
                     val act = activity ?: return@Button
                     purchaseError = null
-                    onPurchaseStarted("mindset_premium_monthly")
-                    SubscriptionBilling.purchase(act, "mindset_premium_monthly") { message ->
+                    onPurchaseStarted(PRODUCT_REGULAR_MONTHLY)
+                    SubscriptionBilling.purchase(act, PRODUCT_REGULAR_MONTHLY) { message ->
                         purchaseError = message
                     }
                 },
@@ -372,17 +443,27 @@ fun PremiumSheet(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
+                    Text(
+                        text = priceLabel(storePrices, PRODUCT_REGULAR_MONTHLY, ANCHOR_REGULAR_MONTHLY),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
             }
 
-            // ── Founding Member plans ──────────────────────────────────────
+            // ── Founding Member plans ────────────────────────────────────
             // Matches the live AppGallery products mindset_premium_founding_
-            // monthly / _yearly (first 100 members, locked-in lower price).
+            // monthly / _yearly.
             //
-            // Rendered only when the eligibility probe above came back positive.
-            // The "first 100 only" copy is accurate and therefore unchanged: the
-            // server-side cap really is 100, and it is global — there is no
-            // per-country quota.
+            // Rendered ONLY when the eligibility probe above came back
+            // positive — the card is hidden entirely, not greyed out, once the
+            // region's target is met. The target is PER COUNTRY/REGION (500 by
+            // default), enforced server-side, so both the "first N" figure and
+            // the remaining count come from the server's answer rather than
+            // from a constant here. Sold out, already claimed, cloud sync
+            // unconfigured, offline, non-2xx, thrown exception and a null probe
+            // all leave this block unrendered, and the regular plans above are
+            // then the only thing on offer — the correct price to show once the
+            // founding tier is gone.
             if (foundingCard == FoundingCardState.Eligible) {
                 Surface(
                     shape = MaterialTheme.shapes.large,
@@ -393,7 +474,7 @@ fun PremiumSheet(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "Founding Member — first 100 only",
+                            text = "Founding Member — first $foundingCap in your region",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -403,27 +484,43 @@ fun PremiumSheet(
                                 "Includes everything in Premium except Strava sync.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                            modifier = Modifier.padding(top = 2.dp),
                         )
+                        if (foundingRemaining > 0) {
+                            Text(
+                                text = "$foundingRemaining of $foundingCap left in your region",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
                         Button(
                             onClick = {
                                 val act = activity ?: return@Button
                                 purchaseError = null
-                                onPurchaseStarted("mindset_premium_founding_yearly")
-                                SubscriptionBilling.purchase(act, "mindset_premium_founding_yearly") { message ->
+                                onPurchaseStarted(PRODUCT_FOUNDING_YEARLY)
+                                SubscriptionBilling.purchase(act, PRODUCT_FOUNDING_YEARLY) { message ->
                                     purchaseError = message
                                 }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 48.dp),
-                        ) { Text("Founding Member — Yearly") }
+                        ) {
+                            Text(
+                                "Founding Member — Yearly " +
+                                    priceLabel(storePrices, PRODUCT_FOUNDING_YEARLY, ""),
+                            )
+                        }
                         Button(
                             onClick = {
                                 val act = activity ?: return@Button
                                 purchaseError = null
-                                onPurchaseStarted("mindset_premium_founding_monthly")
-                                SubscriptionBilling.purchase(act, "mindset_premium_founding_monthly") { message ->
+                                onPurchaseStarted(PRODUCT_FOUNDING_MONTHLY)
+                                SubscriptionBilling.purchase(act, PRODUCT_FOUNDING_MONTHLY) { message ->
                                     purchaseError = message
                                 }
                             },
@@ -432,7 +529,12 @@ fun PremiumSheet(
                                 .fillMaxWidth()
                                 .padding(top = 8.dp)
                                 .defaultMinSize(minHeight = 48.dp),
-                        ) { Text("Founding Member — Monthly") }
+                        ) {
+                            Text(
+                                "Founding Member — Monthly " +
+                                    priceLabel(storePrices, PRODUCT_FOUNDING_MONTHLY, ""),
+                            )
+                        }
                     }
                 }
             }

@@ -186,7 +186,7 @@ const en: Copy = {
   pricingTitle: "Fair pricing, wherever you are",
   pricingSub: "Free forever for the essentials. Premium unlocks the full experience.",
   pricingFoundingBanner:
-    "Founding Member pricing — locked in for life, limited to the first {slots} people who upgrade.",
+    "Founding Member pricing — locked in for life, limited to the first {slots} people who upgrade in your country.",
   pricingFoundingBadge: "Founding price",
   pricingToggleLabel: "Billing cycle",
   pricingMonthly: "Monthly",
@@ -204,7 +204,7 @@ const en: Copy = {
   pricingPremF4: "Extended prompts & exclusive quote library",
   pricingCta: "Become a Founding Member",
   pricingRegionNote:
-    "Final price is shown in your local currency at checkout on Huawei AppGallery.",
+    "Founding Member pricing is limited per country. Once your country's allocation is claimed, Premium switches to the regular price. The final price is shown in your local currency at checkout on Huawei AppGallery.",
 
   privacyBandTitle: "Your data belongs to you.",
   privacyBandBody:
@@ -309,7 +309,7 @@ const zh: Copy = {
 
   pricingTitle: "无论你在哪里，都有公平的价格",
   pricingSub: "基础功能永久免费，高级版解锁完整体验。",
-  pricingFoundingBanner: "创始会员价格 — 终身锁定，仅限前 {slots} 位升级用户。",
+  pricingFoundingBanner: "创始会员价格 — 终身锁定，仅限您所在国家/地区的前 {slots} 位升级用户。",
   pricingFoundingBadge: "创始价",
   pricingToggleLabel: "计费周期",
   pricingMonthly: "月付",
@@ -326,7 +326,7 @@ const zh: Copy = {
   pricingPremF3: "高级每周洞察与 PDF 报告",
   pricingPremF4: "扩展提示词与专属语录库",
   pricingCta: "成为创始会员",
-  pricingRegionNote: "最终价格将在华为应用市场结账时以当地货币显示。",
+  pricingRegionNote: "创始会员名额按国家/地区限量。您所在国家/地区的名额发放完毕后，Premium 将恢复为常规价格。最终价格将在华为应用市场结账时以当地货币显示。",
 
   privacyBandTitle: "你的数据属于你。",
   privacyBandBody:

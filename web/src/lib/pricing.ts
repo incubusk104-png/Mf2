@@ -8,8 +8,14 @@
  * sync by hand whenever you change the AGC base price.
  */
 export const pricing = {
-  /** Matches backend/functions/founding-member-eligibility MAX_CLAIMS. */
-  foundingSlots: 100,
+  /**
+   * Founding-member target PER COUNTRY/REGION. Matches the default in
+   * founding_member_cap_for_region() (backend/supabase/migrations/
+   * 20260915120000_founding_member_per_country_cap.sql) — a region can be
+   * overridden in founding_member_region_caps, so this is the default the
+   * marketing copy quotes, not a hard ceiling for every region.
+   */
+  foundingSlots: 500,
 
   founding: {
     monthly: "$2.99",

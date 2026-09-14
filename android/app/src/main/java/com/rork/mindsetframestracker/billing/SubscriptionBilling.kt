@@ -10,6 +10,7 @@ import com.huawei.hms.iap.IapApiException
 import com.huawei.hms.iap.entity.IsSandboxActivatedReq
 import com.huawei.hms.iap.entity.OrderStatusCode
 import com.huawei.hms.iap.entity.OwnedPurchasesReq
+import com.huawei.hms.iap.entity.ProductInfoReq
 import com.huawei.hms.iap.entity.PurchaseIntentReq
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -70,6 +71,80 @@ object SubscriptionBilling {
         "mindset_premium_founding_monthly",
         "mindset_premium_founding_yearly",
     )
+
+    /**
+     * Outcome of a localized price query.
+     *
+     * [Unavailable] is deliberately distinct from an [Available] map that
+     * happens to be missing a key: the sheet renders a hardcoded reference
+     * price when the store cannot be reached, and it can only tell that
+     * "the store is unreachable" is not the same as "this product is unpriced"
+     * if the two are different values.
+     */
+    sealed interface PriceResult {
+        /** Localized display prices, keyed by product id. May be partial. */
+        data class Available(val prices: Map<String, String>) : PriceResult
+
+        /** Store could not answer — caller should fall back to its own copy. */
+        data object Unavailable : PriceResult
+    }
+
+    /**
+     * Queries AppGallery for the localized display price of each product id.
+     *
+     * This is the authoritative per-country price: AGC prices each product in
+     * the buyer's own currency, so the string returned here is what the user
+     * will actually be charged and is always preferable to a hardcoded number.
+     * It is used for the regular plans once a region's founding target is met —
+     * the fallback path must show the real price, not an anchor.
+     *
+     * Never throws. A missing or unreachable store resolves to
+     * [PriceResult.Unavailable] so callers keep their existing price copy
+     * rather than showing an empty string.
+     */
+    suspend fun queryPrices(
+        context: Context,
+        productIds: Collection<String>,
+    ): PriceResult =
+        suspendCancellableCoroutine { cont ->
+            val ids = productIds.toList()
+            if (ids.isEmpty()) {
+                if (cont.isActive) cont.resume(PriceResult.Available(emptyMap()))
+                return@suspendCancellableCoroutine
+            }
+            runCatching {
+                val req = ProductInfoReq().apply {
+                    priceType = 2 // 2 = auto-renewable subscription, same as the purchase req
+                    this.productIds = ids
+                }
+                Iap.getIapClient(context).getProductInfo(req)
+                    .addOnSuccessListener { result ->
+                        val prices = result.productInfoList
+                            .orEmpty()
+                            .mapNotNull { info ->
+                                val id = info.productId
+                                val price = info.price
+                                if (id.isNullOrBlank() || price.isNullOrBlank()) null else id to price
+                            }
+                            .toMap()
+                        Log.i(TAG, "getProductInfo returned ${prices.size}/${ids.size} price(s)")
+                        if (cont.isActive) {
+                            cont.resume(
+                                if (prices.isEmpty()) PriceResult.Unavailable
+                                else PriceResult.Available(prices),
+                            )
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        val code = (e as? IapApiException)?.statusCode
+                        Log.w(TAG, "getProductInfo failed (code=$code): ${e.message}")
+                        if (cont.isActive) cont.resume(PriceResult.Unavailable)
+                    }
+            }.onFailure {
+                Log.w(TAG, "queryPrices unavailable: ${it.message}")
+                if (cont.isActive) cont.resume(PriceResult.Unavailable)
+            }
+        }
 
     /**
      * Checks whether the IAP environment is ready (HMS Core installed,

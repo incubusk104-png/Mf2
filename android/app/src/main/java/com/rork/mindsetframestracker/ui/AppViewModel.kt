@@ -238,7 +238,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         when (result) {
             is SubscriptionResult.Success -> {
                 grantSubscription(result.productId)
-                // A founding-tier purchase also consumes one of the 100 global
+                // A founding-tier purchase also consumes one of this region's
                 // founding slots, so record the claim server-side. Same
                 // fire-and-forget shape as [recordTipPurchase]: the payment
                 // already succeeded through Huawei, so a failed record must
