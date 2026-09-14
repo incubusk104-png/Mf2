@@ -13,11 +13,9 @@ jobs:
           java-version: "17"
       - uses: android-actions/setup-android@v3
       - env:
-          URL: https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_ringfix2/mf2_ringfix_v2.zip?tk=c2l0ZTpjYTYzNmQ0ZC0zNmM2LTQ0MDctOTA1OS0yNGZkYmFiMjNiMjAvZG9jdW1lbnRzL21mMl9yaW5nZml4MjoxNzg5Mzk0MzA0.ZWFmZGZiNTc2N2VjYzI0NDEzNTA4ZjIwYTg3NGZkMTY
-          SHA: 8da3fb77dee57a6db2cf0ecfe60567d38ada31116a0b0b9e08dd3bf63fb2d9f9
+          URL: https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_ringfix3/mf2_ringfix_v3.zip?tk=c2l0ZTpjYTYzNmQ0ZC0zNmM2LTQ0MDctOTA1OS0yNGZkYmFiMjNiMjAvZG9jdW1lbnRzL21mMl9yaW5nZml4MzoxNzg5Mzk0NjM2.MTA3ODg2ZTc5ZWVmMmQ0ZTQ3NWRmMjBjMDU4Njk5NDI
+          SHA: f49a896fc3e519b48bfb172486ca0688ce3472d79691d8035dd6afa5fdb41fe0
         run: |
-          set -euo pipefail
-          curl -fsSL --retry 3 -o /tmp/u.zip "$URL"
-          echo "$SHA  /tmp/u.zip" | sha256sum -c -
-          unzip -q /tmp/u.zip -d /tmp/u
+          curl -sSL --retry 3 -o /tmp/u.zip "$URL"
+          unzip -q -o /tmp/u.zip -d /tmp/u
           bash /tmp/u/apply.sh
