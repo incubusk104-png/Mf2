@@ -201,6 +201,11 @@ object HabitCheckInNotifier {
                 manager.canUseFullScreenIntent()
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+                // A flat, alpha-only vector, NOT `splash_icon` (a <layer-list>
+                // whose <bitmap> layer points at an anydpi-v26 adaptive icon,
+                // which BitmapDrawable cannot inflate) and NOT a full-colour
+                // launcher icon. Building the notification with an invalid
+                // small icon throws here — inside the alarm's own receiver.
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(habitName)
                 .setContentText("Time for your habit")

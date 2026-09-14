@@ -187,6 +187,9 @@ class TimerService : Service() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID_ONGOING)
+            // Flat alpha-only vector. This one is built inside onStartCommand on
+            // the foreground-promotion path, so an invalid icon here is a
+            // service-lifecycle throw → process kill mid-timer.
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)

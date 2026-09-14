@@ -150,6 +150,9 @@ object TimerNotifier {
             }
 
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                // Flat alpha-only vector — see AlarmRingService for why
+                // `splash_icon` (a layer-list wrapping an adaptive icon) must
+                // not be used in the small-icon slot.
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(body)

@@ -160,10 +160,11 @@ fun HabitsScreen(
         data.habits.mapNotNull { habit -> habit.iconId?.let { it to habit.reminderMinutes } }.toMap()
     }
 
-    // ── Auto-sync hand-off from a finished timer ──
-    // The habit's alarm also leaves a one-shot *options* request, but that is
-    // deliberately not read here — see the note at the end of this function.
-    // This screen owns only the auto-sync half.
+    // ── Timer/stopwatch options, opened from the habit icon itself ──
+    // The habit's alarm leaves a one-shot request (see [HabitTimerRequests]);
+    // we read it and CONSUME it in the same breath. Consuming immediately is
+    // what makes the options appear exactly once per ring: a recomposition, a
+    // resume, a navigation or a reboot all find the request already gone.
     //
     // Keyed on a resume counter rather than `Unit` because the ringing screen
     // is a separate activity — when it finishes, this screen is merely
@@ -180,11 +181,13 @@ fun HabitsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // NOTE: the timer/stopwatch options request is deliberately NOT read here.
+    // It used to be consumed on this screen as well as at the app root, so
+    // whichever happened to resume first won — a race that made the popup
+    // appear from one place or the other depending on timing. Exactly one
+    // composable owns it now: HabitTimerOptionsHost in AppNavigation, which
+    // sits above the NavHost and is therefore reachable from every screen.
     LaunchedEffect(resumeTick) {
-        // Deliberately NO peek/consume of the options request here. Consuming it
-        // on this screen would steal it from the app-root host, which is the
-        // only thing that renders it — so a ring that arrived while the user was
-        // on another tab would be swallowed and the popup would never appear.
         pendingAutoSyncHabitId = HabitTimerRequests.peekAutoSync(context)
     }
 
@@ -618,21 +621,13 @@ fun HabitsScreen(
         )
     }
 
-    // NOTE: the timer / stopwatch choice is deliberately NOT rendered here.
-    //
-    // It has exactly one host — HabitTimerOptionsHost at the app root — because
-    // the sheet must appear "once, at the moment the alarm rings". Two hosts
-    // reading the same on-disk request raced to render it: this one consumed and
-    // showed it while the root host's own copy was still live, and once the
-    // ringing activity finished and recomposed this screen the sheet could
-    // appear a second time for a single ring — the "it keeps popping up"
-    // symptom. Consuming the request here (as this screen must, or it would
-    // never clear) actively stole it from the root host as well, so a ring that
-    // arrived while the user was on another tab could be swallowed entirely.
-    //
-    // The request is still *read* here — see the peekAutoSync block above — but
-    // only for the auto-sync half; the options half is owned solely by the root
-    // host.
+    // ── The timer / stopwatch choice, anchored to its habit icon ──
+    // Opened only from the habit's own alarm (or its alarm dialog). The sheet
+    // names the habit and draws its catalog artwork, so the choice always
+    // reads as belonging to the icon the user was looking at.
+    // The timer/stopwatch choice is owned by HabitTimerOptionsHost at the app
+    // root (see AppNavigation), so it is not rendered here — one owner, so the
+    // sheet can never be raised twice for the same ring.
 }
 
 // ── Alarm time formatting ───────────────────────────────────────────────────

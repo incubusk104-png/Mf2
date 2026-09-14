@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -43,7 +44,6 @@ import com.rork.mindsetframestracker.R
 import com.rork.mindsetframestracker.data.HabitIconCatalog
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerCompletionEvent
-import com.rork.mindsetframestracker.ui.navigation.NavRequests
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -170,27 +170,18 @@ class AlarmRingingActivity : ComponentActivity() {
                         showSnooze = ringingEvent == null,
                         onDismiss = { finishRinging() },
                         onSnooze = { snoozeAndFinish() },
-                        // A fallback for reachability only: the timer/stopwatch
-                        // popup appears on its own at the app root the moment
-                        // this alarm rings. This button routes to the HABITS tab
-                        // (not the timer screen) so the habit's icon — the thing
-                        // the choice belongs to — is what the user lands on.
-                        onTimerOptions = {
-                            NavRequests.request(NavRequests.ROUTE_HABITS)
-                            finishRinging()
-                        },
                     )
 
-                    // NOTE: the timer/stopwatch popup used to be rendered right
-                    // here. It now lives at the app root (HabitTimerOptionsHost
-                    // in AppNavigation), because this screen is launched through
-                    // the reminder's full-screen intent — and on Android 14+
-                    // USE_FULL_SCREEN_INTENT is revoked by default, so the
-                    // notification posts with no full-screen intent and this
-                    // Activity never launches at all. Hosting the choice here
-                    // made it depend on a grant the user had no reason to have
-                    // given: the alarm rang, and the popup never appeared.
-                    // The `onTimerOptions` button above stays as a fallback.
+                    // NOTE: the timer/stopwatch popup is deliberately NOT here.
+                    // It is raised automatically at the app root by
+                    // HabitTimerOptionsHost in AppNavigation, from a one-shot
+                    // request written the instant the alarm reaches the user
+                    // (HabitReminderReceiver). Hosting it on this screen made it
+                    // depend on a grant the user had no reason to have given:
+                    // Android 14+ revokes USE_FULL_SCREEN_INTENT by default, so
+                    // the notification posts with no full-screen intent and this
+                    // Activity never launches at all — the alarm rang and the
+                    // choice never appeared.
                 }
             }
         }
@@ -209,18 +200,29 @@ class AlarmRingingActivity : ComponentActivity() {
      * the alarm that is actually ringing.
      */
     override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        recreate()
+        runCatching {
+            super.onNewIntent(intent)
+            setIntent(intent)
+            recreate()
+        }.onFailure { Log.w(TAG, "Could not refresh the ringing screen for a new alarm", it) }
     }
 
-    /** Ensures the alarm UI appears even from a locked screen with the display off. */
+    /**
+     * Ensures the alarm UI appears even from a locked screen with the display off.
+     *
+     * Guarded as a whole: this runs at the very top of `onCreate`, on an
+     * alarm-triggered cold start, and `requestDismissKeyguard` in particular is
+     * allowed to throw when the keyguard is in a state it cannot service. None
+     * of it is worth the process.
+     */
     private fun showOverLockScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            keyguardManager?.requestDismissKeyguard(this, null)
+            runCatching {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+                val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                keyguardManager?.requestDismissKeyguard(this, null)
+            }.onFailure { Log.w(TAG, "Could not take over the lock screen", it) }
         } else {
             @Suppress("DEPRECATION")
             window.addFlags(
@@ -276,11 +278,16 @@ class AlarmRingingActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        stopRinging()
+        // Guarded: onDestroy is a lifecycle callback, so a throw here is another
+        // process-killing path — and it runs while the ring is being torn down.
+        runCatching { stopRinging() }
+            .onFailure { Log.w(TAG, "Failed to stop ringing cleanly", it) }
         super.onDestroy()
     }
 
     companion object {
+        private const val TAG = "AlarmRingingActivity"
+
         /** Stop ringing on its own after this long, same as most alarm clocks. */
         private const val AUTO_STOP_MILLIS = 3L * 60L * 1000L
     }
@@ -294,7 +301,6 @@ private fun AlarmRingingScreen(
     showSnooze: Boolean,
     onDismiss: () -> Unit,
     onSnooze: () -> Unit,
-    onTimerOptions: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -352,14 +358,18 @@ private fun AlarmRingingScreen(
                     onClick = onSnooze,
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 ) { Text("Snooze 5 min") }
-
-                // Habit alarms only: the timers belong to the habit, so the
-                // choice is offered here, from the habit's own alarm.
-                OutlinedButton(
-                    onClick = onTimerOptions,
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                ) { Text("Timer / stopwatch") }
             }
+
+            // NOTE: there is deliberately no "Timer / stopwatch" button here.
+            // The choice belongs to the habit's own icon, not to this screen,
+            // and it must arrive on its own without the user tapping anything:
+            // it is raised automatically at the app root by
+            // HabitTimerOptionsHost the moment the ring's request is written
+            // (see HabitReminderReceiver). A button here would also be
+            // unreachable in the very case that matters most — this Activity is
+            // launched through the notification's full-screen intent, which
+            // Android 14+ does not grant by default, so it often never appears
+            // at all.
         }
     }
 }

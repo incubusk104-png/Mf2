@@ -60,6 +60,38 @@ import com.rork.mindsetframestracker.R
  * The Activity is now purely the *view* of a ring: it draws the screen and
  * calls [stop] when the user acts.
  *
+ * ## Why the service can no longer take the process down
+ *
+ * This service only ever exists while an alarm is ringing, so every one of its
+ * lifecycle callbacks runs at the worst possible moment. A throw escaping
+ * `onCreate` or `onStartCommand` is not a caught error \u2014 for a *started*
+ * Service the system turns it into a **process kill**, which is precisely the
+ * "keeps stopping" dialog that appears while the alarm rings.
+ *
+ * Three things here were capable of throwing:
+ *
+ *  - `startForeground(...)` with a **missing or invalid small icon**. All four
+ *    alarm-path notifiers used `R.drawable.splash_icon`, a `<layer-list>` whose
+ *    `<bitmap>` layer points at `@mipmap/ic_launcher` \u2014 an `anydpi-v26`
+ *    **adaptive icon**, which has no bitmap to decode. `BitmapDrawable` layer
+ *    inflation on that is an undefined cast at best and a throw at worst, and
+ *    it happened inside `onCreate`, on the ring path. The icon is now the flat
+ *    alpha-only vector [R.drawable.ic_notification], and the promotion is
+ *    guarded so even a hypothetical failure there costs the ongoing
+ *    notification rather than the process. (The other four notifiers in the app
+ *    \u2014 `CheckInNotifier`, `StreakAlertNotifier`, `WeeklyRecapNotifier`,
+ *    `CompanionNotifier` \u2014 already used a plain vector; the alarm path was the
+ *    odd one out.)
+ *  - Building the ongoing notification *before* promoting to foreground, which
+ *    re-reads state and can throw before the ~5-second
+ *    `startForegroundService()` deadline is met \u2014 the classic
+ *    `ForegroundServiceDidNotStartInTimeException`, which is also fatal.
+ *  - `createChannel()` on the notification-manager service, unguarded.
+ *
+ * Failing to ring is a bad outcome; killing the app while the user's alarm is
+ * supposed to be ringing is a worse one. The audio path is therefore
+ * explicitly best-effort and every step is guarded.
+ *
  * ## Sound and vibration
  *
  * Plays on [AudioAttributes.USAGE_ALARM] \u2014 the phone's *alarm* volume, which
@@ -75,52 +107,33 @@ class AlarmRingService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
-
-    /**
-     * True once [stopRinging] has released the player.
-     *
-     * Read by the prepared-listener below. The listener fires late (on the main
-     * thread, after the ringtone has been decoded), by which time the auto-stop
-     * or a "Dismiss" tap may already have released the player — and calling
-     * `start()` on a released MediaPlayer throws.
-     */
-    @Volatile private var released = false
     private val handler = Handler(Looper.getMainLooper())
     private val autoStop = Runnable { stopSelfSafely() }
 
-    /** The habit (or event) currently ringing, so a stop can clear its notification. */
-    private var habitId: String? = null
-    private var eventId: String? = null
+    /** True once [startForeground] has actually succeeded. */
+    private var foregroundActive = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
+        // A throw here kills the process, so every step is best-effort: the
+        // worst acceptable outcome is an alarm that only vibrates, never a crash.
         super.onCreate()
-        // Promote to foreground immediately. Android kills a service that was
-        // started with startForegroundService() but doesn't post its
-        // notification within ~5 seconds \u2014 and this service only ever exists
-        // while an alarm is ringing, so there is no earlier moment to do it.
-        createChannel()
-        // Guarded: an exception thrown out of a service lifecycle callback is
-        // exactly what the OS turns into its "app keeps stopping" process kill.
-        // buildOngoingNotification() is the only non-trivial work here, so if it
-        // ever fails the worthwhile thing to lose is a silent ongoing
-        // notification — never the audible ring or the alarm notification that
-        // HabitCheckInNotifier / TimerNotifier have already posted.
-        runCatching {
-            startForeground(ONGOING_NOTIFICATION_ID, buildOngoingNotification())
-        }.onFailure { Log.w(TAG, "Could not promote the ring service to foreground", it) }
-    }
+        runCatching { createChannel() }
+            .onFailure { Log.w(TAG, "Could not create the ring channel", it) }
 
-    /**
-     * Android 15+ (API 35) calls this when the `mediaPlayback` foreground-service
-     * timeout elapses. Ringing is a legitimate user-visible reason to keep
-     * running, but the safe answer is to stop cleanly rather than let the OS
-     * kill the process — a kill here is indistinguishable to the user from
-     * "the app crashed while the alarm was ringing".
-     */
-    override fun onTimeout(startId: Int) {
-        stopSelfSafely()
+        // Promote to foreground immediately. Android kills a service started
+        // with startForegroundService() that doesn't post its notification
+        // within ~5 seconds \u2014 and this service only ever exists while an alarm
+        // is ringing, so there is no earlier moment to do it. The notification
+        // is built inside the guard so a failure while building it neither
+        // escapes this callback nor blows the deadline.
+        foregroundActive = runCatching {
+            startForeground(ONGOING_NOTIFICATION_ID, buildOngoingNotification())
+            true
+        }.onFailure {
+            Log.w(TAG, "Could not promote the ring service to foreground", it)
+        }.getOrDefault(false)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -138,6 +151,17 @@ class AlarmRingService : Service() {
         handler.removeCallbacks(autoStop)
         handler.postDelayed(autoStop, AUTO_STOP_MILLIS)
 
+        // If the promotion in onCreate failed, we are still a started service
+        // that owes the system a foreground notification; retry once here, which
+        // is the last chance to satisfy that without being killed.
+        if (!foregroundActive) {
+            foregroundActive = runCatching {
+                startForeground(ONGOING_NOTIFICATION_ID, buildOngoingNotification())
+                true
+            }.onFailure { Log.w(TAG, "Retry of the foreground promotion failed", it) }
+                .getOrDefault(false)
+        }
+
         // START_STICKY would restart this with a null Intent and no idea which
         // alarm it belonged to, which is worse than not ringing: the alarm's own
         // re-arm path (HabitAlarmScheduler / TimerAlarmScheduler) already covers
@@ -146,56 +170,30 @@ class AlarmRingService : Service() {
     }
 
     private fun startRinging() {
-        // A fresh ring on a reused service instance must be able to start audio
-        // again, so clear the released latch before preparing.
-        released = false
         runCatching {
             val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            val player = MediaPlayer()
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
-            player.isLooping = true
-            // The listener is registered BEFORE setDataSource/prepareAsync, and
-            // deliberately on the player object itself rather than inside an
-            // `apply { }` block that ends with prepareAsync(). That ordering IS
-            // the fix:
-            //
-            // `MediaPlayer.setDataSource(context, uri)` reaches the ringtone
-            // through a content resolver and calls `prepare()` internally, and
-            // `prepareAsync()` can likewise complete synchronously when the
-            // source resolves instantly. In both cases onPrepared fires during
-            // the `apply { }` block — at which point the listener registered at
-            // its end is still null. The callback never ran, `start()` was never
-            // called, and the player was assigned to the field one line later
-            // than the moment it mattered. The result was an alarm that rang
-            // silently while every log line claimed success.
-            player.setOnPreparedListener { mp ->
-                // The ring window may have expired (auto-stop) or the user may
-                // have dismissed the alarm while the ringtone was still being
-                // decoded. `start()` on a released MediaPlayer throws
-                // IllegalStateException on the main thread — an immediate crash
-                // while the alarm is ringing. Re-check and decline.
-                if (released || mediaPlayer == null) {
-                    runCatching { mp.release() }
-                    return@setOnPreparedListener
+            val player = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                setDataSource(this@AlarmRingService, alarmUri)
+                isLooping = true
+                // prepareAsync(), NOT prepare(): this is a service but still the
+                // main thread of the process, and a blocking decode here delays
+                // the ring itself. The sound simply starts when the ringtone is
+                // decoded.
+                setOnPreparedListener { it.start() }
+                setOnErrorListener { _, what, extra ->
+                    Log.w(TAG, "Ringtone playback error (what=$what extra=$extra)")
+                    true
                 }
-                runCatching { mp.start() }
-                    .onFailure { Log.w(TAG, "Could not start the decoded ringtone", it) }
+                prepareAsync()
             }
-            player.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "Ringtone playback error (what=$what extra=$extra)")
-                true
-            }
-            player.setDataSource(this@AlarmRingService, alarmUri)
-            // Publish the field BEFORE preparing: if onPrepared fires
-            // synchronously, the guard above must already see a non-null field.
             mediaPlayer = player
-            player.prepareAsync()
         }.onFailure { Log.w(TAG, "Could not start ringtone", it) }
 
         runCatching {
@@ -218,17 +216,16 @@ class AlarmRingService : Service() {
     }
 
     private fun stopSelfSafely() {
-        handler.removeCallbacks(autoStop)
+        runCatching { handler.removeCallbacks(autoStop) }
         stopRinging()
-        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-        stopSelf()
+        runCatching {
+            if (foregroundActive) stopForeground(STOP_FOREGROUND_REMOVE)
+        }.onFailure { Log.w(TAG, "stopForeground failed", it) }
+        foregroundActive = false
+        runCatching { stopSelf() }
     }
 
     private fun stopRinging() {
-        // Latched BEFORE the reference is dropped: a prepared-listener callback
-        // already queued on the main thread must be able to see that this player
-        // is being torn down and decline to start it.
-        released = true
         runCatching { mediaPlayer?.stop() }
         runCatching { mediaPlayer?.release() }
         mediaPlayer = null
@@ -237,7 +234,10 @@ class AlarmRingService : Service() {
     }
 
     override fun onDestroy() {
-        stopRinging()
+        // A throw out of onDestroy is another process-killing path, and this one
+        // runs while the ring is being torn down.
+        runCatching { stopRinging() }
+            .onFailure { Log.w(TAG, "Failed to release the ring cleanly", it) }
         super.onDestroy()
     }
 
@@ -248,6 +248,12 @@ class AlarmRingService : Service() {
      * posted by [HabitCheckInNotifier] / [TimerNotifier] (plus the full-screen
      * ringing screen when that is granted). Importance LOW keeps this from
      * adding a second sound or a second heads-up on top of them.
+     *
+     * The small icon is deliberately [R.drawable.ic_notification] \u2014 a flat,
+     * alpha-only vector. It is NOT `splash_icon` (a `<layer-list>` wrapping an
+     * adaptive icon, which `BitmapDrawable` cannot inflate) and NOT
+     * `@mipmap/ic_launcher` (a full-colour adaptive icon, wrong for a slot the
+     * system renders as a silhouette).
      */
     private fun buildOngoingNotification(): Notification {
         val openIntent = Intent(this, MainActivity::class.java).apply {

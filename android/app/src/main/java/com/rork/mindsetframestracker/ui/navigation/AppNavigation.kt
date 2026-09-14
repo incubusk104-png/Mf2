@@ -200,91 +200,78 @@ private fun HabitTimerOptionsHost(
     onOpenTimerScreen: () -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    // Whether the app is genuinely in front of the user, tracked as *state*
-    // driven by lifecycle callbacks rather than read as
-    // `lifecycle.currentState` during composition: that property is not snapshot
-    // state, so reading it would not re-run composition when the activity
-    // resumes — the sheet would simply never appear on the resume it was
-    // waiting for.
-    var resumed by remember { mutableStateOf(false) }
-    // Read once on creation so a ring that is already pending when the app
-    // starts (the alarm woke a dead process, or it rang while the app was
-    // closed) is delivered on the first resume instead of being missed.
-    var pending by remember { mutableStateOf(HabitTimerRequests.peek(context)) }
+    var request by remember { mutableStateOf<HabitTimerRequests.Request?>(null) }
 
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> {
-                    resumed = true
-                    // Pick the request up ONLY when no sheet is already on
-                    // screen. Assigning unconditionally would clobber a sheet
-                    // the user is looking at, so every trip through the ringing
-                    // activity and back would restart it.
-                    if (pending == null) {
-                        pending = HabitTimerRequests.peek(context)
-                    }
-                }
-                Lifecycle.Event.ON_PAUSE -> resumed = false
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    val current = pending ?: return
-
-    // Only render — and only consume — once the app is genuinely RESUMED.
-    // ON_START and ON_RESUME are separate callbacks and this host sits at the
-    // root of the tree, so on a cold start it composes while the activity is
-    // still merely STARTED. A ring arriving in that window would otherwise
-    // render the sheet and burn the request over the app's own launch, and a
-    // dialog shown against a not-yet-RESUMED owner is exactly the kind of
-    // window-token mismatch that some OEM skins turn into a crash right as the
-    // alarm rings.
+    // ── Why this polls instead of waiting for ON_RESUME ──
+    // A one-shot request is written to disk by HabitReminderReceiver at the
+    // instant the alarm reaches the user. This host has to notice it *without
+    // anything else happening*, because the whole point is that the choice
+    // appears on its own, the moment the alarm rings.
     //
-    // Deferring both the consume and the render keeps the once-per-ring promise
-    // intact: the request stays on disk until it is actually shown, and a ring
-    // that lands while the app is backgrounded is delivered the moment the user
-    // brings the app forward rather than being silently discarded.
-    if (!resumed) return
-
-    // Consume the moment the choice is shown, so it can never come back. The
-    // sheet below keeps rendering from the value already read, so this ring
-    // still shows it exactly once.
-    LaunchedEffect(current.habitId) {
-        HabitTimerRequests.consume(context)
+    // A lifecycle-only trigger is not enough for that: when the alarm fires
+    // while the app is already in the foreground *and* USE_FULL_SCREEN_INTENT
+    // is not granted (the Android 14+ default), the ringing screen never
+    // launches, so no pause/resume ever occurs and an ON_RESUME-driven host
+    // would sit there having missed it entirely. It would also miss the
+    // request if the user stayed put in the app.
+    //
+    // So the pending record is re-read on a short tick. This is not a poll of
+    // anything expensive: SharedPreferences is an in-memory map after the first
+    // read, so each pass is a map lookup — and it makes "the popup appears when
+    // the alarm rings" independent of which screen the user is on, whether the
+    // app was backgrounded, and whether the full-screen grant exists.
+    LaunchedEffect(Unit) {
+        while (true) {
+            val pending = HabitTimerRequests.peek(context)
+            if (pending != null && pending.habitId != request?.habitId) {
+                // Consumed in the same step it is detected, before the sheet is
+                // even handed the value, so this ring shows it exactly once and
+                // no later tick can resurrect it.
+                HabitTimerRequests.consume(context)
+                request = pending
+            }
+            delay(POPUP_POLL_MILLIS)
+        }
     }
+
+    val pending = request ?: return
 
     // The ringing habit's own catalog artwork. Resolved off the main thread —
     // decoding the app blob synchronously in composition is exactly the
     // main-thread stall that has to stay off the ring path. The sheet falls
     // back to its generic timer glyph for the first frame.
-    var iconId by remember(current.habitId) { mutableStateOf(current.iconId) }
-    if (current.iconId == null) {
-        LaunchedEffect(current.habitId) {
+    var iconId by remember(pending.habitId) { mutableStateOf(pending.iconId) }
+    if (pending.iconId == null) {
+        LaunchedEffect(pending.habitId) {
             iconId = withContext(Dispatchers.IO) {
                 runCatching {
                     MindsetRepository(context).load().habits
-                        .firstOrNull { it.id == current.habitId }?.iconId
+                        .firstOrNull { it.id == pending.habitId }?.iconId
                 }.getOrNull()
             }
         }
     }
 
     HabitTimerOptionsSheet(
-        habitId = current.habitId,
-        habitName = current.habitName.ifBlank { "Habit" },
+        habitId = pending.habitId,
+        habitName = pending.habitName.ifBlank { "Habit" },
         habitIconId = iconId,
         onOpenTimerScreen = {
-            pending = null
+            request = null
             onOpenTimerScreen()
         },
-        onDismiss = { pending = null },
+        onDismiss = { request = null },
     )
 }
+
+/**
+ * How often the root host re-reads the one-shot timer/stopwatch request.
+ *
+ * Short enough that the choice is on screen effectively the instant the alarm
+ * rings, long enough to be free: SharedPreferences resolves from an in-memory
+ * map, so each pass is a single lookup rather than I/O.
+ */
+private const val POPUP_POLL_MILLIS = 1_000L
 
 /**
  * Root-level owner of the **one-time** timer completion popup.
