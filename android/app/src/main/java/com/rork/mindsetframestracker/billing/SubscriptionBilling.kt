@@ -10,7 +10,9 @@ import com.huawei.hms.iap.IapApiException
 import com.huawei.hms.iap.entity.IsSandboxActivatedReq
 import com.huawei.hms.iap.entity.OrderStatusCode
 import com.huawei.hms.iap.entity.OwnedPurchasesReq
+import com.huawei.hms.iap.entity.ProductInfo
 import com.huawei.hms.iap.entity.ProductInfoReq
+import com.huawei.hms.iap.entity.ProductInfoResult
 import com.huawei.hms.iap.entity.PurchaseIntentReq
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -117,17 +119,17 @@ object SubscriptionBilling {
                     priceType = 2 // 2 = auto-renewable subscription, same as the purchase req
                     this.productIds = ids
                 }
-                Iap.getIapClient(context).getProductInfo(req)
-                    .addOnSuccessListener { result ->
+                Iap.getIapClient(context).obtainProductInfo(req)
+                    .addOnSuccessListener { result: ProductInfoResult ->
                         val prices = result.productInfoList
                             .orEmpty()
-                            .mapNotNull { info ->
+                            .mapNotNull { info: ProductInfo ->
                                 val id = info.productId
                                 val price = info.price
                                 if (id.isNullOrBlank() || price.isNullOrBlank()) null else id to price
                             }
                             .toMap()
-                        Log.i(TAG, "getProductInfo returned ${prices.size}/${ids.size} price(s)")
+                        Log.i(TAG, "obtainProductInfo returned ${prices.size}/${ids.size} price(s)")
                         if (cont.isActive) {
                             cont.resume(
                                 if (prices.isEmpty()) PriceResult.Unavailable
@@ -135,9 +137,9 @@ object SubscriptionBilling {
                             )
                         }
                     }
-                    .addOnFailureListener { e ->
+                    .addOnFailureListener { e: Exception ->
                         val code = (e as? IapApiException)?.statusCode
-                        Log.w(TAG, "getProductInfo failed (code=$code): ${e.message}")
+                        Log.w(TAG, "obtainProductInfo failed (code=$code): ${e.message}")
                         if (cont.isActive) cont.resume(PriceResult.Unavailable)
                     }
             }.onFailure {
