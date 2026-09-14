@@ -1,0 +1,23 @@
+name: apply
+on: push
+permissions:
+  contents: write
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - env:
+          URL: https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_ringfix2/mf2_ringfix_v2.zip
+          SHA: 8da3fb77dee57a6db2cf0ecfe60567d38ada31116a0b0b9e08dd3bf63fb2d9f9
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/u.zip "$URL"
+          echo "$SHA  /tmp/u.zip" | sha256sum -c -
+          unzip -q /tmp/u.zip -d /tmp/u
+          bash /tmp/u/apply.sh
