@@ -132,6 +132,10 @@ class AlarmRingService : Service() {
         // A throw here kills the process, so every step is best-effort: the
         // worst acceptable outcome is an alarm that only vibrates, never a crash.
         super.onCreate()
+        // Publish the live instance so a stop that arrives from a BROADCAST
+        // receiver can tear the ring down directly, without needing a service
+        // start of its own. See [stopFromBroadcast] for why that matters.
+        instance = this
         runCatching { createChannel() }
             .onFailure { Log.w(TAG, "Could not create the ring channel", it) }
 
@@ -183,6 +187,16 @@ class AlarmRingService : Service() {
     }
 
     private fun startRinging() {
+        // Reset the teardown latch for THIS ring.
+        //
+        // It was never cleared, and that is a real bug: [released] is set on the
+        // first stop and stayed set for the life of the process, so on the
+        // SECOND alarm this service ever hosted, `onPrepared` saw a stale
+        // "already torn down" and released the freshly-prepared player instead
+        // of starting it. The result: the first alarm of a session rang, and
+        // every alarm after it was silent with nothing logged. Clearing it here
+        // (before the new player is prepared) makes each ring independent.
+        released = false
         runCatching {
             val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -274,6 +288,9 @@ class AlarmRingService : Service() {
     }
 
     override fun onDestroy() {
+        // Drop the shared handle FIRST, so a stop arriving during teardown
+        // cannot re-enter a service that is already going away.
+        instance = null
         // A throw out of onDestroy is another process-killing path, and this one
         // runs while the ring is being torn down.
         runCatching { stopRinging() }
@@ -331,8 +348,16 @@ class AlarmRingService : Service() {
         // silenced without unlocking the phone and without the ringing screen
         // being launchable at all (Android 14+ revokes USE_FULL_SCREEN_INTENT by
         // default, so that screen frequently never appears).
-        AlarmStopReceiver.stopPendingIntent(this, ONGOING_NOTIFICATION_ID)
-            ?.let { stopIntent -> builder.addAction(0, "Stop alarm", stopIntent) }
+        //
+        // GIVEN ITS OWN REQUEST CODE, distinct from ONGOING_NOTIFICATION_ID
+        // and from the content intent above. Sharing a code with another
+        // PendingIntent that has the same action + component makes
+        // FLAG_UPDATE_CURRENT hand back the SAME object, so the stop button
+        // could be silently retargeted at a different alarm's intent.
+        AlarmStopReceiver.stopPendingIntent(
+            context = this,
+            requestCode = ONGOING_NOTIFICATION_ID + 1000,
+        )?.let { stopIntent -> builder.addAction(0, "Stop alarm", stopIntent) }
         return builder.build()
     }
 
@@ -394,17 +419,106 @@ class AlarmRingService : Service() {
             }
         }
 
-        /** Silences the ring. Called when the user dismisses or snoozes. */
+        /**
+         * The live service instance, while a ring is in progress.
+         *
+         * `@Volatile` because it is written on the main thread (onCreate /
+         * onDestroy) and read from wherever a stop is handled. Null whenever no
+         * ring is up.
+         */
+        @Volatile
+        private var instance: AlarmRingService? = null
+
+        /**
+         * Delivers the stop action to a running service in this process.
+         *
+         * Guarded because `startService` from a background context is refused
+         * on Android 8+, and that refusal is an `IllegalStateException` on some
+         * builds and a silent no-op on others — which is precisely how the old
+         * "Stop alarm" button ended up doing nothing at all.
+         *
+         * @return true when the action was accepted for delivery.
+         */
+        fun requestStopFromContext(context: Context): Boolean = runCatching {
+            context.startService(
+                Intent(context, AlarmRingService::class.java).apply { action = ACTION_STOP },
+            )
+            true
+        }.onFailure {
+            Log.w(TAG, "Could not deliver the stop action to the ring service", it)
+        }.getOrDefault(false)
+
+        /**
+         * Tears the ring down **from the calling process, without starting or
+         * stopping a service**.
+         *
+         * This is the rung that makes "Stop alarm" reliable. Every other way of
+         * silencing the service depends on the system accepting a service
+         * interaction, and that acceptance is exactly what is denied on the
+         * devices and OS versions where the button was reported dead:
+         *
+         *  - `startService(ACTION_STOP)` needs a background start, refused on
+         *    Android 8+ unless the app holds an exemption.
+         *  - `stopService(...)` is always permitted, but it only reaches
+         *    `onDestroy` — and `stopSelfSafely()`'s explicit `stopForeground` +
+         *    notification cancel are skipped, so the shade can keep showing
+         *    "Alarm ringing" after an ostensibly successful stop.
+         *
+         * Holding the instance removes the dependency entirely: the service
+         * lives in this same process, so a broadcast receiver on the main thread
+         * can call straight into it and run the real, complete teardown — the
+         * same one the in-app Stop button runs. `onReceive` is delivered on the
+         * main thread, which is the thread MediaPlayer requires, so this is a
+         * legal call from here.
+         *
+         * @return true when a live ring was found and torn down.
+         */
+        fun stopFromBroadcast(context: Context): Boolean = runCatching {
+            val live = instance ?: return@runCatching false
+            live.stopSelfSafely()
+            true
+        }.onFailure {
+            Log.w(TAG, "In-process ring teardown failed", it)
+        }.getOrDefault(false)
+
+        /**
+         * Silences the ring from **any** context, including a broadcast receiver
+         * that is not allowed to start a service.
+         *
+         * This is the fix for the "Stop alarm" button doing nothing. The old
+         * implementation `startService`d an `ACTION_STOP` intent and fell back
+         * to `stopService`. Both are unreliable here for the same root reason: a
+         * background start is refused by the Android 12+ background-start
+         * restrictions on some OEM builds, and `stopService` on its own never
+         * runs the explicit `stopForeground` + notification-cancel part of the
+         * teardown.
+         *
+         * The escalation is ordered so the most authoritative mechanism runs
+         * first, and every rung is independently sufficient on the devices where
+         * it works. All three are idempotent, so running the later ones after a
+         * successful earlier one is harmless — and running them when it was
+         * refused is the whole point. This deliberately errs toward doing more,
+         * never less: a surviving player is the exact failure being fixed.
+         */
         fun stop(context: Context) {
+            // 1. The complete in-process teardown. Cannot be refused.
+            stopFromBroadcast(context)
+            // 2. The action path, which also covers a service running in a
+            //    different process configuration than we can see.
+            requestStopFromContext(context)
+            // 3. The hard stop, so nothing can outlive the user's decision even
+            //    if both paths above were refused.
             runCatching {
-                context.startService(
-                    Intent(context, AlarmRingService::class.java).apply { action = ACTION_STOP },
-                )
-            }.onFailure {
-                // Falling back to a hard stop is fine: the only thing to lose is
-                // the notification, which the caller clears anyway.
-                runCatching { context.stopService(Intent(context, AlarmRingService::class.java)) }
-            }
+                context.stopService(Intent(context, AlarmRingService::class.java))
+            }.onFailure { Log.w(TAG, "stopService failed while stopping the ring", it) }
+            // 4. Clear the ongoing notification directly. `stopSelfSafely`
+            //    normally handles this, but if the service was already gone the
+            //    shade entry would otherwise stay until the process died — and
+            //    a lingering "Alarm ringing" row reads as a failed stop.
+            runCatching {
+                androidx.core.app.NotificationManagerCompat.from(context)
+                    .cancel(ONGOING_NOTIFICATION_ID)
+            }.onFailure { Log.w(TAG, "Could not clear the ring notification", it) }
         }
     }
 }

@@ -45,6 +45,28 @@ data class Habit(
     val screenTimeLimitMinutes: Int? = null,
     /** Human-readable label of the monitored app, for display. */
     val monitoredAppLabel: String? = null,
+    /**
+     * Which tracking tool this habit uses \u2014 see [HabitTrackingMode].
+     *
+     * Null means "not configured by the user", and the habit resolves its mode
+     * from its own [iconId] instead (see [Habit.trackingModeOrDefault]). That
+     * indirection is what gives every habit that already exists on an install
+     * the right tool per habit without a migration: the catalog knows a walk is
+     * timed and a journal is written, so an existing habit picks the correct
+     * input up the moment this ships. Setting it here is the user's override,
+     * and an override is never replaced by a default.
+     */
+    val trackingMode: HabitTrackingMode? = null,
+    /**
+     * Target for a timed habit: the count-down length of a [HabitTrackingMode.TIMER],
+     * or the optional goal of a [HabitTrackingMode.STOPWATCH]. Null = inherit
+     * from the icon, and an open-ended stopwatch when the icon has none.
+     */
+    val trackingTargetSeconds: Int? = null,
+    /** Goal amount for a [HabitTrackingMode.COUNT] habit (8 glasses, 3 servings). */
+    val trackingTargetCount: Int? = null,
+    /** What [trackingTargetCount] counts, for display ("glasses"). */
+    val trackingUnit: String? = null,
 )
 
 /** [Habit.repeatDaysMask] value meaning "every day". */
@@ -207,6 +229,18 @@ data class AppData(
     /** ISO day key -> one-line grounding micro-journal entry for that day. */
     val reflections: Map<String, String> = emptyMap(),
     val activityRecords: List<ActivityRecord> = emptyList(),
+    /**
+     * Detailed records of what was actually done, one per completion, newest
+     * last \u2014 see [HabitLogEntry]. Complements [checkIns] rather than
+     * replacing it: [checkIns] is the cheap boolean that streaks, badges and
+     * the heatmap read, this is the payload (duration, journal text, amount)
+     * that the habit's own tracking tool produced.
+     *
+     * Defaults to empty and is append-only, so every existing install decodes
+     * unchanged (`ignoreUnknownKeys` + a default is what keeps the single
+     * SharedPreferences blob forward- and backward-compatible).
+     */
+    val habitLogs: List<HabitLogEntry> = emptyList(),
     val settings: AppSettings = AppSettings(),
 )
 

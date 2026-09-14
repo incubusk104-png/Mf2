@@ -164,8 +164,12 @@ object TimerNotifier {
             // The manual "Stop alarm" action. Same guarded-broadcast rationale as
             // HabitCheckInNotifier: deliverable from the shade, and unable to
             // throw into the notification path that runs at ring time.
-            AlarmStopReceiver.stopPendingIntent(context, notificationId(event.eventId) + 4)
-                ?.let { stopIntent -> builder.addAction(0, "Stop alarm", stopIntent) }
+            AlarmStopReceiver.stopPendingIntent(
+                context = context,
+                requestCode = notificationId(event.eventId) + 4,
+                habitId = event.habitId,
+                eventId = event.eventId,
+            )?.let { stopIntent -> builder.addAction(0, "Stop alarm", stopIntent) }
             if (canUseFullScreenIntent) {
                 builder.setFullScreenIntent(ringingPendingIntent, true)
             }

@@ -3,11 +3,15 @@ package com.rork.mindsetframestracker.notifications
 import android.content.Context
 import android.util.Log
 import com.rork.mindsetframestracker.data.ActiveTimer
+import com.rork.mindsetframestracker.data.Dates
+import com.rork.mindsetframestracker.data.HabitLogEntry
+import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerCompletionEvent
 import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.data.TimerRepository
 import com.rork.mindsetframestracker.data.TimerStatus
+import com.rork.mindsetframestracker.data.trackingModeOrDefault
 
 /**
  * The **single** funnel through which a timer's completion happens.
@@ -116,6 +120,39 @@ object TimerCompletion {
         if (!habitId.isNullOrBlank()) {
             runCatching { MindsetRepository(context).markHabitDoneToday(habitId) }
                 .onFailure { Log.w(TAG, "Failed to record habit $habitId from timer completion", it) }
+
+            // ── Record WHAT was actually done against the habit ────────────
+            // The check-in above is the boolean streaks read; this is the
+            // payload. Without it a finished walk contributed nothing but a
+            // tick, and the habit's own tracking tool (stopwatch or timer) had
+            // no lasting result — the user cannot see how long they walked, and
+            // a JOURNAL/COUNT habit finished through an alarm recorded nothing
+            // at all. Written from here because this funnel is the single place
+            // a completion is known to be genuine and once-only; the habit's
+            // mode is read back so the entry is shaped by the habit, not by
+            // whatever the timer happened to be.
+            runCatching {
+                val habit = MindsetRepository(context).load().habits
+                    .firstOrNull { it.id == habitId }
+                val mode = when {
+                    habit == null -> if (event.kind == TimerKind.TIMER) {
+                        HabitTrackingMode.TIMER
+                    } else {
+                        HabitTrackingMode.STOPWATCH
+                    }
+                    else -> habit.trackingModeOrDefault
+                }
+                MindsetRepository(context).saveHabitLog(
+                    HabitLogEntry(
+                        habitId = habitId,
+                        dayKey = Dates.todayKey(),
+                        mode = mode,
+                        durationSeconds = event.elapsedSeconds.takeIf { it > 0 },
+                        recordedAtEpochMs = System.currentTimeMillis(),
+                        note = null,
+                    ),
+                )
+            }.onFailure { Log.w(TAG, "Failed to record the tracked duration for $habitId", it) }
 
             // ── Auto-sync the activity from the connected app ──
             // The timer/stopwatch the user just finished IS the activity, but

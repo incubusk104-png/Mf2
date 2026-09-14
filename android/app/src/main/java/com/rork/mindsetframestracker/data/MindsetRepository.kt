@@ -151,6 +151,25 @@ class MindsetRepository(context: Context) {
         save(updated)
     }
 
+    /**
+     * Appends one [HabitLogEntry] and persists — the record of what a habit's
+     * own tracking tool actually produced (a measured duration, a journal
+     * title + text, a count).
+     *
+     * Append-only by design, and it does **not** touch `checkIns`: recording
+     * the payload and marking the day done are separate concerns, and keeping
+     * them separate means a caller cannot accidentally create a streak by
+     * writing text. [com.rork.mindsetframestracker.ui.AppViewModel] does both
+     * together when the user confirms.
+     *
+     * @return the stored entry, or null when persistence failed.
+     */
+    fun saveHabitLog(entry: HabitLogEntry): HabitLogEntry? = runCatching {
+        val current = load()
+        save(current.copy(habitLogs = current.habitLogs + entry))
+        entry
+    }.onFailure { Log.w(TAG, "Failed to persist habit log for ${entry.habitId}", it) }.getOrNull()
+
     /** Records for a specific habit, most recent first — feeds TrendChart/YearHeatmap. */
     fun activityRecordsForHabit(habitId: String): List<ActivityRecord> =
         load().activityRecords.filter { it.habitId == habitId }.sortedByDescending { it.timestamp }

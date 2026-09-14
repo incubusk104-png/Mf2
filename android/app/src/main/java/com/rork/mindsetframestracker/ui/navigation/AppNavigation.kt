@@ -685,6 +685,13 @@ fun AppNavigation(viewModel: AppViewModel) {
                                 restoreState = true
                             }
                         },
+                        // A timed habit started from its tracking sheet opens the
+                        // timer screen, the same destination the alarm's timer
+                        // flow uses — one place to watch a run, whichever route
+                        // started it.
+                        onOpenTimerScreen = {
+                            navController.navigate("timer") { launchSingleTop = true }
+                        },
                     )
                 }
                 composable("habits") {

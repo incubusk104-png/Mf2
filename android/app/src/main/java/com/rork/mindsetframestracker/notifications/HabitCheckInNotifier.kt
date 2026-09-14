@@ -225,8 +225,12 @@ object HabitCheckInNotifier {
             // Built through the guarded helper, so a failure to construct the
             // PendingIntent drops the button rather than throwing inside this
             // receiver — which runs at the exact moment the alarm fires.
-            AlarmStopReceiver.stopPendingIntent(context, notificationId(habitId) + 1)
-                ?.let { stopIntent -> notificationBuilder.addAction(0, "Stop alarm", stopIntent) }
+            AlarmStopReceiver.stopPendingIntent(
+                context = context,
+                requestCode = notificationId(habitId) + 1,
+                habitId = habitId,
+                habitName = habitName,
+            )?.let { stopIntent -> notificationBuilder.addAction(0, "Stop alarm", stopIntent) }
             if (canUseFullScreenIntent) {
                 // Wakes the screen and rings even through silent/DND/Bedtime
                 // mode on devices that allow full-screen alarm intents.

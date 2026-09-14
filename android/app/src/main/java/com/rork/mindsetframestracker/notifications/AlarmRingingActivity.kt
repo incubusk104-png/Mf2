@@ -2,8 +2,10 @@ package com.rork.mindsetframestracker.notifications
 
 import android.app.KeyguardManager
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -11,6 +13,7 @@ import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
@@ -98,6 +101,52 @@ class AlarmRingingActivity : ComponentActivity() {
      * completion has no habit to draw.
      */
     private var timerOptionsReady = false
+
+    /**
+     * Closes this screen the moment the alarm is stopped from anywhere else.
+     *
+     * The notification's "Stop alarm" action (and the ongoing notification's)
+     * routes through [AlarmStopReceiver], which silences the ring and broadcasts
+     * [AlarmStopReceiver.ACTION_ALARM_STOPPED]. Without this the ring went quiet
+     * while this full-screen screen stayed up, holding the user on an alarm page
+     * for an alarm that was no longer ringing — which reads as the stop button
+     * having only half worked.
+     */
+    private val stopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            runCatching { finishRinging() }
+                .onFailure { Log.w(TAG, "Could not close the ringing screen", it) }
+        }
+    }
+
+    /**
+     * Registered in [onStart] / unregistered in [onStop] rather than in
+     * `onCreate`, so the receiver can never outlive the visible screen. The
+     * broadcast is package-scoped (see [AlarmStopReceiver]), and this is a
+     * dynamic registration for an app-internal action — no manifest entry and
+     * no exported surface.
+     *
+     * `RECEIVER_NOT_EXPORTED` is required from API 33 for any dynamically
+     * registered receiver, and is the correct flag here regardless: only our own
+     * process sends this.
+     */
+    override fun onStart() {
+        super.onStart()
+        runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                stopReceiver,
+                IntentFilter(AlarmStopReceiver.ACTION_ALARM_STOPPED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }.onFailure { Log.w(TAG, "Could not listen for the alarm-stop broadcast", it) }
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(stopReceiver) }
+            .onFailure { Log.w(TAG, "Could not unregister the alarm-stop receiver", it) }
+        super.onStop()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -242,8 +291,32 @@ class AlarmRingingActivity : ComponentActivity() {
 
     private fun stopRinging() {
         autoStopHandler.removeCallbacks(autoStopRunnable)
-        // Silence the service that owns the audio.
-        AlarmRingService.stop(this)
+        // Silence the ring through the AUTHORITATIVE stop path, not by calling
+        // into the service builder directly. That path cancels the armed alarm,
+        // clears every notification this ring posted, tears the service down
+        // in-process and hard-stops it — so the in-app Stop button and the
+        // notification's "Stop alarm" button can no longer behave differently
+        // from each other, which is how one of them ended up not working.
+        //
+        // Routed through a receiver-shaped Intent rather than a direct call so
+        // the habit/event identity travels with it: that is what lets the stop
+        // cancel the right scheduled alarm and the right notification instead
+        // of only muting the audio.
+        runCatching {
+            val stopIntent = Intent(this, AlarmStopReceiver::class.java).apply {
+                action = AlarmStopReceiver.ACTION_STOP_ALARM
+                putExtra(AlarmStopReceiver.EXTRA_HABIT_ID, habitId.takeIf { it.isNotEmpty() })
+                putExtra(AlarmStopReceiver.EXTRA_HABIT_NAME, habitName)
+                putExtra(AlarmStopReceiver.EXTRA_EVENT_ID, ringingEvent?.eventId)
+            }
+            sendBroadcast(stopIntent)
+        }.onFailure {
+            // Falling back to the direct service stop keeps a broadcast hiccup
+            // from leaving the alarm playing; the notifications are cleared by
+            // the caller as before.
+            Log.w(TAG, "Could not route the stop through the shared path", it)
+            AlarmRingService.stop(this)
+        }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         // Cancel the notification that raised this ring: the timer's own event id
         // for a timer, the habit's id for a reminder. A timer has no habit, so

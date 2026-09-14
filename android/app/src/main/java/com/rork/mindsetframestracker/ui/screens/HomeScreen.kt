@@ -102,6 +102,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -112,6 +113,15 @@ import kotlinx.coroutines.launch
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.ContentPack
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitTrackingMode
+import com.rork.mindsetframestracker.data.TimerKind
+import com.rork.mindsetframestracker.data.habitLogsFor
+import com.rork.mindsetframestracker.data.trackingModeOrDefault
+import com.rork.mindsetframestracker.data.trackingTargetCountOrDefault
+import com.rork.mindsetframestracker.data.trackingTargetSecondsOrDefault
+import com.rork.mindsetframestracker.data.trackingUnitOrDefault
+import com.rork.mindsetframestracker.notifications.TimerController
+import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.BadgeTier
 import com.rork.mindsetframestracker.data.completedCountOn
@@ -160,6 +170,16 @@ import java.util.Locale
 fun HomeScreen(
     viewModel: AppViewModel,
     onGoToHabits: () -> Unit,
+    /**
+     * Opens the full timer screen after a timed habit is started from its
+     * tracking sheet.
+     *
+     * Defaulted so a caller that has no navigation to offer (a preview, or a
+     * future embedding) still compiles and still records correctly; the timer
+     * itself lives in a service, so the run survives even with nowhere to show
+     * it.
+     */
+    onOpenTimerScreen: () -> Unit = {},
 ) {
     val data by viewModel.state.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
@@ -180,6 +200,67 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+
+    // ── Which habit's tracking sheet is open, if any ──────────────────────
+    // The input the sheet renders is decided by THAT habit's tracking mode, so
+    // all this holds is which habit was tapped — never the shape of the form.
+    // A walk and a journal entry open the same sheet and see different tools.
+    var trackingHabitId by remember { mutableStateOf<String?>(null) }
+
+    // Resolved from the state on every frame rather than captured when the tap
+    // happened, so an edit or a sync that lands while the sheet is open is
+    // reflected instead of the sheet rendering a stale copy of the habit.
+    val trackingHabit = trackingHabitId?.let { id -> data.habits.firstOrNull { it.id == id } }
+    if (trackingHabit != null) {
+        // The one completion dialog, rendered per habit. Its whole input is
+        // chosen by `trackingHabit.trackingModeOrDefault` inside the sheet —
+        // this call site passes the habit's configuration through and does not
+        // decide the form itself, which is what keeps a walk and a journal
+        // entry genuinely different tools instead of one generic form.
+        HabitTrackingSheet(
+            habitName = trackingHabit.name,
+            habitIconId = trackingHabit.iconId,
+            trackingMode = trackingHabit.trackingModeOrDefault,
+            targetSeconds = trackingHabit.trackingTargetSecondsOrDefault,
+            targetCount = trackingHabit.trackingTargetCountOrDefault,
+            unit = trackingHabit.trackingUnitOrDefault,
+            recentLogs = data.habitLogsFor(trackingHabit.id).take(3),
+            onRecord = { title, note, durationSeconds, count ->
+                // One write path for every mode: the record's shape is decided
+                // by the habit's mode inside the ViewModel, and the check-in is
+                // written with it so the logged habit actually counts.
+                viewModel.recordHabitTracking(
+                    habitId = trackingHabit.id,
+                    mode = trackingHabit.trackingModeOrDefault,
+                    title = title,
+                    note = note,
+                    durationSeconds = durationSeconds,
+                    count = count,
+                    unit = trackingHabit.trackingUnitOrDefault,
+                )
+                trackingHabitId = null
+            },
+            onStartTimed = { kind, targetSeconds ->
+                // A running clock has to outlive this sheet — backgrounded app,
+                // locked screen, killed process — so it is handed to the timer
+                // service, exactly as the alarm's timer flow does, and
+                // attributed to this habit by id. The completion then records
+                // itself through the normal once-only funnel, which is why
+                // nothing is written here.
+                TimerController.start(
+                    context = context,
+                    kind = kind,
+                    targetSeconds = targetSeconds,
+                    label = trackingHabit.name,
+                    habitId = trackingHabit.id,
+                )
+                trackingHabitId = null
+                onOpenTimerScreen()
+            },
+            onDismiss = { trackingHabitId = null },
+        )
+    }
 
     // Huawei IAP resolves through Activity.startActivityForResult, handled in
     // MainActivity.onActivityResult (not a Compose launcher — see TipBilling.kt
@@ -684,7 +765,23 @@ fun HomeScreen(
                         moodKey = mood.name,
                         staggerIndex = index,
                         isSoftLocked = isSoftLocked,
-                        onToggle = { viewModel.toggleHabitToday(habit.id) },
+                        onToggle = {
+                            // The habit's own tracking mode decides what happens on
+                            // a tap. Binary habits keep the one-tap check-in they
+                            // always had — adding a dialog to "did you take your
+                            // medication?" would be pure friction. Everything else
+                            // opens the tool that can actually express it: a timer
+                            // or stopwatch for a measured activity, a title + note
+                            // for a journal, a stepper for a count. Previously every
+                            // one of them was recorded as a bare tap, which is why
+                            // the completion dialog had nothing habit-specific to
+                            // show the user.
+                            if (habit.trackingModeOrDefault == HabitTrackingMode.CHECK) {
+                                viewModel.toggleHabitToday(habit.id)
+                            } else {
+                                trackingHabitId = habit.id
+                            }
+                        },
                         onSoftLockClick = { },
                     )
                 }

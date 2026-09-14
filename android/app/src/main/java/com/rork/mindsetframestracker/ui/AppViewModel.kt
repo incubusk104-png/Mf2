@@ -26,6 +26,9 @@ import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.HabitCategory
 import com.rork.mindsetframestracker.data.HabitRecommender
 import com.rork.mindsetframestracker.data.HabitSuggestion
+import com.rork.mindsetframestracker.data.HabitLogEntry
+import com.rork.mindsetframestracker.data.HabitTrackingMode
+import com.rork.mindsetframestracker.data.habitLogsFor
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.MoodMode
@@ -1449,6 +1452,108 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshCompanionUnlocks()
         queueSync()
     }
+
+    /**
+     * Records what a habit's own tracking tool produced, and (by default)
+     * marks the habit done for today.
+     *
+     * This is the single write path behind every tracking mode, so the shape of
+     * the record is decided by [mode] and nothing else. The two side effects
+     * are deliberately both here and both optional-by-argument:
+     *
+     *  - the **[HabitLogEntry]** is the payload — a measured duration, a journal
+     *    title + text, a count. It is what makes the habit more than a label.
+     *  - the **check-in** is the boolean that streaks, badges and the heatmap
+     *    are built on. It is written alongside the entry so a logged habit
+     *    counts, which is what the user expects from "I did this".
+     *
+     * Both were previously the job of a bare tap, which is exactly the problem:
+     * a tap cannot express a duration or a sentence. Called with
+     * [markDone] = false when the user is recording something without claiming
+     * the day (journaling a note without counting it as done).
+     */
+    fun recordHabitTracking(
+        habitId: String,
+        mode: HabitTrackingMode,
+        title: String? = null,
+        note: String? = null,
+        durationSeconds: Int? = null,
+        count: Int? = null,
+        unit: String? = null,
+        markDone: Boolean = true,
+    ) {
+        if (habitId.isBlank()) return
+        val today = Dates.todayKey()
+        val entry = HabitLogEntry(
+            habitId = habitId,
+            dayKey = today,
+            mode = mode,
+            title = title?.trim()?.takeIf { it.isNotEmpty() },
+            note = note?.trim()?.takeIf { it.isNotEmpty() },
+            durationSeconds = durationSeconds?.takeIf { it > 0 },
+            count = count?.takeIf { it > 0 },
+            unit = unit?.trim()?.takeIf { it.isNotEmpty() },
+            recordedAtEpochMs = System.currentTimeMillis(),
+        )
+
+        update { data ->
+            val logged = data.copy(habitLogs = data.habitLogs + entry)
+            if (!markDone) return@update logged
+            val days = logged.checkIns[habitId].orEmpty().toMutableSet()
+            // Additive only: recording a second walk today must not un-check
+            // the day the first one already completed.
+            if (!days.add(today)) return@update logged
+            logged.copy(checkIns = logged.checkIns + (habitId to days.toList()))
+        }
+
+        refreshCompanionUnlocks()
+        queueSync()
+
+        // Capture what the device recorded, the same way a completing tap does
+        // — the monitor itself decides whether this habit is in its movement
+        // set, so a journal entry costs nothing here.
+        if (markDone && mode != HabitTrackingMode.JOURNAL) {
+            runCatching {
+                com.rork.mindsetframestracker.integrations.ActivityMonitor
+                    .captureForHabit(getApplication(), habitId)
+            }
+        }
+    }
+
+    /**
+     * Persists the user's explicit choice of tracking tool for a habit.
+     *
+     * Writing this is what makes the habit's mode sticky: an explicit value
+     * always outranks the icon-derived default (see [Habit.trackingModeOrDefault]),
+     * so changing a habit's tool is permanent rather than a preference that
+     * evaporates on the next recomposition.
+     */
+    fun setHabitTracking(
+        habitId: String,
+        mode: HabitTrackingMode,
+        targetSeconds: Int? = null,
+        targetCount: Int? = null,
+        unit: String? = null,
+    ) {
+        update { data ->
+            data.copy(
+                habits = data.habits.map { habit ->
+                    if (habit.id != habitId) habit
+                    else habit.copy(
+                        trackingMode = mode,
+                        trackingTargetSeconds = targetSeconds,
+                        trackingTargetCount = targetCount,
+                        trackingUnit = unit,
+                    )
+                },
+            )
+        }
+        queueSync()
+    }
+
+    /** Today's recorded entry for a habit, if anything was logged yet. */
+    fun todayTrackingLogFor(habitId: String): HabitLogEntry? =
+        _state.value.habitLogsFor(habitId).firstOrNull { it.dayKey == Dates.todayKey() }
 
     fun canAddHabit(): Boolean =
         _state.value.settings.hasFeatureAccess() || _state.value.habits.size < MAX_FREE_HABITS
