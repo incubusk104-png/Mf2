@@ -411,6 +411,14 @@ fun AppNavigation(viewModel: AppViewModel) {
         contract = MindsetHealthConnectClient.permissionRequestContract(),
     ) { granted ->
         viewModel.onHealthConnectPermissionResult(granted)
+        // Access was just granted — capture what the device actually recorded for
+        // every movement habit, so the sports habits carry real numbers instead of
+        // being a label. Fire-and-forget on the monitor's own IO scope: this is a
+        // permission-result callback and must not block the UI thread.
+        runCatching {
+            com.rork.mindsetframestracker.integrations.ActivityMonitor
+                .captureAllSupportedHabits(context)
+        }
     }
     val hcPermissionRequested by viewModel.healthConnectPermissionRequested
         .collectAsStateWithLifecycle()

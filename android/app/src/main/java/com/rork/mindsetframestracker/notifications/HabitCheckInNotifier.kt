@@ -217,6 +217,16 @@ object HabitCheckInNotifier {
                 // Vibrate pattern for attention
                 .setVibrate(longArrayOf(0, 250, 100, 250))
                 .addAction(0, "Snooze 5 min", snoozePendingIntent)
+            // ── The manual "Stop alarm" action ──────────────────────────────
+            // Sits beside Snooze so a ringing alarm can be silenced from the shade
+            // alone — without unlocking the phone, and without depending on the
+            // ringing screen being launchable (Android 14+ revokes
+            // USE_FULL_SCREEN_INTENT by default, so it frequently never appears).
+            // Built through the guarded helper, so a failure to construct the
+            // PendingIntent drops the button rather than throwing inside this
+            // receiver — which runs at the exact moment the alarm fires.
+            AlarmStopReceiver.stopPendingIntent(context, notificationId(habitId) + 1)
+                ?.let { stopIntent -> notificationBuilder.addAction(0, "Stop alarm", stopIntent) }
             if (canUseFullScreenIntent) {
                 // Wakes the screen and rings even through silent/DND/Bedtime
                 // mode on devices that allow full-screen alarm intents.

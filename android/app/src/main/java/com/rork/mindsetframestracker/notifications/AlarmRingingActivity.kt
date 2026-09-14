@@ -168,7 +168,7 @@ class AlarmRingingActivity : ComponentActivity() {
                         // "later" for a completed timer), so it is a habit-only
                         // affordance.
                         showSnooze = ringingEvent == null,
-                        onDismiss = { finishRinging() },
+                        onStop = { finishRinging() },
                         onSnooze = { snoozeAndFinish() },
                     )
 
@@ -299,7 +299,7 @@ private fun AlarmRingingScreen(
     subtitle: String,
     habitIconRes: Int?,
     showSnooze: Boolean,
-    onDismiss: () -> Unit,
+    onStop: () -> Unit,
     onSnooze: () -> Unit,
 ) {
     Column(
@@ -347,11 +347,19 @@ private fun AlarmRingingScreen(
         )
 
         Column(modifier = Modifier.fillMaxWidth().padding(top = 48.dp)) {
+            // ── The manual "Stop alarm" button ──────────────────────────────────
+            // Deliberately the primary action, and deliberately NOT a plain
+            // screen close: the ring audio is owned by AlarmRingService, so
+            // merely finishing this Activity would leave the alarm playing in the
+            // background. This stops the MediaPlayer, cancels the repeating
+            // vibration, tears the service down and clears both notifications.
+            // Every step is idempotent, so a double tap, or a race with the
+            // 3-minute auto-stop, is harmless.
             Button(
-                onClick = onDismiss,
+                onClick = onStop,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            ) { Text("Dismiss") }
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            ) { Text("Stop alarm") }
 
             if (showSnooze) {
                 OutlinedButton(

@@ -194,6 +194,15 @@ fun ActivityReportSheet(
                     ?.average()?.toInt()
                 if (avgHr != null) {
                     InsightChip(text = RuleBasedInsight.forHeartRate(avgHr))
+                } else {
+                    // Honest about the ABSENCE rather than silently showing nothing.
+                    // No source in this period reported heart-rate samples, which on
+                    // a phone with no paired watch or band is the normal case — it is
+                    // not a bug, and it must not look like one.
+                    InsightChip(
+                        text = "No heart-rate data was recorded for these sessions. " +
+                            "Heart rate needs a watch, band or chest strap.",
+                    )
                 }
                 if (totalSteps > 0) {
                     InsightChip(text = RuleBasedInsight.forSteps(totalSteps))
@@ -312,6 +321,9 @@ private fun SourceBreakdownRow(
         "strava" -> "Strava"
         "polar" -> "Polar"
         "health_connect" -> "Health Connect"
+        // Recorded from this phone's own Health Connect store, over the window
+        // the activity actually happened.
+        "health_connect_device" -> "This device (Health Connect)"
         else -> source.replaceFirstChar { it.uppercase() }
     }
     val displayIcon = when (source) {
@@ -431,6 +443,15 @@ private fun RecentActivityRow(record: ActivityRecord) {
             if (record.distanceMeters != null && record.distanceMeters > 100) {
                 Text(
                     text = "${"%.1f".format(record.distanceMeters / 1000.0)} km",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (record.steps != null && record.steps > 0) {
+                // Steps were recorded but distance was not. Saying so is better than
+                // leaving a blank the user could read as "0 km" — the app genuinely
+                // has no distance for this session.
+                Text(
+                    text = "distance not recorded",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -21,6 +21,13 @@
          actually saw a dialog to approve or deny. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <!-- Real activity monitoring for the sports habits. Without these declared,
+         Health Connect refuses the read even when the user has granted the
+         matching runtime permission in its dialog. -->
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Offline detection for cloud backup — lets the app queue syncs instead of failing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -281,6 +288,18 @@
         <!-- Handles "Snooze 5 min" tapped on a habit reminder notification -->
         <receiver
             android:name=".notifications.HabitSnoozeReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
+        <!-- Handles the manual "Stop alarm" action on a ringing alarm's
+             notification (and on the ongoing "Alarm ringing" notification).
+             A broadcast rather than a service start on purpose: a notification
+             action that starts a service can be silently refused under the
+             Android 12+ background-start restrictions, which would leave the user
+             pressing a button that does nothing while the alarm keeps ringing.
+             Not exported — only our own notification actions send it. -->
+        <receiver
+            android:name=".notifications.AlarmStopReceiver"
             android:exported="false"
             android:enabled="true" />
 

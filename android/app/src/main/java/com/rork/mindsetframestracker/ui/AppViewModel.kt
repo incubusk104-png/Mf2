@@ -1367,13 +1367,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleHabitToday(habitId: String) {
+        var completed = false
         update { data ->
             val today = Dates.todayKey()
             val days = data.checkIns[habitId].orEmpty().toMutableSet()
-            if (!days.add(today)) days.remove(today)
+            // Captured here because the set is mutated in place: `completed`
+            // is true only when this tap ADDED today's check-in.
+            completed = days.add(today)
+            if (!completed) days.remove(today)
             data.copy(checkIns = data.checkIns + (habitId to days.toList()))
         }
         refreshCompanionUnlocks()
+
+        // A tap that COMPLETES a habit is the user telling us they just did it, so
+        // capture what the device actually recorded instead of leaving the habit
+        // as a bare label. Only on completion — un-checking must not record an
+        // activity — and only for habits in the movement set, which the monitor
+        // itself decides once it resolves the habit's activity type.
+        if (completed) {
+            runCatching {
+                com.rork.mindsetframestracker.integrations.ActivityMonitor
+                    .captureForHabit(getApplication(), habitId)
+            }
+        }
     }
 
     /**

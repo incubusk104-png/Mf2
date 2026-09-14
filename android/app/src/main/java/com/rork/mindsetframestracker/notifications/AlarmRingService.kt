@@ -113,6 +113,19 @@ class AlarmRingService : Service() {
     /** True once [startForeground] has actually succeeded. */
     private var foregroundActive = false
 
+    /**
+     * Set the instant the ring is torn down, BEFORE the player reference is
+     * dropped.
+     *
+     * `@Volatile` because MediaPlayer delivers its prepared/error callbacks on
+     * its own thread while [stopRinging] runs on the main thread. Without this
+     * latch, a callback already queued when the user pressed Stop could still
+     * call `start()` on a released player — an `IllegalStateException` on the
+     * main thread, i.e. a crash at the exact moment the alarm is ringing.
+     */
+    @Volatile
+    private var released = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -173,27 +186,50 @@ class AlarmRingService : Service() {
         runCatching {
             val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-                setDataSource(this@AlarmRingService, alarmUri)
-                isLooping = true
-                // prepareAsync(), NOT prepare(): this is a service but still the
-                // main thread of the process, and a blocking decode here delays
-                // the ring itself. The sound simply starts when the ringtone is
-                // decoded.
-                setOnPreparedListener { it.start() }
-                setOnErrorListener { _, what, extra ->
-                    Log.w(TAG, "Ringtone playback error (what=$what extra=$extra)")
-                    true
-                }
-                prepareAsync()
-            }
+            // ── The ordering here is load-bearing, and it was wrong ────────────
+            //
+            // `setDataSource(context, uri)` resolves the ringtone through the
+            // content resolver and calls prepare() internally, and
+            // `prepareAsync()` can complete synchronously when the source
+            // resolves instantly. So `onPrepared` is able to fire DURING this
+            // block. With the listener registered *after* `setDataSource` (as it
+            // was), the callback ran while the listener was still null: `start()`
+            // was never called, the alarm made no sound, and nothing was thrown
+            // or logged — which is why it presented as an alarm that simply
+            // never rings.
+            //
+            // Registering the listener FIRST, and publishing the field BEFORE
+            // preparing, removes both that missed start and the opposite failure
+            // where the callback arrives after the ring was already torn down.
+            val player = MediaPlayer()
             mediaPlayer = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            player.isLooping = true
+            player.setOnPreparedListener { prepared ->
+                // Declines instead of throwing when the ring was stopped — or the
+                // 3-minute auto-stop fired — while the ringtone was still
+                // decoding.
+                if (released) {
+                    runCatching { prepared.release() }
+                } else {
+                    runCatching { prepared.start() }
+                        .onFailure { Log.w(TAG, "Could not start the prepared ringtone", it) }
+                }
+            }
+            player.setOnErrorListener { _, what, extra ->
+                Log.w(TAG, "Ringtone playback error (what=$what extra=$extra)")
+                true
+            }
+            player.setDataSource(this, alarmUri)
+            // prepareAsync(), NOT prepare(): this is a service but still the main
+            // thread of the process, and a blocking decode here delays the ring
+            // itself. The sound simply starts when the ringtone is decoded.
+            player.prepareAsync()
         }.onFailure { Log.w(TAG, "Could not start ringtone", it) }
 
         runCatching {
@@ -226,6 +262,10 @@ class AlarmRingService : Service() {
     }
 
     private fun stopRinging() {
+        // Set BEFORE the references are dropped, so a prepared/error callback
+        // already in flight sees the teardown and declines rather than touching a
+        // released player.
+        released = true
         runCatching { mediaPlayer?.stop() }
         runCatching { mediaPlayer?.release() }
         mediaPlayer = null
@@ -238,6 +278,18 @@ class AlarmRingService : Service() {
         // runs while the ring is being torn down.
         runCatching { stopRinging() }
             .onFailure { Log.w(TAG, "Failed to release the ring cleanly", it) }
+        // Remove the ongoing "Alarm ringing" notification.
+        //
+        // This was missing, and it is why an alarm could keep *looking* like it
+        // was still ringing after every stop path had run: `stopSelf()` does not
+        // clear a foreground notification, so the "Alarm ringing / Tap to open"
+        // entry stayed in the shade until the process happened to be killed.
+        // Best-effort — a failure here costs a stale notification, never the
+        // teardown itself.
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(this)
+                .cancel(ONGOING_NOTIFICATION_ID)
+        }.onFailure { Log.w(TAG, "Could not clear the ring notification", it) }
         super.onDestroy()
     }
 
@@ -265,7 +317,7 @@ class AlarmRingService : Service() {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Alarm ringing")
             .setContentText("Tap to open")
@@ -274,7 +326,14 @@ class AlarmRingService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .setSilent(true)
-            .build()
+        // ── The manual "Stop alarm" action ──────────────────────────────────
+        // Reachable straight from the shade, so a ringing alarm can always be
+        // silenced without unlocking the phone and without the ringing screen
+        // being launchable at all (Android 14+ revokes USE_FULL_SCREEN_INTENT by
+        // default, so that screen frequently never appears).
+        AlarmStopReceiver.stopPendingIntent(this, ONGOING_NOTIFICATION_ID)
+            ?.let { stopIntent -> builder.addAction(0, "Stop alarm", stopIntent) }
+        return builder.build()
     }
 
     private fun createChannel() {

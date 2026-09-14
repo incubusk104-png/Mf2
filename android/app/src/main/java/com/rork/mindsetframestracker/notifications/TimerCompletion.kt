@@ -126,6 +126,23 @@ object TimerCompletion {
             // UI to consent from and no guarantee the tokens are fresh. The
             // Habits screen picks the request up on next resume and pulls the
             // data for that habit.
+            // ── Capture what the user ACTUALLY did ───────────────────────────
+            // The timer/stopwatch run that just ended IS the activity, so this is
+            // the one moment a real measurement can be attributed to this habit.
+            // Reads Health Connect over the session window and records the metrics
+            // that are genuinely present — duration, steps, distance, calories,
+            // heart rate — so the habit stops being a bare label.
+            //
+            // Fire-and-forget on the monitor's own IO scope, including the habit
+            // lookup: this runs inside a headless alarm-time process, so it must
+            // neither block nor throw into the completion path.
+            runCatching {
+                com.rork.mindsetframestracker.integrations.ActivityMonitor
+                    .captureForHabit(context, habitId)
+            }.onFailure {
+                Log.w(TAG, "Failed to dispatch activity capture for $habitId", it)
+            }
+
             runCatching { HabitTimerRequests.requestAutoSync(context, habitId) }
                 .onFailure { Log.w(TAG, "Failed to queue activity sync for habit $habitId", it) }
         }
