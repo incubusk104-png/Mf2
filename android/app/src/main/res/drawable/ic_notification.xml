@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The app's notification small icon.
+
+  ## Why this file exists
+
+  Every alarm path in the app used `R.drawable.splash_icon` as its
+  `setSmallIcon`. That was wrong, and it is one of the two things that could
+  take the process down at the moment an alarm rings.
+
+  `splash_icon` is a `<layer-list>` whose second item is a `<bitmap>` pointing
+  at `@mipmap/ic_launcher`. `ic_launcher` is an `anydpi-v26` **adaptive icon**
+  (`<adaptive-icon>`), i.e. an `AdaptiveIconDrawable` whose foreground is a
+  vector — there is no bitmap to decode. `BitmapDrawable`'s layer inflation
+  assumes a bitmap, so resolving that layer is at best an undefined cast and at
+  worst a throw *while the notification is being built*. On the alarm path that
+  runs inside `AlarmRingService.onCreate()` (a foreground-service lifecycle
+  callback) and inside receivers that must not throw — which is exactly the
+  "force stop while the alarm is ringing" symptom.
+
+  A small icon must also be a **flat, single-colour, alpha-only** glyph that the
+  system renders as a silhouette. An adaptive icon and a full-colour
+  `@mipmap/ic_launcher` are both wrong for that slot — which is why
+  `CheckInNotifier`, `StreakAlertNotifier`, `WeeklyRecapNotifier` and
+  `CompanionNotifier` already use a plain vector (`ic_launcher_foreground`)
+  while the four alarm-path notifiers were the odd ones out.
+
+  This is a purpose-built replacement: the standard Material alarm glyph as a
+  white vector, which is what the small-icon slot expects. It costs nothing at
+  runtime and removes the whole class of failure.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,1H9v2h6V1zM11,14h2V8h-2v6zM19.03,7.39l1.42,-1.42c-0.43,-0.51 -0.9,-0.99 -1.41,-1.41l-1.42,1.42C16.07,4.74 14.12,4 12,4c-4.97,0 -9,4.03 -9,9s4.02,9 9,9 9,-4.03 9,-9c0,-2.12 -0.74,-4.07 -1.97,-5.61zM12,20c-3.87,0 -7,-3.13 -7,-7s3.13,-7 7,-7 7,3.13 7,7 -3.13,7 -7,7z" />
+</vector>
