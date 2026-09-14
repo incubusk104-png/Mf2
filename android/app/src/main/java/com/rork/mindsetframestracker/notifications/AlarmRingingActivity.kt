@@ -50,9 +50,16 @@ import com.rork.mindsetframestracker.data.HabitIconCatalog
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerCompletionEvent
 import com.rork.mindsetframestracker.ui.navigation.NavRequests
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.rork.mindsetframestracker.ui.screens.HabitTimerOptionsSheet
 import com.rork.mindsetframestracker.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Shown via a notification's full-screen intent so a habit reminder behaves
@@ -94,6 +101,13 @@ class AlarmRingingActivity : ComponentActivity() {
      */
     private var habitIconRes: Int? = null
 
+    /**
+     * True when this ring is a habit reminder — i.e. when the timer/stopwatch
+     * choice belongs to this screen. Habit reminders only: a timer completion
+     * has nothing to choose, and must never offer to start a second run.
+     */
+    private var timerOptionsReady = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -111,44 +125,28 @@ class AlarmRingingActivity : ComponentActivity() {
             habitId = intent.getStringExtra("habitId") ?: run { finish(); return }
             habitName = intent.getStringExtra("habitName") ?: "Habit"
 
-            // Resolve this habit's own icon from the saved data. Done on IO
-            // because the repository reads DataStore; failure just falls back
-            // to the generic alarm glyph rather than blocking the ring.
-            habitIconRes = runCatching {
-                runBlocking(Dispatchers.IO) {
-                    MindsetRepository(this@AlarmRingingActivity)
-                        .load()
-                        .habits
-                        .firstOrNull { it.id == habitId }
-                        ?.iconId
-                        ?.let { HabitIconCatalog.byId(it)?.drawableRes }
-                }
-            }.getOrNull()
+            // The habit's own alarm is ringing, so this screen owns the
+            // timer/stopwatch choice and shows it automatically once the ring
+            // has started — no tap required.
+            timerOptionsReady = true
 
-            // ── Arm the one-shot timer/stopwatch options ───────────────
-            // The user asked for the choice to appear "once the alarm was
-            // ringing and notified", anchored to the habit icon. The alarm
-            // rang in a process that may have no UI and this screen is
-            // dismissible, so the request is left on disk for the Habits
-            // screen to pick up and consume exactly once — it survives this
-            // activity being closed, the app being backgrounded, and a
-            // reboot. Writing it here (rather than only in the notifier)
-            // covers the ringing screen being launched straight from the
-            // full-screen intent.
-            HabitTimerRequests.request(
-                context = this,
-                habitId = habitId,
-                habitName = habitName,
-                iconId = runCatching {
-                    runBlocking(Dispatchers.IO) {
-                        MindsetRepository(this@AlarmRingingActivity)
-                            .load()
-                            .habits
-                            .firstOrNull { it.id == habitId }
-                            ?.iconId
-                    }
-                }.getOrNull(),
-            )
+            // ── The one-shot timer/stopwatch request ────────────────────────
+            // Written here from the Intent extras, before anything else touches
+            // the ring, so the choice is already waiting when the popup opens.
+            // A plain SharedPreferences write: deliberately NO repository read
+            // and no blocking on this path, because decoding the whole app blob
+            // on the main thread inside onCreate is what used to delay — and
+            // occasionally kill — the ring itself. (It was wrapped in
+            // runBlocking(Dispatchers.IO) here before.) The newest ring wins,
+            // which is what HabitTimerRequests.request documents.
+            if (habitId.isNotEmpty()) {
+                HabitTimerRequests.request(
+                    context = this,
+                    habitId = habitId,
+                    habitName = habitName,
+                    iconId = null,
+                )
+            }
         }
 
         showOverLockScreen()
@@ -158,26 +156,83 @@ class AlarmRingingActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
+                    // Resolve the ringing habit's own catalog artwork AFTER the
+                    // first frame, on IO. This is exactly the repository read
+                    // that used to sit in onCreate as runBlocking(Dispatchers.IO)
+                    // — on the main thread, before the alarm was even allowed to
+                    // ring. Moved here it can neither delay nor kill the ring;
+                    // the habit's own icon simply appears a beat later, and the
+                    // generic glyph covers the gap.
+                    var resolvedIconId by remember { mutableStateOf<String?>(null) }
+                    if (timerOptionsReady) {
+                        LaunchedEffect(habitId) {
+                            resolvedIconId = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    MindsetRepository(this@AlarmRingingActivity)
+                                        .load()
+                                        .habits
+                                        .firstOrNull { it.id == habitId }
+                                        ?.iconId
+                                }.getOrNull()
+                            }
+                        }
+                    }
                     AlarmRingingScreen(
                         habitName = habitName,
                         subtitle = ringingSubtitle,
-                        habitIconRes = habitIconRes,
+                        habitIconRes = habitIconRes
+                            ?: resolvedIconId?.let { HabitIconCatalog.byId(it)?.drawableRes },
                         // Snoozing a timer is meaningless (there is no
                         // "later" for a completed timer), so it is a habit-only
                         // affordance.
                         showSnooze = ringingEvent == null,
                         onDismiss = { finishRinging() },
                         onSnooze = { snoozeAndFinish() },
-                        // A ringing habit is the moment to start timing it.
-                        // Routed to the HABITS tab, not the timer screen: the
-                        // timer/stopwatch options live inside the habit's own
-                        // icon, where this ring's one-shot request is already
-                        // waiting to be consumed.
+                        // A fallback for reachability only: the popup below
+                        // appears on its own the moment the ring starts. This
+                        // button routes to the HABITS tab (not the timer
+                        // screen) so the habit's icon — the thing the choice
+                        // belongs to — is what the user lands on.
                         onTimerOptions = {
                             NavRequests.request(NavRequests.ROUTE_HABITS)
                             finishRinging()
                         },
                     )
+
+                    // ── The timer / stopwatch popup ─────────────────────
+                    // Shown automatically the instant this alarm rings — the
+                    // same moment its notification appears — so the user picks
+                    // timer or stopwatch without tapping anything. It is
+                    // anchored to the ringing habit's own icon.
+                    if (timerOptionsReady) {
+                        val context = LocalContext.current
+                        val request = remember { HabitTimerRequests.peek(context) }
+                        var dismissed by remember { mutableStateOf(false) }
+                        if (request != null && !dismissed) {
+                            HabitTimerOptionsSheet(
+                                habitId = request.habitId,
+                                habitName = request.habitName.ifBlank { habitName },
+                                habitIconId = request.iconId ?: resolvedIconId,
+                                onOpenTimerScreen = {
+                                    // TimerController.start already opened the
+                                    // run; route the app at the timer screen
+                                    // so the user lands on it as the ring ends.
+                                    NavRequests.request(NavRequests.ROUTE_TIMER)
+                                    finishRinging()
+                                },
+                                onDismiss = { dismissed = true },
+                            )
+                            // Clear the on-disk flag the moment the choice is
+                            // shown, so it can never come back: a
+                            // recomposition, a resume, a navigation or a
+                            // reboot all find the request already consumed.
+                            // The sheet stays on screen from the value already
+                            // read, so this ring still shows it exactly once.
+                            LaunchedEffect(request.habitId) {
+                                HabitTimerRequests.consume(context)
+                            }
+                        }
+                    }
                 }
             }
         }

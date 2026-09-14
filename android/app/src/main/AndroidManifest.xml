@@ -25,11 +25,11 @@
     <!-- Offline detection for cloud backup — lets the app queue syncs instead of failing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Walk timer / stopwatch. These are foreground-service permissions for the
+    <!-- Timer / stopwatch. These are foreground-service permissions for the
          service that keeps a running timer alive and shows its remaining time.
          `specialUse` is deliberately the type: Android has no dedicated "timer"
          foreground-service type, and the alternative `shortService` is capped at
-         3 minutes, which a 20-minute walk (and every preset above 3 minutes)
+         3 minutes, which a 20-minute timer (and every preset above 3 minutes)
          would exceed and get killed by. The subtype property below is the
          machine-readable justification the store review process asks for. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -277,7 +277,7 @@
             android:exported="false"
             android:enabled="true" />
 
-        <!-- ── Walk timer / stopwatch ───────────────────────────────────────────
+        <!-- ── Timer / stopwatch ───────────────────────────────────────────────────
              The service keeps a running timer visible (ongoing notification with
              the live remaining time) and is the in-process safety net that rings
              the completion alert if the AlarmManager path is blocked by an OEM
@@ -289,7 +289,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps a user-started walk timer or stopwatch running and shows its remaining time until the user stops it." />
+                android:value="Keeps a user-started timer or stopwatch running and shows its remaining time until the user stops it." />
         </service>
 
         <!-- Fired by the AlarmManager alarm armed for a running timer's exact

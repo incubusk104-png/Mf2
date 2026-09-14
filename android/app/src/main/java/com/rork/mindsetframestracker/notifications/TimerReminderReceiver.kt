@@ -24,7 +24,11 @@ class TimerReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_TIMER_REMINDER) return
+        runCatching { remind(context, intent) }
+            .onFailure { Log.w(TAG, "Timer reminder handling failed", it) }
+    }
 
+    private fun remind(context: Context, intent: Intent) {
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
         val repo = TimerRepository(context)
         // Only nudge for a completion that could still be shown as a popup

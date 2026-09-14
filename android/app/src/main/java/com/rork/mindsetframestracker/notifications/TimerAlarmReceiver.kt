@@ -24,7 +24,14 @@ class TimerAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != TimerAlarmScheduler.ACTION_TIMER_DEADLINE) return
+        // An uncaught throw out of a manifest receiver takes the process with
+        // it, and this one fires mid-timer. Log it and let the next occurrence
+        // (or the cold-start reconcile) recover instead of killing the app.
+        runCatching { handleDeadline(context, intent) }
+            .onFailure { Log.w(TAG, "Timer deadline handling failed", it) }
+    }
 
+    private fun handleDeadline(context: Context, intent: Intent) {
         val repo = TimerRepository(context)
         val active = repo.loadActive()
         if (active == null) {

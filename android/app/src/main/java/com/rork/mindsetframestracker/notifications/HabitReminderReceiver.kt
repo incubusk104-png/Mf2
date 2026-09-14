@@ -18,6 +18,14 @@ import android.util.Log
 class HabitReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Never let a throw escape: a manifest receiver that dies takes its
+        // process with it, and this one runs at the exact moment the user's
+        // alarm is supposed to ring.
+        runCatching { postReminder(context, intent) }
+            .onFailure { Log.w(TAG, "Habit reminder handling failed", it) }
+    }
+
+    private fun postReminder(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra(EXTRA_HABIT_ID) ?: return
         val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: "Habit"
         val isSnoozeRefire = intent.getBooleanExtra(EXTRA_IS_SNOOZE_REFIRE, false)

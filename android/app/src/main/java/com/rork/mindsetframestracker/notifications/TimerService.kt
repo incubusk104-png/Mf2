@@ -73,7 +73,22 @@ class TimerService : Service() {
             return START_NOT_STICKY
         }
 
-        startForeground(NOTIFICATION_ID_ONGOING, buildOngoingNotification())
+        // An exception thrown out of a service lifecycle callback is what the
+        // OS turns into a "keeps stopping" process kill. This promotion used to
+        // run unguarded, and buildOngoingNotification() re-reads the repository
+        // and builds the notification — so a throw in there escaped
+        // onStartCommand and took the whole app down mid-timer. Guarding it
+        // means a failure now costs only the ongoing notification: the
+        // AlarmManager alarm still rings the completion, so the timer degrades
+        // to "alarm-only" instead of killing the app.
+        val promoted = runCatching {
+            startForeground(NOTIFICATION_ID_ONGOING, buildOngoingNotification())
+        }.onFailure { Log.w(TAG, "Could not promote to foreground; ongoing notification unavailable", it) }
+            .isSuccess
+        if (!promoted) {
+            stopSelfSafely()
+            return START_NOT_STICKY
+        }
         if (tickThread == null) {
             running = true
             tickThread = Thread { tickLoop() }.apply {
@@ -95,31 +110,48 @@ class TimerService : Service() {
      */
     private fun tickLoop() {
         while (running) {
-            val timer = repo.loadActive()
-            if (timer == null || timer.status != TimerStatus.RUNNING) {
-                stopSelfSafely()
-                return
-            }
-
-            val now = System.currentTimeMillis()
-            if (timer.isExpiredAt(now)) {
-                TimerCompletion.fire(applicationContext, timer)
-                stopSelfSafely()
-                return
-            }
-
-            runCatching {
-                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.notify(NOTIFICATION_ID_ONGOING, buildOngoingNotification())
-            }
-
-            // Poll twice a second near the deadline so the alert is not late by
-            // up to a second; once a second otherwise (notification only needs
-            // second-level granularity).
-            val msLeft = (timer.remainingSecondsAt(now) * 1000L) - (now - now / 1000L * 1000L)
-            val sleepMs = if (timer.hasTarget && msLeft in 1..2_000) 150L else 1_000L
+            // The whole iteration is guarded. This is a plain daemon thread, so
+            // an uncaught throw here is an uncaught exception on a background
+            // thread — which the default handler turns into a process kill,
+            // not merely a stopped timer. A transient repository or
+            // notification failure must never take the app down.
+            val sleepMs = runCatching { tickOnce() }
+                .onFailure { Log.w(TAG, "Timer tick failed; retrying", it) }
+                .getOrElse { 1_000L }
+            if (sleepMs < 0L) return
             runCatching { Thread.sleep(sleepMs) }
         }
+    }
+
+    /**
+     * One iteration of the tick loop. Returns how long to sleep before the next
+     * one, or a negative value when the loop should stop — the timer is gone,
+     * or its completion has just been fired.
+     */
+    private fun tickOnce(): Long {
+        val timer = repo.loadActive()
+        if (timer == null || timer.status != TimerStatus.RUNNING) {
+            stopSelfSafely()
+            return -1L
+        }
+
+        val now = System.currentTimeMillis()
+        if (timer.isExpiredAt(now)) {
+            TimerCompletion.fire(applicationContext, timer)
+            stopSelfSafely()
+            return -1L
+        }
+
+        runCatching {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID_ONGOING, buildOngoingNotification())
+        }
+
+        // Poll twice a second near the deadline so the alert is not late by
+        // up to a second; once a second otherwise (notification only needs
+        // second-level granularity).
+        val msLeft = (timer.remainingSecondsAt(now) * 1000L) - (now - now / 1000L * 1000L)
+        return if (timer.hasTarget && msLeft in 1..2_000) 150L else 1_000L
     }
 
     private fun buildOngoingNotification(): Notification {

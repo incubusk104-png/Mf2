@@ -307,19 +307,6 @@ fun HabitsScreen(
         AlarmPickerDialog(
             habitName = icon.label,
             defaultMinutes = icon.defaultReminderMinutes,
-            onTimerOptions = {
-                // In-app path: the sheet is shown directly. No persisted
-                // hand-off is involved here — that exists only for the
-                // alarm-time flow, which may run with no UI at all.
-                val existing = data.habits.firstOrNull { it.iconId == icon.id }
-                timerOptionsRequest = HabitTimerRequests.Request(
-                    habitId = existing?.id.orEmpty(),
-                    habitName = icon.label,
-                    iconId = icon.id,
-                )
-                alarmPickerIcon = null
-                alarmSetupExistingHabitId = null
-            },
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
@@ -692,7 +679,6 @@ private fun AlarmPickerDialog(
     defaultMinutes: Int,
     onDismiss: () -> Unit,
     onConfirm: (reminderMinutes: Int?, repeatMask: Int) -> Unit,
-    onTimerOptions: () -> Unit = {},
 ) {
     val defaultHour = defaultMinutes / 60
     val defaultMinute = defaultMinutes % 60
@@ -734,15 +720,6 @@ private fun AlarmPickerDialog(
                     onClick = { onConfirm(null, repeatMask) },
                     modifier = Modifier.padding(top = 4.dp),
                 ) { Text("Skip — no alarm for this habit") }
-
-                // The alarm is the primary action above. The timers belong to
-                // this same habit, so the choice to time it is offered here
-                // too — it opens the very same options sheet the habit's icon
-                // uses, anchored to this icon.
-                TextButton(
-                    onClick = onTimerOptions,
-                    modifier = Modifier.padding(top = 4.dp),
-                ) { Text("Also track this with a timer / stopwatch") }
             }
         },
         confirmButton = {

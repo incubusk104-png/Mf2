@@ -36,6 +36,14 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Guarded for the same reason as the other alarm receivers: a throw out
+        // of a manifest receiver kills the process, and this one fires from the
+        // user tapping "Snooze" on a ringing alarm.
+        runCatching { snooze(context, intent) }
+            .onFailure { Log.w(TAG, "Snooze handling failed", it) }
+    }
+
+    private fun snooze(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra("habitId") ?: return
         val habitName = intent.getStringExtra("habitName") ?: return
 

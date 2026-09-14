@@ -1,3 +1,81 @@
-exit=0
-(no e: lines)
-BUILD SUCCESSFUL in 3m 22s
+=== pwd / workspace ===
+/home/runner/work/Mf2/Mf2
+GITHUB_WORKSPACE=/home/runner/work/Mf2/Mf2
+/home/runner/work/Mf2/Mf2
+=== download ===
+/tmp/upd.zip: OK
+=== unzip listing ===
+Archive:  /tmp/upd.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+        0  2026-09-14 08:46   mf2_v7/
+        0  2026-09-14 08:46   mf2_v7/android/
+        0  2026-09-14 08:46   mf2_v7/android/app/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/
+    17026  2026-09-14 08:46   mf2_v7/android/app/src/main/AndroidManifest.xml
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/
+    18784  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+     3261  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitReminderReceiver.kt
+     4388  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitSnoozeReceiver.kt
+     2445  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerAlarmReceiver.kt
+     4357  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerReminderReceiver.kt
+    12030  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerService.kt
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/ui/
+        0  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/
+    39342  2026-09-14 08:46   mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/HabitsScreen.kt
+---------                     -------
+   101633                     20 files
+=== payload file exists? ===
+-rw-r--r-- 1 runner runner 18784 Sep 14 08:46 /tmp/upd/mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+=== md5 BEFORE overlay ===
+payload: 2feaaa3ae53820c76d0222b076285f8c  /tmp/upd/mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+repo   : 2246f279fdaf02ba592df6c5e9369177  android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+cp_exit=0
+=== md5 AFTER overlay ===
+payload: 2feaaa3ae53820c76d0222b076285f8c  /tmp/upd/mf2_v7/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+repo   : 2feaaa3ae53820c76d0222b076285f8c  android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+=== grep repo file for the fix ===
+4
+=== git status --short ===
+ M android/app/src/main/AndroidManifest.xml
+ M android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+ M android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitReminderReceiver.kt
+ M android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitSnoozeReceiver.kt
+ M android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerAlarmReceiver.kt
+ M android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerReminderReceiver.kt
+ M android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerService.kt
+ M android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/HabitsScreen.kt
+ M diag.txt
+=== git diff --stat ===
+ android/app/src/main/AndroidManifest.xml           |   8 +-
+ .../notifications/AlarmRingingActivity.kt          | 147 ++++++++++++++-------
+ .../notifications/HabitReminderReceiver.kt         |   8 ++
+ .../notifications/HabitSnoozeReceiver.kt           |   8 ++
+ .../notifications/TimerAlarmReceiver.kt            |   7 +
+ .../notifications/TimerReminderReceiver.kt         |   4 +
+ .../notifications/TimerService.kt                  |  76 ++++++++---
+ .../ui/screens/HabitsScreen.kt                     |  25 +---
+ diag.txt                                           |  57 +++++++-
+ 9 files changed, 241 insertions(+), 99 deletions(-)
+=== ls-files modified count ===
+9
+=== staged ===
+D	.github/workflows/apply-timer-popup.yml
+D	.github/workflows/apply-timer-popup2.yml
+D	.github/workflows/apply-timer-popup3.yml
+D	.github/workflows/apply-timer-popup4.yml
+M	android/app/src/main/AndroidManifest.xml
+M	android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingingActivity.kt
+M	android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitReminderReceiver.kt
+M	android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitSnoozeReceiver.kt
+M	android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerAlarmReceiver.kt
+M	android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerReminderReceiver.kt
+M	android/app/src/main/java/com/rork/mindsetframestracker/notifications/TimerService.kt
+M	android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/HabitsScreen.kt
+M	diag.txt
+staged_count=13
