@@ -1,0 +1,55 @@
+name: apply-crashfix
+
+# One-shot applier: overlays the alarm-ring crash fix onto main byte-exactly.
+# Deletes itself and the stale apply-ringfix.yml in the same commit.
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Download and verify payload
+        env:
+          PAYLOAD_URL: "https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_crashfix/mf2_crashfix.zip"
+          PAYLOAD_SHA256: "ff3782372be12e0b8e14d6b521c85732d94a1f0c03a9822d6f3995dd9195110e"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/upd.zip "$PAYLOAD_URL"
+          echo "$PAYLOAD_SHA256  /tmp/upd.zip" | sha256sum -c -
+          mkdir -p /tmp/upd && unzip -q /tmp/upd.zip -d /tmp/upd
+          test -f /tmp/upd/android/app/src/main/java/com/rork/mindsetframestracker/notifications/AlarmRingService.kt
+          cp -a /tmp/upd/. .
+          rm -f .github/workflows/crashfix-apply.yml .github/workflows/apply-ringfix.yml
+          git status --short
+      - name: Compile gate (must pass before main is touched)
+        run: |
+          set -euo pipefail
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:compileReleaseKotlin --console=plain --no-daemon -q
+      - name: Commit and push to main
+        run: |
+          set -euo pipefail
+          git config user.name "incubusk104-png"
+          git config user.email "incubusk104@gmail.com"
+          git add -A
+          git commit \
+            -m "Fix the alarm-ring crash and wire the timer/stopwatch popup end to end" \
+            -m "- AlarmRingService: register the MediaPlayer prepared-listener before setDataSource/prepareAsync, publish the player field before preparing, and guard start() behind a released latch, so a late or racing callback can never start a released player." \
+            -m "- AlarmRingService: guard onCreate's startForeground against a throw out of a service lifecycle callback, and add onTimeout for the Android 15 mediaPlayback foreground-service timeout." \
+            -m "- Route every alarm-path notification at the flat alpha-only ic_notification small icon instead of the layer-list/adaptive splash_icon, which the small-icon slot cannot render." \
+            -m "- HabitTimerOptionsHost: render and consume the options request only once the app is RESUMED, tracked as state so the resume actually recomposes." \
+            -m "- HabitsScreen: stop rendering and consuming the options request, so the app-root host is its single owner and one ring can no longer show the sheet twice or swallow it on another tab." \
+            -m "- Remove the stale apply-ringfix helper workflow, which re-fired on every push to main and overwrote the files it had already fixed."
+          git push origin HEAD:main
