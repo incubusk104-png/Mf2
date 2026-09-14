@@ -13,7 +13,7 @@ jobs:
           java-version: "17"
       - uses: android-actions/setup-android@v3
       - env:
-          URL: https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_ringfix2/mf2_ringfix_v2.zip
+          URL: https://static.teamily.ai/sites/ca636d4d-36c6-4407-9059-24fdbab23b20/documents/mf2_ringfix2/mf2_ringfix_v2.zip?tk=c2l0ZTpjYTYzNmQ0ZC0zNmM2LTQ0MDctOTA1OS0yNGZkYmFiMjNiMjAvZG9jdW1lbnRzL21mMl9yaW5nZml4MjoxNzg5Mzk0MzA0.ZWFmZGZiNTc2N2VjYzI0NDEzNTA4ZjIwYTg3NGZkMTY
           SHA: 8da3fb77dee57a6db2cf0ecfe60567d38ada31116a0b0b9e08dd3bf63fb2d9f9
         run: |
           set -euo pipefail
