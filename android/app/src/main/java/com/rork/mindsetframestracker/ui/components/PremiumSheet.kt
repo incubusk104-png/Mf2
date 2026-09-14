@@ -42,9 +42,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.rork.mindsetframestracker.billing.SubscriptionBilling
+import com.rork.mindsetframestracker.data.SupabaseSync
 
 /**
  * Huawei AppGallery listing for Mindset Frames. The `appmarket://` deep link
@@ -92,12 +95,38 @@ object AppGalleryLink {
 }
 
 /**
+ * Whether the Founding Member card may render at all.
+ *
+ * [Checking] is deliberately distinct from [Unavailable] so the card starts
+ * hidden *before* the network call resolves, instead of flashing on for a
+ * frame and then disappearing once the answer arrives.
+ */
+private enum class FoundingCardState {
+    /** Eligibility call in flight — hidden until we actually know. */
+    Checking,
+
+    /** Server confirmed a founding slot is still free for this install. */
+    Eligible,
+
+    /** Sold out, or this install already claimed a slot. */
+    NotEligible,
+
+    /** Check could not be completed — fail closed, stay hidden. */
+    Unavailable,
+}
+
+/**
  * Premium upgrade sheet — polished with a clear Free vs Premium comparison
  * table, feature breakdown by tier, and native Huawei IAP purchase buttons.
  *
  * [onPurchaseStarted] must record the product id in the ViewModel so
  * MainActivity.onActivityResult can attribute the purchase result;
  * [onRestore] triggers an owned-purchases query ("Restore purchase").
+ *
+ * [foundingEligibility] gates the Founding Member block. Unless it resolves to
+ * a positive "eligible" answer the block is not rendered at all, and only the
+ * two regular premium plans are offered. Passing null is safe — it is treated
+ * exactly like a failed check (card hidden).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,12 +134,50 @@ fun PremiumSheet(
     onDismiss: () -> Unit,
     onPurchaseStarted: (String) -> Unit = {},
     onRestore: (() -> Unit)? = null,
+    foundingEligibility: (suspend () -> SupabaseSync.FoundingEligibility)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     val activity = LocalActivity.current
     val huaweiRed = Color(0xFFC7000B)
     var purchaseError by remember { mutableStateOf<String?>(null) }
+
+    // ── Founding Member gate ───────────────────────────────────────────────
+    // This block used to render unconditionally behind a hardcoded "first 100
+    // only" line, so buyer #101 was shown a button that could never be
+    // honoured. The cap is enforced server-side by the
+    // founding-member-eligibility Edge Function (100 slots, global); the sheet
+    // now only offers the card when that endpoint positively says a slot is
+    // still free.
+    //
+    // Fail-closed by construction: every path that is not a positive
+    // [FoundingCardState.Eligible] — sold out, already claimed, cloud sync
+    // unconfigured, offline, non-2xx, thrown exception, null probe — leaves the
+    // card hidden. Failing open would let someone pay for a tier that no longer
+    // exists, which is far worse than briefly hiding an offer.
+    //
+    // The probe is read through rememberUpdatedState and the effect is keyed on
+    // Unit, so it runs exactly once per sheet open. Keying the effect on the
+    // lambda itself would restart the network call on every recomposition,
+    // because the callers pass a fresh lambda instance each time.
+    var foundingCard by remember { mutableStateOf(FoundingCardState.Checking) }
+    val currentProbe by rememberUpdatedState(foundingEligibility)
+    LaunchedEffect(Unit) {
+        val probe = currentProbe
+        if (probe == null) {
+            foundingCard = FoundingCardState.Unavailable
+            return@LaunchedEffect
+        }
+        foundingCard = runCatching { probe() }
+            .map { result ->
+                when (result) {
+                    is SupabaseSync.FoundingEligibility.Eligible -> FoundingCardState.Eligible
+                    is SupabaseSync.FoundingEligibility.NotEligible -> FoundingCardState.NotEligible
+                    is SupabaseSync.FoundingEligibility.Unavailable -> FoundingCardState.Unavailable
+                }
+            }
+            .getOrElse { FoundingCardState.Unavailable }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -122,7 +189,7 @@ fun PremiumSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 28.dp),
         ) {
-            // ── Header ──────────────────────────────────────────────
+            // ── Header ─────────────────────────────────────────────────────
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth(),
@@ -157,7 +224,7 @@ fun PremiumSheet(
                 )
             }
 
-            // ── Free vs Premium comparison ──────────────────────────
+            // ── Free vs Premium comparison ─────────────────────────────────
             Surface(
                 shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -208,7 +275,7 @@ fun PremiumSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Feature highlights ──────────────────────────────────
+            // ── Feature highlights ─────────────────────────────────────────
             Text(
                 text = "Everything in Premium",
                 style = MaterialTheme.typography.titleSmall,
@@ -255,7 +322,7 @@ fun PremiumSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Purchase buttons ────────────────────────────────────
+            // ── Purchase buttons ───────────────────────────────────────────
             Button(
                 onClick = {
                     val act = activity ?: return@Button
@@ -308,58 +375,65 @@ fun PremiumSheet(
                 }
             }
 
-            // ── Founding Member plans ───────────────────────────────
+            // ── Founding Member plans ──────────────────────────────────────
             // Matches the live AppGallery products mindset_premium_founding_
             // monthly / _yearly (first 100 members, locked-in lower price).
-            Surface(
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp),
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "Founding Member — first 100 only",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
-                    Text(
-                        text = "Lock in a lower price forever as an early supporter. " +
-                            "Includes everything in Premium except Strava sync.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
-                    )
-                    Button(
-                        onClick = {
-                            val act = activity ?: return@Button
-                            purchaseError = null
-                            onPurchaseStarted("mindset_premium_founding_yearly")
-                            SubscriptionBilling.purchase(act, "mindset_premium_founding_yearly") { message ->
-                                purchaseError = message
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp),
-                    ) { Text("Founding Member — Yearly") }
-                    Button(
-                        onClick = {
-                            val act = activity ?: return@Button
-                            purchaseError = null
-                            onPurchaseStarted("mindset_premium_founding_monthly")
-                            SubscriptionBilling.purchase(act, "mindset_premium_founding_monthly") { message ->
-                                purchaseError = message
-                            }
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                            .defaultMinSize(minHeight = 48.dp),
-                    ) { Text("Founding Member — Monthly") }
+            //
+            // Rendered only when the eligibility probe above came back positive.
+            // The "first 100 only" copy is accurate and therefore unchanged: the
+            // server-side cap really is 100, and it is global — there is no
+            // per-country quota.
+            if (foundingCard == FoundingCardState.Eligible) {
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Founding Member — first 100 only",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                        Text(
+                            text = "Lock in a lower price forever as an early supporter. " +
+                                "Includes everything in Premium except Strava sync.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+                        )
+                        Button(
+                            onClick = {
+                                val act = activity ?: return@Button
+                                purchaseError = null
+                                onPurchaseStarted("mindset_premium_founding_yearly")
+                                SubscriptionBilling.purchase(act, "mindset_premium_founding_yearly") { message ->
+                                    purchaseError = message
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 48.dp),
+                        ) { Text("Founding Member — Yearly") }
+                        Button(
+                            onClick = {
+                                val act = activity ?: return@Button
+                                purchaseError = null
+                                onPurchaseStarted("mindset_premium_founding_monthly")
+                                SubscriptionBilling.purchase(act, "mindset_premium_founding_monthly") { message ->
+                                    purchaseError = message
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .defaultMinSize(minHeight = 48.dp),
+                        ) { Text("Founding Member — Monthly") }
+                    }
                 }
             }
 
@@ -386,7 +460,7 @@ fun PremiumSheet(
                     .padding(top = 10.dp),
             )
 
-            // ── Always-free callout ─────────────────────────────────
+            // ── Always-free callout ────────────────────────────────────────
             Surface(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),

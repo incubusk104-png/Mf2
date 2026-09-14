@@ -1205,6 +1205,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
             onDismiss = { showPremiumSheet = false },
             onPurchaseStarted = { viewModel.onSubscriptionPurchaseStarted(it) },
             onRestore = { viewModel.restoreSubscription() },
+            foundingEligibility = { viewModel.checkFoundingMemberEligibility() },
         )
     }
 

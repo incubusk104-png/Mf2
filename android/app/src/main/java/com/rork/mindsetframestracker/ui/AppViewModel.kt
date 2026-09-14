@@ -11,9 +11,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rork.mindsetframestracker.BuildConfig
 import com.rork.mindsetframestracker.auth.HuaweiAuthClient
+import com.rork.mindsetframestracker.billing.Entitlements
 import com.rork.mindsetframestracker.billing.RestoreResult
 import com.rork.mindsetframestracker.billing.SubscriptionBilling
 import com.rork.mindsetframestracker.billing.SubscriptionResult
+import com.rork.mindsetframestracker.billing.SubscriptionTier
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.integrations.StravaTokens
 import com.rork.mindsetframestracker.data.AppData
@@ -233,6 +235,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         when (result) {
             is SubscriptionResult.Success -> {
                 grantSubscription(result.productId)
+                // A founding-tier purchase also consumes one of the 100 global
+                // founding slots, so record the claim server-side. Same
+                // fire-and-forget shape as [recordTipPurchase]: the payment
+                // already succeeded through Huawei, so a failed record must
+                // never delay or block the success message. Safe to retry —
+                // the endpoint re-reads an existing claim instead of burning a
+                // second slot.
+                if (Entitlements.tierForProductId(result.productId) == SubscriptionTier.FOUNDING) {
+                    recordFoundingMemberClaim(result.productId)
+                }
                 _subscriptionMessage.value = "Premium unlocked — welcome aboard! \uD83C\uDF89"
             }
             is SubscriptionResult.Cancelled -> {
@@ -854,6 +866,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { supabaseSync.recordTipPurchase(purchaseData, signature) }
                 .onFailure {
                     if (BuildConfig.DEBUG) Log.w("AppViewModel", "Tip record failed: ${it.message}")
+                }
+        }
+    }
+
+    /**
+     * Reads the server-side founding-member eligibility for this install.
+     * Called from the premium sheet when it opens. The sheet fails closed, so
+     * any error here simply hides the Founding Member card.
+     */
+    suspend fun checkFoundingMemberEligibility(): com.rork.mindsetframestracker.data.SupabaseSync.FoundingEligibility =
+        supabaseSync.checkFoundingMemberEligibility()
+
+    /**
+     * Fire-and-forget server-side record of a founding-member claim, fired
+     * after a successful founding-tier purchase. Mirrors [recordTipPurchase]:
+     * never blocks the UI, and safe to retry because the server re-reads the
+     * existing claim instead of consuming another slot.
+     */
+    fun recordFoundingMemberClaim(productId: String) {
+        viewModelScope.launch {
+            runCatching { supabaseSync.recordFoundingMemberClaim(productId) }
+                .onFailure {
+                    if (BuildConfig.DEBUG) {
+                        Log.w("AppViewModel", "Founding claim record failed: ${it.message}")
+                    }
                 }
         }
     }

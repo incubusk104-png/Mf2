@@ -13,6 +13,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -31,6 +32,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.util.Locale
 import java.util.UUID
 
 /** Snapshot of remote data pulled after sign-in (restore flow). */
@@ -645,6 +647,110 @@ class SupabaseSync(context: Context) {
             }
         } catch (e: Exception) {
             Log.w(TAG, "tip-purchase record error: ${e.message}")
+            false
+        }
+    }
+
+    // ── Founding-member eligibility (cap enforcement) ──────────────
+
+    /**
+     * Three-state result of the pre-render eligibility check.
+     *
+     * [Unavailable] is deliberately distinct from [NotEligible]: the premium
+     * sheet must fail CLOSED (hide the Founding Member card) when the check
+     * cannot be completed, and it can only do that if "the server said no"
+     * and "the server said nothing" are not collapsed into one value.
+     */
+    sealed interface FoundingEligibility {
+        data class Eligible(val remaining: Int) : FoundingEligibility
+        data class NotEligible(
+            val remaining: Int,
+            val alreadyClaimed: Boolean,
+        ) : FoundingEligibility
+        data object Unavailable : FoundingEligibility
+    }
+
+    @Serializable
+    private data class FoundingEligibilityBody(
+        val eligible: Boolean = false,
+        val claimed: Boolean = false,
+        val remaining: Int = 0,
+    )
+
+    @Serializable
+    private data class FoundingClaimBody(
+        val user_id: String,
+        val country: String = "",
+        val plan_id: String = "",
+    )
+
+    /**
+     * Asks the founding-member-eligibility Edge Function whether this install
+     * may still claim one of the 100 global founding slots.
+     *
+     * The server is the source of truth — this call only decides whether the
+     * Founding Member card is worth rendering. Every failure mode (not
+     * configured, offline, non-2xx, malformed body, thrown request) returns
+     * [FoundingEligibility.Unavailable] so the caller hides the card instead of
+     * offering a purchase that may no longer be claimable.
+     */
+    suspend fun checkFoundingMemberEligibility(): FoundingEligibility {
+        if (!isConfigured) return FoundingEligibility.Unavailable
+        return try {
+            val response = client.get("$baseUrl/functions/v1/founding-member-eligibility") {
+                header("apikey", anonKey)
+                header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
+                parameter("user_id", sessionUserId ?: deviceId)
+            }
+            if (!response.status.isSuccess()) {
+                Log.i(TAG, "founding eligibility check failed: ${response.status}")
+                return FoundingEligibility.Unavailable
+            }
+            val parsed = response.body<FoundingEligibilityBody>()
+            if (parsed.eligible) {
+                FoundingEligibility.Eligible(parsed.remaining)
+            } else {
+                FoundingEligibility.NotEligible(
+                    remaining = parsed.remaining,
+                    alreadyClaimed = parsed.claimed,
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "founding eligibility error: ${e.message}")
+            FoundingEligibility.Unavailable
+        }
+    }
+
+    /**
+     * Records a founding-member claim after a successful founding-tier
+     * purchase, mirroring [recordTipPurchase] exactly: fire-and-forget, so a
+     * network failure never blocks the on-device "Premium unlocked" flow —
+     * Huawei already completed the payment.
+     *
+     * Safe to call more than once for the same install. The server's
+     * claim_founding_member() re-reads the row under an advisory lock and
+     * reports the existing claim rather than consuming a second slot.
+     */
+    suspend fun recordFoundingMemberClaim(planId: String): Boolean {
+        if (!isConfigured) return false
+        return try {
+            val response = client.post("$baseUrl/functions/v1/founding-member-eligibility") {
+                header("apikey", anonKey)
+                header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    FoundingClaimBody(
+                        user_id = sessionUserId ?: deviceId,
+                        country = Locale.getDefault().country.orEmpty(),
+                        plan_id = planId,
+                    ),
+                )
+            }
+            response.status.isSuccess().also { ok ->
+                if (!ok) Log.i(TAG, "founding-member claim record failed: ${response.status}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "founding-member claim record error: ${e.message}")
             false
         }
     }
