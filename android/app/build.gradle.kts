@@ -47,6 +47,28 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // that one `implementation` line), not globally via `configurations.all`.
 // ---------------------------------------------------------------------------
 
+// ── Huawei app identity for HMS Core ─────────────────────────────────────
+// HMS Core runs in its own process and identifies the calling app from THIS
+// APK's manifest meta-data (`com.huawei.hms.client.appid` — see
+// AndroidManifest.xml), not from the AGConnect instance created in-process in
+// HuaweiServicesConfig. With the AGConnect Gradle plugin applied that meta-data
+// is generated automatically; this project applies no such plugin, so it is
+// declared by hand and fed from here. Without it every Huawei IAP call fails
+// with ORDER_STATE_IAP_NOT_ACTIVATED (60002) even though
+// agconnect-services.json is valid and Huawei sign-in works.
+//
+// The values are read out of agconnect-services.json so the manifest can never
+// drift from client.app_id / client.cp_id (the first occurrence of each key is
+// the "client" block). The literals are a last-resort fallback so a build can
+// never inject an empty appid.
+val agconnectConfigText = runCatching { file("agconnect-services.json").readText() }.getOrDefault("")
+val huaweiAgcAppId = Regex("\"app_id\"\\s*:\\s*\"([^\"]+)\"")
+    .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
+    .ifBlank { "118642709" }
+val huaweiAgcCpId = Regex("\"cp_id\"\\s*:\\s*\"([^\"]+)\"")
+    .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
+    .ifBlank { "30063000033888672" }
+
 val agconnectGeneratedAssets = layout.buildDirectory.dir("generated/agconnect/assets")
 val copyAgconnectServices = tasks.register<Copy>("copyAgconnectServices") {
     from(layout.projectDirectory.file("agconnect-services.json"))
@@ -67,6 +89,11 @@ android {
         // when the test build's versionCode exceeds the released one).
         versionCode = 22
         versionName = "1.1.1"
+
+        // Backs the com.huawei.hms.client.appid / .cpid meta-data in
+        // AndroidManifest.xml — see the "Huawei app identity" block above.
+        manifestPlaceholders["huaweiAppId"] = huaweiAgcAppId
+        manifestPlaceholders["huaweiCpId"] = huaweiAgcCpId
 
         val supabaseUrl = resolveRorkValue("SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_URL", "mindset.supabaseUrl")
         val supabaseAnonKey = resolveRorkValue("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY", "mindset.supabaseAnonKey")

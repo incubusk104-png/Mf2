@@ -287,7 +287,11 @@ object TipBilling {
             "This product isn't available. Please update the app."
         OrderStatusCode.ORDER_STATE_PARAM_ERROR -> // 60001
             "The purchase request was invalid. Please update the app."
-        else -> fallback ?: "Purchase failed with code: $code"
+        // Anything not enumerated above falls through to the shared table so
+        // the tip and subscription flows can never explain a code differently.
+        // The tip-flavoured overrides above are deliberate — "you already own
+        // this tip" reads better against a tip button than the generic copy.
+        else -> HuaweiIapErrors.message(code, fallback, context = "tip purchase")
     }
 
     /**

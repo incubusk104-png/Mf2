@@ -131,6 +131,27 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MindsetFrames">
 
+        <!-- HMS Core app identity.
+             HMS Core runs in a SEPARATE process, so it cannot see the AGConnect
+             instance built in-process from agconnect-services.json — it
+             identifies the calling app from these meta-data entries. Absent or
+             mismatched, every Huawei IAP call returns
+             ORDER_STATE_IAP_NOT_ACTIVATED (60002) and purchases fail, even
+             though Huawei sign-in (which resolves its app id by another path)
+             keeps working, which is what makes this omission so hard to spot.
+             The AGConnect Gradle plugin would generate these automatically; this
+             project applies no such plugin, so they are declared explicitly.
+             Values come from agconnect-services.json via the "Huawei app
+             identity" block in app/build.gradle.kts, so they can never drift
+             from client.app_id / client.cp_id. -->
+        <meta-data
+            android:name="com.huawei.hms.client.appid"
+            android:value="appid=${huaweiAppId}" />
+
+        <meta-data
+            android:name="com.huawei.hms.client.cpid"
+            android:value="cpid=${huaweiCpId}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

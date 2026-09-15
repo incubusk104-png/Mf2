@@ -55,6 +55,9 @@ object HuaweiServicesConfig {
     private const val CONFIG_ASSET = "agconnect-services.json"
     private const val DIAGNOSTICS_FILE = "huawei_diagnostics.txt"
 
+    /** Manifest meta-data key HMS Core reads to identify the calling app. */
+    private const val HMS_APPID_META = "com.huawei.hms.client.appid"
+
     @Volatile
     private var initialized = false
 
@@ -70,6 +73,37 @@ object HuaweiServicesConfig {
     /** True when a valid agconnect-services.json was found and AGConnect initialized. */
     val isConfigured: Boolean
         get() = initialized && !configuredAppId.isNullOrBlank()
+
+    /**
+     * The HMS Core app identity declared in AndroidManifest.xml as
+     * `com.huawei.hms.client.appid`, normalised to the `appid=<id>` form
+     * ("" when the meta-data is missing).
+     *
+     * HMS Core runs in its OWN process, so it identifies the calling app from
+     * this manifest entry — not from the AGConnect instance [initialize] builds
+     * in-process. The AGConnect Gradle plugin injects the entry automatically;
+     * this project applies no such plugin, so it is declared by hand (fed from
+     * agconnect-services.json in app/build.gradle.kts). When it is blank every
+     * Huawei IAP call fails with ORDER_STATE_IAP_NOT_ACTIVATED (60002) while
+     * Huawei sign-in — which resolves its app id by another path — keeps
+     * working, so the omission is invisible from symptoms alone.
+     */
+    fun manifestHmsAppId(context: Context): String {
+        return runCatching {
+            @Suppress("DEPRECATION")
+            val info = context.packageManager.getApplicationInfo(
+                context.packageName,
+                PackageManager.GET_META_DATA,
+            )
+            when (val raw = info.metaData?.getString(HMS_APPID_META)) {
+                null -> ""
+                "" -> ""
+                else -> if (raw.startsWith("appid=")) raw else "appid=$raw"
+            }
+        }.onFailure {
+            Log.w(TAG, "Could not read $HMS_APPID_META from the manifest: ${it.message}")
+        }.getOrDefault("")
+    }
 
     /**
      * Reads agconnect-services.json from assets, validates the client block,
@@ -136,6 +170,12 @@ object HuaweiServicesConfig {
                 buildString {
                     appendLine("── HuaweiServicesConfig.initialize() ──")
                     appendLine("agconnect app_id: $appId")
+                    appendLine(
+                        "manifest $HMS_APPID_META: " +
+                            manifestHmsAppId(appContext).ifBlank {
+                                "<MISSING — every Huawei IAP call will fail with 60002>"
+                            },
+                    )
                     appendLine("agconnect client_id: $clientId")
                     appendLine("agconnect package_name: $packageName")
                     appendLine("actual applicationId: ${appContext.packageName}")
