@@ -85,6 +85,39 @@ const val REPEAT_WEEKENDS = 0b1100000
 val Habit.isScreenTimeHabit: Boolean
     get() = monitoredPackage != null && screenTimeLimitMinutes != null
 
+/**
+ * One app's screen-time limit as chosen in the limits manager.
+ *
+ * This is the transport between the picker UI and [AppViewModel]'s
+ * reconciliation, deliberately a plain value rather than a [Habit]: the sheet
+ * knows which apps the user wants limited and by how much, but it does not own
+ * habit identity, creation order or ids. Letting the ViewModel mint the
+ * [Habit]s keeps ids and the create/update/remove decision in one place.
+ */
+data class ScreenTimeLimitInput(
+    val packageName: String,
+    val appLabel: String,
+    /** Daily budget in minutes. */
+    val limitMinutes: Int,
+)
+
+/**
+ * Human label for a screen-time habit, e.g. "Facebook under 2h".
+ *
+ * Falls back to the package name when the stored label is missing (habits
+ * created before the label column existed), so the title is never blank.
+ */
+fun Habit.screenTimeSummary(): String {
+    val label = monitoredAppLabel ?: monitoredPackage ?: return name
+    val limit = screenTimeLimitMinutes ?: return label
+    val limitText = when {
+        limit % 60 == 0 && limit >= 60 -> "${limit / 60}h"
+        limit > 60 -> "${limit / 60}h ${limit % 60}m"
+        else -> "${limit}m"
+    }
+    return "$label under $limitText"
+}
+
 @Serializable
 data class ActivityRecord(
     val id: String,

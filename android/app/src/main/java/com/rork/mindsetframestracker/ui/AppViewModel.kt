@@ -30,6 +30,9 @@ import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.habitLogsFor
 import com.rork.mindsetframestracker.data.habitLogsOn
+import com.rork.mindsetframestracker.data.isScreenTimeHabit
+import com.rork.mindsetframestracker.data.screenTimeSummary
+import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.MoodMode
@@ -559,6 +562,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      *
      * Called on app start / resume and after a screen-time habit is added.
      * No-op when the Usage Access permission is missing.
+     *
+     * Measurement is a **single batched event scan** for every monitored
+     * package at once, rather than one query per habit per day. That matters
+     * for two reasons: `UsageStatsManager.queryEvents` is the expensive call
+     * here, and the per-day attribution the UI shows must come from the same
+     * numbers the check-in is decided on — otherwise the limit row and the
+     * habit's own verdict could disagree.
      */
     fun evaluateScreenTimeHabits() {
         val app = getApplication<Application>()
@@ -570,18 +580,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 it.monitoredPackage != null && it.screenTimeLimitMinutes != null
             }
             if (screenHabits.isEmpty()) return@launch
+
             val todayKey = Dates.todayKey()
             val yesterdayKey = Dates.key(java.time.LocalDate.now().minusDays(1))
+            val todayStart = monitor.dayStartMillis(0)
+            val yesterdayStart = monitor.dayStartMillis(-1)
+
+            // One scan covering yesterday..now answers for every habit.
+            val usage = monitor.dailyUsageMinutes(
+                app,
+                screenHabits.mapNotNull { it.monitoredPackage }.distinct(),
+                yesterdayStart,
+                System.currentTimeMillis(),
+            ) ?: return@launch
+
             var changed = false
             var updatedCheckIns = data.checkIns
 
             for (habit in screenHabits) {
                 val pkg = habit.monitoredPackage ?: continue
                 val limit = habit.screenTimeLimitMinutes ?: continue
+                val byDay = usage[pkg] ?: emptyMap()
 
                 // Today: live status — done while under the limit.
-                monitor.usedMinutesToday(app, pkg)?.let { used ->
-                    val underLimit = used <= limit
+                val usedToday = byDay[todayStart]
+                if (usedToday != null) {
+                    val underLimit = usedToday <= limit
                     val days = updatedCheckIns[habit.id].orEmpty().toMutableSet()
                     val isChecked = todayKey in days
                     if (underLimit && !isChecked) {
@@ -589,18 +613,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     } else if (!underLimit && isChecked) {
                         days.remove(todayKey); changed = true
                     }
-                    updatedCheckIns = updatedCheckIns + (habit.id to days.toList())
+                    if (underLimit || isChecked) {
+                        updatedCheckIns = updatedCheckIns + (habit.id to days.toList())
+                    }
                 }
 
                 // Yesterday: final settlement (only ever marks success — a
                 // blown day just stays unchecked).
-                monitor.usedMinutesYesterday(app, pkg)?.let { used ->
-                    if (used <= limit) {
-                        val days = updatedCheckIns[habit.id].orEmpty().toMutableSet()
-                        if (yesterdayKey !in days) {
-                            days.add(yesterdayKey); changed = true
-                            updatedCheckIns = updatedCheckIns + (habit.id to days.toList())
-                        }
+                val usedYesterday = byDay[yesterdayStart]
+                if (usedYesterday != null && usedYesterday <= limit) {
+                    val days = updatedCheckIns[habit.id].orEmpty().toMutableSet()
+                    if (yesterdayKey !in days) {
+                        days.add(yesterdayKey); changed = true
+                        updatedCheckIns = updatedCheckIns + (habit.id to days.toList())
                     }
                 }
             }
@@ -615,6 +640,101 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    /**
+     * Reconciles the user's chosen screen-time limits with the habits that
+     * currently exist: creates a habit for each newly-limited app, updates the
+     * limit on apps already monitored, and removes the habit for any app the
+     * user cleared.
+     *
+     * Reconciliation (rather than create-only) is what lets the manager be a
+     * single editable list: the user can change a limit or drop an app without
+     * a separate remove flow, and re-saving the same set is a no-op.
+     *
+     * Returns the number of apps now limited, so the caller can tell the user
+     * what actually happened.
+     */
+    fun applyScreenTimeLimits(limits: List<com.rork.mindsetframestracker.data.ScreenTimeLimitInput>): Int {
+        val desired = limits.associateBy { it.packageName }
+        // Habits being dropped, captured before the update so their ids/keys
+        // can still be read afterwards.
+        val removedHabits = _state.value.habits.filter { habit ->
+            habit.isScreenTimeHabit && habit.monitoredPackage !in desired
+        }
+        // The server deletion queue is keyed by HABIT id (not package), so
+        // capture the ids here rather than re-deriving them post-update.
+        val removedIds = removedHabits.map { it.id }
+
+        update { data ->
+            val existingPackages = data.habits
+                .filter { it.isScreenTimeHabit }
+                .mapNotNull { it.monitoredPackage }
+                .toSet()
+
+            // 1. Drop limits the user cleared.
+            val kept = data.habits.filter { habit ->
+                if (!habit.isScreenTimeHabit) return@filter true
+                val pkg = habit.monitoredPackage ?: return@filter true
+                pkg in desired
+            }
+
+            // 2. Update existing, 3. create the rest.
+            val updated = kept.map { habit ->
+                if (!habit.isScreenTimeHabit) return@map habit
+                val pkg = habit.monitoredPackage ?: return@map habit
+                val want = desired[pkg] ?: return@map habit
+                if (habit.screenTimeLimitMinutes == want.limitMinutes &&
+                    habit.monitoredAppLabel == want.appLabel
+                ) {
+                    habit
+                } else {
+                    val updated = habit.copy(
+                        screenTimeLimitMinutes = want.limitMinutes,
+                        monitoredAppLabel = want.appLabel,
+                    )
+                    // Keep the habit's title in step with its limit — the title
+                    // is what the habit list and the dialogs show.
+                    updated.copy(name = updated.screenTimeSummary())
+                }
+            }
+
+            val additions = desired.values
+                .filter { it.packageName !in existingPackages }
+                .map { want ->
+                    val base = Habit(
+                        id = UUID.randomUUID().toString(),
+                        name = "",
+                        createdAt = System.currentTimeMillis(),
+                        iconId = "screenTime",
+                        monitoredPackage = want.packageName,
+                        screenTimeLimitMinutes = want.limitMinutes,
+                        monitoredAppLabel = want.appLabel,
+                    )
+                    base.copy(name = base.screenTimeSummary())
+                }
+
+            data.copy(
+                habits = updated + additions,
+                // Removing a screen-time habit must also drop its check-in
+                // history, the same way deleteHabit does — otherwise the
+                // heatmap and the weekly count keep counting a limit the user
+                // has removed.
+                checkIns = if (removedIds.isEmpty()) data.checkIns
+                else data.checkIns - removedIds.toSet(),
+            )
+        }
+
+        // Push the deletions server-side too, so a removed limit does not
+        // reappear after a restore on another device. pushSnapshot only
+        // upserts, so a locally-removed habit would otherwise survive in
+        // Supabase and come back on the next pull.
+        removedHabits.forEach { supabaseSync.queueHabitDeletion(it.id) }
+
+        queueSync()
+        evaluateScreenTimeHabits()
+        return _state.value.habits.count { it.isScreenTimeHabit }
+    }
+
 
     fun disconnectPolar() {
         update {

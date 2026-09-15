@@ -55,6 +55,7 @@ import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import com.rork.mindsetframestracker.data.REPEAT_WEEKDAYS
 import com.rork.mindsetframestracker.data.REPEAT_WEEKENDS
 import com.rork.mindsetframestracker.data.hasFeatureAccess
+import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
@@ -534,41 +535,43 @@ fun HabitsScreen(
     }
     if (showScreenTimeSheet) {
         ScreenTimeHabitSheet(
+            habits = data.habits,
             onDismiss = { showScreenTimeSheet = false },
-            onConfirm = { packageName, appLabel, limitMinutes ->
+            onSave = { limits ->
                 showScreenTimeSheet = false
-                val habit = Habit(
-                    id = UUID.randomUUID().toString(),
-                    name = "$appLabel under ${formatLimitLabel(limitMinutes)}",
-                    createdAt = System.currentTimeMillis(),
-                    iconId = "screenTime",
-                    monitoredPackage = packageName,
-                    screenTimeLimitMinutes = limitMinutes,
-                    monitoredAppLabel = appLabel,
-                )
-                if (viewModel.addHabitObject(habit)) {
-                    viewModel.queueSync()
-                    if (!ScreenTimeMonitor.hasPermission(context)) {
-                        // Send the user to the system Usage Access switch —
-                        // Android never auto-grants this special permission.
-                        runCatching {
-                            context.startActivity(ScreenTimeMonitor.buildSettingsIntent(context))
-                        }
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Turn on Usage access for Mindset Frames to track $appLabel time.",
-                            )
-                        }
-                    } else {
-                        viewModel.evaluateScreenTimeHabits()
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Added — $appLabel is now monitored (limit ${formatLimitLabel(limitMinutes)}/day).",
-                            )
-                        }
+                // The picker returns the COMPLETE desired set, so a save both
+                // adds new limits and drops cleared ones — the ViewModel
+                // reconciles. The free-tier cap is checked here rather than in
+                // the sheet: the sheet has no business knowing about tiers, and
+                // a partial save would silently lose limits the user chose.
+                val existingCount = data.habits.count { it.isScreenTimeHabit }
+                val additions = limits.count { want ->
+                    data.habits.none { it.monitoredPackage == want.packageName }
+                }
+                if (!viewModel.canAddHabit() && existingCount + additions > existingCount) {
+                    showPremiumSheet = true
+                    return@ScreenTimeHabitSheet
+                }
+                val total = viewModel.applyScreenTimeLimits(limits)
+                if (!ScreenTimeMonitor.hasPermission(context)) {
+                    // Send the user to the system Usage Access switch —
+                    // Android never auto-grants this special permission.
+                    runCatching {
+                        context.startActivity(ScreenTimeMonitor.buildSettingsIntent(context))
+                    }
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            "Saved $total app limit${if (total == 1) "" else "s"} — " +
+                                "turn on Usage access to start measuring screen time.",
+                        )
                     }
                 } else {
-                    showPremiumSheet = true
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            if (total == 0) "Screen-time limits cleared."
+                            else "$total app limit${if (total == 1) "" else "s"} saved.",
+                        )
+                    }
                 }
             },
         )
