@@ -243,7 +243,10 @@ object SubscriptionBilling {
                         OrderStatusCode.ORDER_HWID_NOT_LOGIN -> {
                             onError("Please sign in to your Huawei ID first.")
                         }
-                        else -> onError(e.message ?: "Unknown billing error")
+                        else -> {
+                            HuaweiIapErrors.log(code, "Subscription createPurchaseIntent")
+                            onError(HuaweiIapErrors.message(code, context = "subscription purchase"))
+                        }
                     }
                 }
         } catch (e: Exception) {
@@ -281,7 +284,17 @@ object SubscriptionBilling {
                 Log.i(TAG, "ORDER_PRODUCT_OWNED for $purchasedId — granting premium")
                 onResult(SubscriptionResult.Success(info.inAppPurchaseData ?: "", info.inAppDataSignature ?: "", purchasedId))
             }
-            else -> onResult(SubscriptionResult.Error("Purchase failed with code: ${info.returnCode}"))
+            else -> {
+                HuaweiIapErrors.log(info.returnCode, "Subscription purchase result")
+                onResult(
+                    SubscriptionResult.Error(
+                        HuaweiIapErrors.message(
+                            info.returnCode,
+                            context = "subscription purchase",
+                        ),
+                    ),
+                )
+            }
         }
     }
 

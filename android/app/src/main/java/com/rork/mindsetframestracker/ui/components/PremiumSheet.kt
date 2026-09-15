@@ -389,154 +389,79 @@ fun PremiumSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── Purchase buttons ───────────────────────────────────────────
-            Button(
-                onClick = {
-                    val act = activity ?: return@Button
-                    purchaseError = null
-                    onPurchaseStarted(PRODUCT_REGULAR_YEARLY)
-                    // Routes to the Huawei IAP purchase flow for the REGULAR
-                    // yearly product. This is the fallback the whole sheet
-                    // leans on once a region's founding target is met.
-                    SubscriptionBilling.purchase(act, PRODUCT_REGULAR_YEARLY) { message ->
-                        purchaseError = message
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = huaweiRed,
-                    contentColor = Color.White,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp),
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Go Premium — Yearly",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = priceLabel(storePrices, PRODUCT_REGULAR_YEARLY, ANCHOR_REGULAR_YEARLY) +
-                            " · best value",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+            // ── Plan cards ───────────────────────────────────────────────────
+            // MUTUALLY EXCLUSIVE, resolved per country/region.
+            //
+            // The server owns the cap (500 per region by default) and is the
+            // only thing that decides which card this user is allowed to buy:
+            //
+            //   • region still has slots → Founding Member card ONLY, at the
+            //     founding price, with the regular price struck through. The
+            //     regular card is not rendered at all, so the two are never
+            //     offered side by side.
+            //   • region has filled up  → regular card ONLY, at the regular
+            //     price. The founding card disappears entirely rather than
+            //     being disabled — there is no tier left to sell.
+            //   • check unresolved      → a neutral placeholder with NO
+            //     purchase button. Selling before the answer arrives risks
+            //     charging for a tier that no longer exists in this region.
+            //
+            // Whichever card is on screen, the upgrade button routes through
+            // the Huawei IAP flow (SubscriptionBilling.purchase) for the
+            // product id matching the region's state — founding while the
+            // region has slots, regular once it is full.
+            val regularYearly = priceLabel(storePrices, PRODUCT_REGULAR_YEARLY, ANCHOR_REGULAR_YEARLY)
+            val regularMonthly = priceLabel(storePrices, PRODUCT_REGULAR_MONTHLY, ANCHOR_REGULAR_MONTHLY)
+            val foundingYearly = storePrices[PRODUCT_FOUNDING_YEARLY].orEmpty()
+            val foundingMonthly = storePrices[PRODUCT_FOUNDING_MONTHLY].orEmpty()
+
+            // One place that starts a purchase, wherever it is triggered from:
+            // remember the product id so MainActivity.onActivityResult can
+            // attribute the result, clear any previous error, and hand the
+            // IAP flow to SubscriptionBilling.
+            fun buy(productId: String) {
+                val act = activity
+                if (act == null) {
+                    purchaseError = "Open the app on your device to complete the purchase."
+                    return
                 }
-            }
-            Button(
-                onClick = {
-                    val act = activity ?: return@Button
-                    purchaseError = null
-                    onPurchaseStarted(PRODUCT_REGULAR_MONTHLY)
-                    SubscriptionBilling.purchase(act, PRODUCT_REGULAR_MONTHLY) { message ->
-                        purchaseError = message
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .defaultMinSize(minHeight = 52.dp),
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Go Premium — Monthly",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = priceLabel(storePrices, PRODUCT_REGULAR_MONTHLY, ANCHOR_REGULAR_MONTHLY),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+                purchaseError = null
+                onPurchaseStarted(productId)
+                SubscriptionBilling.purchase(act, productId) { message ->
+                    purchaseError = message
                 }
             }
 
-            // ── Founding Member plans ────────────────────────────────────
-            // Matches the live AppGallery products mindset_premium_founding_
-            // monthly / _yearly.
-            //
-            // Rendered ONLY when the eligibility probe above came back
-            // positive — the card is hidden entirely, not greyed out, once the
-            // region's target is met. The target is PER COUNTRY/REGION (500 by
-            // default), enforced server-side, so both the "first N" figure and
-            // the remaining count come from the server's answer rather than
-            // from a constant here. Sold out, already claimed, cloud sync
-            // unconfigured, offline, non-2xx, thrown exception and a null probe
-            // all leave this block unrendered, and the regular plans above are
-            // then the only thing on offer — the correct price to show once the
-            // founding tier is gone.
-            if (foundingCard == FoundingCardState.Eligible) {
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Founding Member — first $foundingCap in your region",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                        )
-                        Text(
-                            text = "Lock in a lower price forever as an early supporter. " +
-                                "Includes everything in Premium except Strava sync.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                        if (foundingRemaining > 0) {
-                            Text(
-                                text = "$foundingRemaining of $foundingCap left in your region",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
-                        Button(
-                            onClick = {
-                                val act = activity ?: return@Button
-                                purchaseError = null
-                                onPurchaseStarted(PRODUCT_FOUNDING_YEARLY)
-                                SubscriptionBilling.purchase(act, PRODUCT_FOUNDING_YEARLY) { message ->
-                                    purchaseError = message
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .defaultMinSize(minHeight = 48.dp),
-                        ) {
-                            Text(
-                                "Founding Member — Yearly " +
-                                    priceLabel(storePrices, PRODUCT_FOUNDING_YEARLY, ""),
-                            )
-                        }
-                        Button(
-                            onClick = {
-                                val act = activity ?: return@Button
-                                purchaseError = null
-                                onPurchaseStarted(PRODUCT_FOUNDING_MONTHLY)
-                                SubscriptionBilling.purchase(act, PRODUCT_FOUNDING_MONTHLY) { message ->
-                                    purchaseError = message
-                                }
-                            },
-                            colors = ButtonDefaults.outlinedButtonColors(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                                .defaultMinSize(minHeight = 48.dp),
-                        ) {
-                            Text(
-                                "Founding Member — Monthly " +
-                                    priceLabel(storePrices, PRODUCT_FOUNDING_MONTHLY, ""),
-                            )
-                        }
-                    }
-                }
+            when (foundingCard) {
+                FoundingCardState.Eligible -> FoundingPlanCard(
+                    cap = foundingCap,
+                    remaining = foundingRemaining,
+                    monthlyPrice = foundingMonthly.ifBlank { regularMonthly },
+                    yearlyPrice = foundingYearly.ifBlank { regularYearly },
+                    regularMonthlyPrice = regularMonthly,
+                    regularYearlyPrice = regularYearly,
+                    onPurchaseYearly = { buy(PRODUCT_FOUNDING_YEARLY) },
+                    onPurchaseMonthly = { buy(PRODUCT_FOUNDING_MONTHLY) },
+                )
+
+                // Sold out, already claimed, probe failed, or cloud sync not
+                // configured — the founding tier is not sellable in this
+                // region, so the regular plans are the only offer. Treating
+                // Unavailable the same as NotEligible keeps a user who is
+                // offline able to buy something, while still never showing a
+                // founding card we cannot honour.
+                FoundingCardState.NotEligible,
+                FoundingCardState.Unavailable,
+                -> RegularPlanCard(
+                    monthlyPrice = regularMonthly,
+                    yearlyPrice = regularYearly,
+                    onPurchaseYearly = { buy(PRODUCT_REGULAR_YEARLY) },
+                    onPurchaseMonthly = { buy(PRODUCT_REGULAR_MONTHLY) },
+                )
+
+                // Still asking the server. No buttons until we know which tier
+                // this region is entitled to.
+                FoundingCardState.Checking -> PlanSlotPlaceholder()
             }
 
             purchaseError?.let { message ->

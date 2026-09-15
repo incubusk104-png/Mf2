@@ -107,6 +107,22 @@ fun TipSheet(
             // Prices come from Huawei's obtainProductInfo so they match the
             // account's region/currency; the built-in labels are the fallback
             // when the query fails (offline, HMS not ready).
+
+            // Shown only when the store answered but none of our consumable
+            // ids exist in it yet (e.g. the tip products have not been added
+            // in AppGallery Connect) — the reference prices below would
+            // otherwise look authoritative when they are not.
+            if (pricesLoaded && products.isEmpty()) {
+                Text(
+                    text = "Showing reference prices — open AppGallery once so we can " +
+                        "read your local prices.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
+
             TipTierButton(
                 productId = "tip_small",
                 products = products,
@@ -140,6 +156,17 @@ fun TipSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Same billing disclosure the upgrade sheet carries, so the two
+            // purchase surfaces read as one product rather than two.
+            Text(
+                text = "Billed through your Huawei ID on AppGallery. A tip is a one-off " +
+                    "purchase and never auto-renews.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
             OutlinedButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth(),
@@ -164,9 +191,15 @@ private fun TipTierButton(
     val priceText = product?.price?.takeIf { it.isNotBlank() } ?: fallbackPrice
     val label = product?.label ?: fallbackLabel
 
+    // Deliberately ALWAYS enabled. The button used to be gated on
+    // `product != null`, which disabled every tier whenever Huawei's price
+    // query came back empty — and that query returns empty precisely when the
+    // price lookup is unavailable (offline, HMS not ready, IAP not activated).
+    // That turned a cosmetic price-lookup failure into "you cannot tip at
+    // all". The price is a label here, not a precondition: the purchase itself
+    // never needs it, and the built-in fallback price below covers display.
     Button(
         onClick = onClick,
-        enabled = !pricesLoaded || product != null,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
