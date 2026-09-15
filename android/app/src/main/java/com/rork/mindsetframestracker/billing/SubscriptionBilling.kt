@@ -175,7 +175,12 @@ object SubscriptionBilling {
                             status.startResolutionForResult(activity, ENV_READY_REQUEST_CODE)
                         } catch (ex: IntentSender.SendIntentException) {
                             Log.e(TAG, "isEnvReady resolution failed", ex)
-                            onError("Could not set up Huawei payment. Try updating HMS Core.")
+                            // Was "Try updating HMS Core" — the same
+                            // blame-a-version habit as the 60002 copy. A failed
+                            // resolution launch is not evidence of a stale
+                            // install, so the advice is gone; the real exception
+                            // is logged just above for a bug report.
+                            onError("Could not set up Huawei payment. Please try again.")
                         }
                     } else {
                         Log.w(TAG, "IAP env not ready, no resolution: ${e.message}")

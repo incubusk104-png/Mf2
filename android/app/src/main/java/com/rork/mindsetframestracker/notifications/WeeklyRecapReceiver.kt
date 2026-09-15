@@ -3,6 +3,7 @@ package com.rork.mindsetframestracker.notifications
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 
 /**
  * Fired by the AlarmManager alarm on Sunday evenings.
@@ -15,7 +16,16 @@ import android.content.Intent
 class WeeklyRecapReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        WeeklyRecapNotifier.showRecap(context)
-        NotificationScheduler(context).scheduleWeeklyRecap()
+        // Guarded like every other alarm receiver. This one lands on a Sunday
+        // evening when the app is almost certainly not running, and an uncaught
+        // throw from a manifest receiver takes the process down with it.
+        runCatching {
+            WeeklyRecapNotifier.showRecap(context)
+            NotificationScheduler(context).scheduleWeeklyRecap()
+        }.onFailure { Log.w(TAG, "Weekly recap failed", it) }
+    }
+
+    private companion object {
+        const val TAG = "WeeklyRecapReceiver"
     }
 }

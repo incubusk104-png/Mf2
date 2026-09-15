@@ -155,7 +155,11 @@ object TipBilling {
                             status.startResolutionForResult(activity, ENV_READY_REQUEST_CODE)
                         } catch (ex: IntentSender.SendIntentException) {
                             Log.e(TAG, "isEnvReady resolution failed", ex)
-                            onError("Could not set up Huawei payment. Try updating HMS Core.")
+                            // Same copy fix as the subscription path: a failed
+                            // resolution launch is not evidence that HMS Core is
+                            // stale, so the "try updating HMS Core" advice is
+                            // gone. The exception itself is logged just above.
+                            onError("Could not set up Huawei payment. Please try again.")
                         }
                     } else {
                         Log.w(TAG, "IAP env not ready, no resolution: ${e.message}")
@@ -277,8 +281,14 @@ object TipBilling {
      * against the constants in the bundled IAP SDK 6.13.0.300.
      */
     private fun messageForCode(code: Int?, fallback: String?): String = when (code) {
+        // 60002 = ORDER_STATE_IAP_NOT_ACTIVATED: a store-side activation setting
+        // for this app/region, never a version problem. Kept in lockstep with
+        // HuaweiIapErrors so the tip and subscription flows cannot drift — the
+        // drift between them is what produced the misleading "please update".
         OrderStatusCode.ORDER_STATE_IAP_NOT_ACTIVATED -> // 60002
-            "In-app purchases aren't enabled for this app yet. Please update the app or try again later."
+            "In-app purchases aren't switched on for this app yet. That setting " +
+                "lives on the store side, so updating the app won't change it — " +
+                "please try again later or contact support."
         OrderStatusCode.ORDER_STATE_NET_ERROR -> // 60005
             "Network error — check your connection and try again."
         OrderStatusCode.ORDER_HWID_NOT_LOGIN -> // 60050
@@ -292,9 +302,9 @@ object TipBilling {
         OrderStatusCode.ORDER_STATE_CALLS_FREQUENT -> // 60004
             "Too many attempts — wait a moment and try again."
         OrderStatusCode.ORDER_STATE_PRODUCT_INVALID -> // 60003
-            "This product isn't available. Please update the app."
+            "This tip isn't available for your account right now. Please try again later."
         OrderStatusCode.ORDER_STATE_PARAM_ERROR -> // 60001
-            "The purchase request was invalid. Please update the app."
+            "The purchase request was invalid. Please try again later."
         // Anything not enumerated above falls through to the shared table so
         // the tip and subscription flows can never explain a code differently.
         // The tip-flavoured overrides above are deliberate — "you already own

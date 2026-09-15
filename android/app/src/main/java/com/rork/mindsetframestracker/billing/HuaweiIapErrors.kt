@@ -49,9 +49,16 @@ object HuaweiIapErrors {
         fallback: String? = null,
         context: String = "purchase",
     ): String = when (code) {
+        // 60002 is ORDER_STATE_IAP_NOT_ACTIVATED and it means in-app purchasing
+        // has not been activated for THIS APP (usually for the account's region)
+        // on the store side. It is emphatically NOT a version signal, so the old
+        // "please update to the latest version" copy sent the user chasing an
+        // update that cannot possibly fix it — which is the misleading prompt
+        // they reported, on a device whose AppGallery was already current.
         OrderStatusCode.ORDER_STATE_IAP_NOT_ACTIVATED -> // 60002
-            "In-app purchases aren't available for this app right now. " +
-                "Please update to the latest version and try again."
+            "In-app purchases aren't switched on for this app yet. That setting " +
+                "lives on the store side, so updating the app or AppGallery won't " +
+                "change it — please try again later or contact support."
         OrderStatusCode.ORDER_HWID_NOT_LOGIN -> // 60050
             "Please sign in to your Huawei ID first."
         OrderStatusCode.ORDER_STATE_NET_ERROR -> // 60005
@@ -59,9 +66,9 @@ object HuaweiIapErrors {
         OrderStatusCode.ORDER_STATE_CALLS_FREQUENT -> // 60004
             "Too many attempts — wait a moment and try again."
         OrderStatusCode.ORDER_STATE_PRODUCT_INVALID -> // 60003
-            "This product isn't available right now. Please update the app."
+            "This product isn't available for your account right now. Please try again later."
         OrderStatusCode.ORDER_STATE_PARAM_ERROR -> // 60001
-            "The purchase request was invalid. Please update the app."
+            "The purchase request was invalid. Please try again later."
         OrderStatusCode.ORDER_STATE_PRODUCT_COUNTRY_NOT_SUPPORTED -> // 60007
             "This item isn't available in your region yet."
         OrderStatusCode.ORDER_ACCOUNT_AREA_NOT_SUPPORTED -> // 60054
@@ -72,8 +79,12 @@ object HuaweiIapErrors {
             "Please accept the Huawei in-app purchase agreement, then try again."
         OrderStatusCode.ORDER_PRODUCT_CONSUMED -> // 60053
             "This purchase was already used up. Please try again."
+        // ORDER_STATE_FAILED (-1) is a generic failure. It carried "please
+        // update HMS Core", which again blamed a version for an unversioned
+        // failure; and because Android's RESULT_OK is also -1, this text used to
+        // appear even when nothing had actually failed.
         OrderStatusCode.ORDER_STATE_FAILED -> // -1 (a real failure, NOT a cancel)
-            "Huawei couldn't complete the $context. Please update HMS Core and try again."
+            "Huawei couldn't complete the $context. Please try again in a moment."
         else -> fallback ?: "Couldn't complete the $context. Please try again."
     }
 
