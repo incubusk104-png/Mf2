@@ -263,7 +263,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 "not claiming a slot (no payment evidence).",
                         )
                     } else {
-                        recordFoundingMemberClaim(result.productId, result.purchaseData, result.signature)
+                        // plan_id is the entitlement plan id; the server also
+                        // reads the product from the payload Huawei signed, so a
+                        // client that lied about the plan cannot slip a
+                        // non-founding product past the gate.
+                        recordFoundingMemberClaim(
+                            planId = result.productId,
+                            productId = result.productId,
+                            purchaseData = result.purchaseData,
+                            signature = result.signature,
+                        )
                     }
                 }
             }
@@ -967,10 +976,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * never revokes it \u2014 but it must be visible, because it means the founding
      * slot was not recorded and support may need to reconcile it.
      */
-    fun recordFoundingMemberClaim(productId: String, purchaseData: String, signature: String?) {
+    fun recordFoundingMemberClaim(
+        planId: String,
+        productId: String,
+        purchaseData: String,
+        signature: String?,
+    ) {
         viewModelScope.launch {
             val charged = runCatching {
-                supabaseSync.recordFoundingMemberClaim(productId, purchaseData, signature)
+                supabaseSync.recordFoundingMemberClaim(planId, productId, purchaseData, signature)
             }.getOrElse { e ->
                 if (BuildConfig.DEBUG) Log.w("AppViewModel", "Founding claim record failed: ${e.message}")
                 false

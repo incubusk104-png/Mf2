@@ -726,6 +726,20 @@ class SupabaseSync(context: Context) {
         val user_id: String,
         val country: String = "",
         val plan_id: String = "",
+        /** The `productId` Huawei reported for the completed order. */
+        val product_id: String = "",
+        /**
+         * The `inAppPurchaseData` JSON string and its signature, exactly as
+         * Huawei returned them in the purchase-result Intent.
+         *
+         * These are the payment evidence. The server re-parses `purchase_data`
+         * to read the purchase token, then asks Huawei's Order Service whether
+         * that token is a completed, paid order — so these two fields are what
+         * stand between a founding slot and a claim that was never paid for.
+         * Empty is treated as "no evidence" and refused server-side.
+         */
+        val purchase_data: String = "",
+        val signature: String = "",
     )
 
     /**
@@ -805,7 +819,12 @@ class SupabaseSync(context: Context) {
      * claim_founding_member() re-reads the row under an advisory lock and
      * reports the existing claim rather than consuming a second slot.
      */
-    suspend fun recordFoundingMemberClaim(planId: String): Boolean {
+    suspend fun recordFoundingMemberClaim(
+        planId: String,
+        productId: String,
+        purchaseData: String,
+        signature: String?,
+    ): Boolean {
         if (!isConfigured) return false
         return try {
             val response = client.post("$baseUrl/functions/v1/founding-member-eligibility") {
@@ -817,11 +836,22 @@ class SupabaseSync(context: Context) {
                         user_id = sessionUserId ?: deviceId,
                         country = currentRegion(),
                         plan_id = planId,
+                        product_id = productId,
+                        purchase_data = purchaseData,
+                        signature = signature.orEmpty(),
                     ),
                 )
             }
-            response.status.isSuccess().also { ok ->
-                if (!ok) Log.i(TAG, "founding-member claim record failed: ${response.status}")
+            if (!response.status.isSuccess()) {
+                // 402 = Huawei says the order is not a completed payment;
+                // 503 = it could not be checked. Both mean no slot was charged.
+                // The entitlement is NOT revoked here — the user already paid —
+                // so this must be logged loudly enough for support to reconcile.
+                val reason = runCatching { response.bodyAsText() }.getOrNull()
+                Log.i(TAG, "founding-member claim refused: ${response.status} ${reason?.take(200)}")
+                false
+            } else {
+                response.body<FoundingClaimResponse>().charged
             }
         } catch (e: Exception) {
             Log.w(TAG, "founding-member claim record error: ${e.message}")
