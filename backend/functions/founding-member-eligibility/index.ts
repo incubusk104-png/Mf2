@@ -290,15 +290,31 @@ Deno.serve(async (req) => {
         );
       }
 
-      // The product inside the signed payload must also be a founding plan —
-      // the client-supplied plan_id and the payload can disagree, and Huawei's
-      // copy is the one that counts.
+      // The product and the purchase token are read from the payload Huawei
+      // SIGNED, never from separate client fields that could be substituted.
+      // The product matters because the client-supplied plan_id and the payload
+      // can disagree, and Huawei's copy is the one that counts.
       let productId = "";
+      let purchaseToken = "";
       try {
         const parsed = JSON.parse(purchaseData);
         productId = typeof parsed.productId === "string" ? parsed.productId : "";
+        purchaseToken = typeof parsed.purchaseToken === "string" ? parsed.purchaseToken : "";
       } catch {
         return json({ error: "purchase_data is not valid JSON" }, 400);
+      }
+      if (!purchaseToken) {
+        return json(
+          {
+            eligible: false,
+            claimed: false,
+            charged: false,
+            reason: "payload_has_no_purchase_token",
+            region,
+            cap,
+          },
+          400,
+        );
       }
       if (!FOUNDING_PLAN_IDS.has(productId)) {
         return json(
@@ -321,19 +337,7 @@ Deno.serve(async (req) => {
       // ORDER_PRODUCT_OWNED, which can carry an empty payload. So the signed
       // purchase is replayed against Huawei's Order Service and only a
       // completed, purchased order is accepted.
-      const verification = await verifyHuaweiOrder(
-        // The token is read from the payload Huawei signed, never from a
-        // separate client field that could be substituted.
-        (() => {
-          try {
-            const parsed = JSON.parse(purchaseData);
-            return typeof parsed.purchaseToken === "string" ? parsed.purchaseToken : "";
-          } catch {
-            return "";
-          }
-        })(),
-        productId,
-      );
+      const verification = await verifyHuaweiOrder(purchaseToken, productId);
 
       if (verification.status !== "verified" || !verification.order) {
         // "rejected" and "unavailable" are different diagnoses but the same
