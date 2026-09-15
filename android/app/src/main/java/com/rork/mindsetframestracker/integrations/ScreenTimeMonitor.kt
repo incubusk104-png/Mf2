@@ -366,18 +366,23 @@ object ScreenTimeMonitor {
             val windowStart = startOfDayMillis(-(span - 1))
             val end = System.currentTimeMillis()
 
-            val perDay = dailyUsageMinutes(context, listOf(packageName), windowStart, end)
+            val perPackage = dailyUsageMinutes(context, listOf(packageName), windowStart, end)
                 ?: return@runCatching LimitStatus(packageName, limitMinutes, null, emptyList())
+
+            // dailyUsageMinutes is keyed package -> day -> minutes, so narrow to
+            // this package first. Indexing the outer map with a day timestamp
+            // (the previous bug) never matched anything and reported 0.
+            val byDay = perPackage[packageName].orEmpty()
 
             val week = (0 until span).map { index ->
                 val offset = index - (span - 1) // -(span-1) .. 0
                 val dayStart = startOfDayMillis(offset)
-                DayUsage(dayStartMs = dayStart, minutes = perDay[dayStart] ?: 0L)
+                DayUsage(dayStartMs = dayStart, minutes = byDay[dayStart] ?: 0L)
             }
             LimitStatus(
                 packageName = packageName,
                 limitMinutes = limitMinutes,
-                usedMinutesToday = perDay[todayStart] ?: 0L,
+                usedMinutesToday = byDay[todayStart] ?: 0L,
                 week = week,
             )
         }.onFailure {

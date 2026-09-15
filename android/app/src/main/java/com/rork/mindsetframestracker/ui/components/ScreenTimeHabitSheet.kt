@@ -60,6 +60,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
+import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
