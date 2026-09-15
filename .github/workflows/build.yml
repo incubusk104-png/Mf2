@@ -30,8 +30,12 @@ name: Build
 # OPTIONAL (activity-sync integrations): to have Strava/Polar "Connect"
 # actually work in APKs built by this workflow, also add:
 #   STRAVA_CLIENT_ID          Strava API app's public Client ID
-#   POLAR_CLIENT_ID           Polar AccessLink API client id
-#   POLAR_CLIENT_SECRET_KEY   Polar AccessLink API client secret
+#   POLAR_CLIENT_ID           Polar AccessLink API client id (PUBLIC)
+#
+# NOTE: Polar's client SECRET must NOT be supplied as a build secret. It is
+# held server-side by the polar-token-exchange Edge Function, so it never
+# reaches the APK. Supplying it here would bake it into BuildConfig, where it
+# is trivially extractable from the shipped dex.
 # (Same values already stored as Supabase Edge Function secrets. Without
 # these, the app still builds fine, but the Strava/Polar Connect buttons
 # will show "isn't configured for this build yet." instead of opening
@@ -220,13 +224,12 @@ jobs:
           # Strava/Polar "Connect" buttons compile fine but silently no-op
           # (PolarClient.isConfigured / Strava's equivalent check is false),
           # because CLIENT_ID/CLIENT_SECRET fall back to blank strings.
-          # Add STRAVA_CLIENT_ID, POLAR_CLIENT_ID and POLAR_CLIENT_SECRET_KEY
+          # Add STRAVA_CLIENT_ID and POLAR_CLIENT_ID
           # as repository secrets (Settings -> Secrets and variables ->
           # Actions) to enable these integrations in CI-built APKs — same
           # values as the Supabase Edge Function secrets of the same name.
           STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
           POLAR_CLIENT_ID: ${{ secrets.POLAR_CLIENT_ID }}
-          POLAR_CLIENT_SECRET_KEY: ${{ secrets.POLAR_CLIENT_SECRET_KEY }}
         # CI-only overrides (GitHub runners have ~7 GB): cap the Gradle JVM and
         # turn off the configuration cache to avoid flaky CI failures. This does
         # NOT change any committed files.

@@ -85,23 +85,8 @@ object MindsetHealthConnectClient {
      * Set of icon IDs whose activity data can be tracked via Health Connect.
      * Shares the same physical-movement set as Polar.
      */
-    val supportedActivityIconIds = setOf(
-        "walking", "running", "basketball", "gym", "stretch",
-        "strava_badminton", "strava_crossfit", "strava_dance",
-        "strava_elliptical", "strava_football", "strava_hiit",
-        "strava_hike", "strava_inline_skate", "strava_pilates",
-        "strava_racquetball", "strava_ride", "strava_rock_climb",
-        "strava_rowing", "strava_squash", "strava_stair_stepper",
-        "strava_swim", "strava_tennis", "strava_trail_run",
-        "strava_volleyball", "strava_weight_training", "strava_workout",
-        "strava_yoga", "strava_mountain_bike_ride", "strava_gravel_ride",
-        "strava_ebike_ride", "strava_emtb_ride", "strava_virtual_ride",
-        "strava_virtual_run", "strava_virtual_rowing", "strava_pickleball",
-        "strava_padel", "strava_cricket", "strava_skateboarding",
-        "strava_ice_skate", "strava_snowboard", "strava_snowshoe",
-        "strava_alpine_ski", "strava_backcountry_ski", "strava_nordic_ski",
-        "strava_roller_ski", "table_tennis",
-    )
+    val supportedActivityIconIds: Set<String> =
+        com.rork.mindsetframestracker.data.SPORT_ACTIVITY_ICON_IDS
 
     fun isActivitySupported(iconId: String): Boolean = iconId in supportedActivityIconIds
 

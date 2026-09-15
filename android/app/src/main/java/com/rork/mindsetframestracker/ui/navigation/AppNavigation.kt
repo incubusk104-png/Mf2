@@ -64,6 +64,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
 import com.rork.mindsetframestracker.ui.AppViewModel
+import com.rork.mindsetframestracker.data.Dates
+import com.rork.mindsetframestracker.data.HabitTrackingMode
+import com.rork.mindsetframestracker.data.habitLogsFor
+import com.rork.mindsetframestracker.data.trackingModeOrDefault
 import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.components.AuthPromptSheet
 import com.rork.mindsetframestracker.data.TimerRepository
@@ -72,6 +76,7 @@ import com.rork.mindsetframestracker.notifications.HabitTimerRequests
 import com.rork.mindsetframestracker.notifications.TimerController
 import com.rork.mindsetframestracker.notifications.TimerService
 import com.rork.mindsetframestracker.data.MindsetRepository
+import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.ui.screens.TimerCompletionPopup
 import com.rork.mindsetframestracker.ui.components.SetNewPasswordSheet
 import com.rork.mindsetframestracker.ui.components.SyncStatusBanner
@@ -83,7 +88,7 @@ import com.rork.mindsetframestracker.ui.screens.OnboardingScreen
 import com.rork.mindsetframestracker.ui.screens.SettingsScreen
 import com.rork.mindsetframestracker.ui.screens.SplashScreen
 import com.rork.mindsetframestracker.ui.screens.TimerScreen
-import com.rork.mindsetframestracker.ui.screens.HabitTimerOptionsSheet
+import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
 import com.rork.mindsetframestracker.util.rememberIsOnline
@@ -197,6 +202,7 @@ private fun ConnectivityStatusIcon(
  */
 @Composable
 private fun HabitTimerOptionsHost(
+    viewModel: AppViewModel,
     onOpenTimerScreen: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -236,27 +242,69 @@ private fun HabitTimerOptionsHost(
 
     val pending = request ?: return
 
-    // The ringing habit's own catalog artwork. Resolved off the main thread —
-    // decoding the app blob synchronously in composition is exactly the
-    // main-thread stall that has to stay off the ring path. The sheet falls
-    // back to its generic timer glyph for the first frame.
-    var iconId by remember(pending.habitId) { mutableStateOf(pending.iconId) }
-    if (pending.iconId == null) {
-        LaunchedEffect(pending.habitId) {
-            iconId = withContext(Dispatchers.IO) {
-                runCatching {
-                    MindsetRepository(context).load().habits
-                        .firstOrNull { it.id == pending.habitId }?.iconId
-                }.getOrNull()
-            }
+    // Everything the ring sheet needs about the habit, resolved off the main
+    // thread: decoding the app blob synchronously in composition is exactly the
+    // main-thread stall that has to stay off the ring path. The sheet renders
+    // its generic glyph for the first frame and fills in when this lands.
+    var habit by remember(pending.habitId) {
+        mutableStateOf<com.rork.mindsetframestracker.data.Habit?>(null)
+    }
+    LaunchedEffect(pending.habitId) {
+        habit = withContext(Dispatchers.IO) {
+            runCatching {
+                MindsetRepository(context).load().habits
+                    .firstOrNull { it.id == pending.habitId }
+            }.getOrNull()
         }
     }
 
-    HabitTimerOptionsSheet(
-        habitId = pending.habitId,
-        habitName = pending.habitName.ifBlank { "Habit" },
-        habitIconId = iconId,
-        onOpenTimerScreen = {
+    // The habit's OWN tool. Recorded at ring time by HabitReminderReceiver and
+    // authoritative; the fallbacks only cover a ring whose habit has since been
+    // edited away. One-tap habits never reach this host at all — the receiver
+    // does not raise a request for them — so this sheet is only ever shown for
+    // a habit that genuinely needs an input.
+    val mode = habit?.trackingModeOrDefault ?: pending.mode ?: HabitTrackingMode.CHECK
+    val name = habit?.name?.takeIf { it.isNotBlank() } ?: pending.habitName.ifBlank { "Habit" }
+
+    // The habit's own data, so the sheet shows what is already inside it
+    // rather than asking the user to add blind: "3 of 8 glasses today" for
+    // water, this week's entries for a journal. Read from the already-loaded
+    // in-memory state rather than the repository, because this must not add
+    // I/O to the ring path — the sheet's own recent-logs section renders it.
+    val appData by viewModel.state.collectAsStateWithLifecycle()
+
+    HabitTrackingSheet(
+        habitName = name,
+        habitIconId = habit?.iconId ?: pending.iconId,
+        trackingMode = mode,
+        targetSeconds = habit?.trackingTargetSeconds ?: 0,
+        targetCount = habit?.trackingTargetCount ?: 0,
+        unit = habit?.trackingUnit.orEmpty(),
+        recentLogs = appData.habitLogsFor(pending.habitId).take(3),
+        onRecord = { title, note, durationSeconds, count ->
+            // Recorded through the single tracking entry point, so the ring
+            // writes the same payload (and the same [HabitLogEntry]) the
+            // Habits screen writes. The mode decides the shape of the record,
+            // which is why it is passed explicitly rather than inferred.
+            viewModel.recordHabitTracking(
+                habitId = pending.habitId,
+                mode = mode,
+                title = title,
+                note = note,
+                durationSeconds = durationSeconds,
+                count = count,
+                unit = habit?.trackingUnit,
+            )
+            request = null
+        },
+        onStartTimed = { kind, target ->
+            TimerController.start(
+                context = context,
+                kind = kind,
+                targetSeconds = target,
+                label = name,
+                habitId = pending.habitId,
+            )
             request = null
             onOpenTimerScreen()
         },
@@ -759,6 +807,7 @@ fun AppNavigation(viewModel: AppViewModel) {
             // does not depend on the full-screen-intent grant that
             // AlarmRingingActivity needs to launch at all.
             HabitTimerOptionsHost(
+                viewModel = viewModel,
                 onOpenTimerScreen = {
                     navController.navigate("timer") { launchSingleTop = true }
                 },

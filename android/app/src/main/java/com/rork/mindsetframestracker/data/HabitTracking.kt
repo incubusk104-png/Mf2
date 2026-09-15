@@ -203,3 +203,197 @@ fun AppData.latestHabitLog(habitId: String): HabitLogEntry? = habitLogsFor(habit
 /** Entry for [habitId] on one day, if any \u2014 used for "you already logged this". */
 fun AppData.habitLogOn(habitId: String, dayKey: String): HabitLogEntry? =
     habitLogsFor(habitId).firstOrNull { it.dayKey == dayKey }
+
+/**
+ * **Every** entry for [habitId] on [dayKey], newest first.
+ *
+ * The single-entry [habitLogOn] above answers "was anything logged"; this
+ * answers "what was logged". They are different questions for a COUNT habit:
+ * "Drink water" tapped five times in a day is five entries, and anything that
+ * wants to show or total them must not stop at the first.
+ */
+fun AppData.habitLogsOn(habitId: String, dayKey: String): List<HabitLogEntry> =
+    habitLogsFor(habitId).filter { it.dayKey == dayKey }
+
+/** Sum of every [HabitLogEntry.count] recorded for [habitId] on [dayKey]. */
+fun AppData.habitCountOn(habitId: String, dayKey: String): Int =
+    habitLogsOn(habitId, dayKey).sumOf { it.count ?: 0 }
+
+/**
+ * Glasses of water so far today.
+ *
+ * This is the summing counterpart to [habitLogOn]'s single-entry semantics,
+ * and it exists because the two are genuinely different: for a TIMER habit
+ * "today's entry" is the right thing to show, but for a COUNT habit it is
+ * actively wrong — a user who has had five glasses must not be shown
+ * "1 glass". Callers showing progress against a COUNT goal use this.
+ */
+fun AppData.todayCount(habitId: String): Int = habitCountOn(habitId, Dates.todayKey())
+
+/** Seconds recorded for [habitId] today, summed across every entry. */
+fun AppData.todaySeconds(habitId: String): Int =
+    habitLogsOn(habitId, Dates.todayKey()).sumOf { it.durationSeconds ?: 0 }
+
+/** One habit's totals over a set of days — the shape both Weekly and the
+ *  dialog's "this week" strip read. */
+data class HabitTotals(
+    val sessions: Int,
+    val totalCount: Int,
+    val totalSeconds: Int,
+    val notes: Int,
+) {
+    val isEmpty: Boolean get() = sessions == 0
+
+    companion object {
+        val EMPTY = HabitTotals(sessions = 0, totalCount = 0, totalSeconds = 0, notes = 0)
+    }
+}
+
+/** Totals for [habitId] across [dayKeys] (a week, a month, any window). */
+fun AppData.habitTotalsOver(habitId: String, dayKeys: Collection<String>): HabitTotals {
+    val days = dayKeys.toSet()
+    val entries = habitLogs.filter { it.habitId == habitId && it.dayKey in days }
+    if (entries.isEmpty()) return HabitTotals.EMPTY
+    return HabitTotals(
+        sessions = entries.size,
+        totalCount = entries.sumOf { it.count ?: 0 },
+        totalSeconds = entries.sumOf { it.durationSeconds ?: 0 },
+        notes = entries.count { !it.note.isNullOrBlank() || !it.title.isNullOrBlank() },
+    )
+}
+
+/** Every habit that has at least one log entry in [dayKeys], in habit order. */
+fun AppData.habitsLoggedOver(dayKeys: Collection<String>): List<Habit> {
+    val days = dayKeys.toSet()
+    val logged = habitLogs.filter { it.dayKey in days }.map { it.habitId }.toSet()
+    return habits.filter { it.id in logged }
+}
+
+/**
+ * True when [habitId] was completed on [dayKey] by **either** route — the
+ * check-in boolean or a recorded log entry.
+ *
+ * Why both: the check-in map is what streaks, badges and the heatmap are built
+ * on, and every write path in the app sets it. But a log entry is itself
+ * evidence the user did the thing, and it is written by paths (a synced
+ * activity, a restored backup from a build that logged without checking in)
+ * that may legitimately have no check-in behind them. Treating a real record
+ * as "not done" would make the Weekly and Insight views disagree with the
+ * record the user just created — which is exactly the disconnect this exists
+ * to remove. [InsightsScreen] already merged synced activity into "done" this
+ * way; this is that same rule, stated once and reused.
+ */
+fun AppData.isHabitDoneOn(habitId: String, dayKey: String): Boolean =
+    isCheckedOn(habitId, dayKey) ||
+        habitLogs.any { it.habitId == habitId && it.dayKey == dayKey }
+
+/** Habits completed on [dayKey], counting a log entry as completion. */
+fun AppData.completedCountOnIncludingLogs(dayKey: String): Int =
+    habits.count { isHabitDoneOn(it.id, dayKey) }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Alarm behaviour — what the RING does, as opposed to what the input needs
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What a habit's **alarm** does the moment it rings.
+ *
+ * This is a different question from [HabitTrackingMode] and it exists because
+ * routing the ring through the tracking mode alone gets two cases wrong:
+ *
+ * A habit's mode describes the *input* it needs. The ring has to decide
+ * something else: does the user need to be asked anything at all right now, or
+ * does the very act of dismissing the alarm already answer the question?
+ *
+ * For "Take a vitamin" it does — the tap on Stop *is* the record, and raising
+ * a dialog to confirm what the user just told you by dismissing is pure
+ * friction. For "Journal" it does not: no tap can invent a sentence, so the
+ * note has to be asked for. For "Walk 30 minutes" neither a tap nor a sentence
+ * works — the habit is a measurement, so the ring has to hand over the
+ * measuring tool.
+ *
+ * ## Why this is derived from the mode rather than from a sport/non-sport test
+ *
+ * The obvious-sounding rule ("sport habits get a dialog, everything else is
+ * one tap") silently breaks habits that are not sport but are still measured:
+ * `read`, `tidy`, `plan`, `noPhone`, `meeting` and `stretch` all default to
+ * [HabitTrackingMode.TIMER]. Deciding the ring by "is this a sport?" would
+ * delete six working timers. Deriving from the mode keeps every habit's own
+ * tool intact and still gives the user exactly the behaviour they asked for on
+ * the examples that matter (water, vitamins → tap; walking, running → the
+ * stopwatch; journal → the note field).
+ *
+ * Sport is a separate, *additive* dimension — see [Habit.isSportActivity] —
+ * that additionally offers the Strava / Health Connect / Polar sources. It
+ * never decides whether a dialog appears.
+ */
+enum class HabitAlarmBehavior {
+    /** The dismissal IS the record. No dialog, nothing to ask. */
+    ONE_TAP,
+
+    /**
+     * A dialog, but a tiny one — the record needs one value a tap cannot
+     * imply: a count ("how many glasses?") or a note ("what did you write?").
+     */
+    MINIMAL_INPUT,
+
+    /** The habit is a measurement: hand over its own timer/stopwatch. */
+    TOOL,
+}
+
+/**
+ * The ring behaviour for this habit, derived from [Habit.trackingModeOrDefault]
+ * so an explicit user choice always decides it — the same precedence every
+ * other part of the tracking model uses.
+ */
+val Habit.alarmBehavior: HabitAlarmBehavior
+    get() = when (trackingModeOrDefault) {
+        HabitTrackingMode.CHECK -> HabitAlarmBehavior.ONE_TAP
+        HabitTrackingMode.COUNT, HabitTrackingMode.JOURNAL -> HabitAlarmBehavior.MINIMAL_INPUT
+        HabitTrackingMode.TIMER, HabitTrackingMode.STOPWATCH -> HabitAlarmBehavior.TOOL
+    }
+
+/**
+ * The physical-movement activities that a step/heart-rate source can actually
+ * supply data for.
+ *
+ * **One list, not two.** This set previously existed verbatim in both
+ * [com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient] and
+ * [com.rork.mindsetframestracker.integrations.PolarClient] — the same 46 ids,
+ * copy-pasted. Two copies of "which activities count as movement" is how a
+ * habit ends up supported by the Health Connect row and silently missing from
+ * the Polar one, or vice versa; the failure is invisible because both lists
+ * look right in isolation. They are now one list, and the source clients read
+ * it from here.
+ */
+val SPORT_ACTIVITY_ICON_IDS: Set<String> = setOf(
+    "walking", "running", "basketball", "gym", "stretch",
+    "strava_badminton", "strava_crossfit", "strava_dance",
+    "strava_elliptical", "strava_football", "strava_hiit",
+    "strava_hike", "strava_inline_skate", "strava_pilates",
+    "strava_racquetball", "strava_ride", "strava_rock_climb",
+    "strava_rowing", "strava_squash", "strava_stair_stepper",
+    "strava_swim", "strava_tennis", "strava_trail_run",
+    "strava_volleyball", "strava_weight_training", "strava_workout",
+    "strava_yoga", "strava_mountain_bike_ride", "strava_gravel_ride",
+    "strava_ebike_ride", "strava_emtb_ride", "strava_virtual_ride",
+    "strava_virtual_run", "strava_virtual_rowing", "strava_pickleball",
+    "strava_padel", "strava_cricket", "strava_skateboarding",
+    "strava_ice_skate", "strava_snowboard", "strava_snowshoe",
+    "strava_alpine_ski", "strava_backcountry_ski", "strava_nordic_ski",
+    "strava_roller_ski", "table_tennis",
+)
+
+/** True when [iconId] names an activity a movement data source can supply. */
+fun isSportActivityIcon(iconId: String?): Boolean =
+    iconId != null && iconId in SPORT_ACTIVITY_ICON_IDS
+
+/**
+ * True when this habit is a physical-movement activity.
+ *
+ * Additive only: it decides whether the ring dialog *also* offers the Strava /
+ * Health Connect / Polar sources, never whether a dialog appears at all (that
+ * is [Habit.alarmBehavior], so a non-sport TIMER habit keeps its timer).
+ */
+val Habit.isSportActivity: Boolean
+    get() = isSportActivityIcon(iconId)

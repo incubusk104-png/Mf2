@@ -4,6 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.rork.mindsetframestracker.data.HabitAlarmBehavior
+import com.rork.mindsetframestracker.data.MindsetRepository
+import com.rork.mindsetframestracker.data.alarmBehavior
+import com.rork.mindsetframestracker.data.isSportActivity
+import com.rork.mindsetframestracker.data.trackingModeOrDefault
 
 /**
  * Fired by the app's own [android.app.AlarmManager] alarm that
@@ -42,21 +47,38 @@ class HabitReminderReceiver : BroadcastReceiver() {
         )) {
             is HabitCheckInNotifier.NotifyResult.Posted -> {
                 // The alarm actually reached the user, so this is the moment the
-                // timer/stopwatch choice becomes due. Written HERE, on the
-                // notification path, rather than from AlarmRingingActivity:
-                // that screen only launches when USE_FULL_SCREEN_INTENT is
-                // granted (Android 14+ revokes it by default), so a ring that
-                // never reached it used to leave no request behind and the
-                // popup never appeared. A plain SharedPreferences write - no
-                // repository read, so nothing is added to the ring path.
-                runCatching {
-                    HabitTimerRequests.request(
-                        context = context,
-                        habitId = habitId,
-                        habitName = habitName,
-                        iconId = null,
-                    )
-                }.onFailure { Log.w(TAG, "Could not record the timer/stopwatch request", it) }
+                // habit's own tool becomes due — but ONLY for a habit whose
+                // completion needs a tool.
+                //
+                // Whether a dialog is right at all is the habit's own
+                // [Habit.alarmBehavior]: a CHECK habit ("Take a vitamin") is
+                // answered by the dismissal itself, so raising a timer sheet for
+                // it asked the user to configure a measurement it does not have
+                // and made a one-tap habit cost three taps. A COUNT or JOURNAL
+                // habit does need input, but not a *timer* — its sheet renders
+                // the stepper or the note field, chosen from the mode recorded
+                // here. Only TIMER/STOPWATCH habits actually want the tool.
+                //
+                // Written HERE, on the notification path, rather than from
+                // AlarmRingingActivity: that screen only launches when
+                // USE_FULL_SCREEN_INTENT is granted (Android 14+ revokes it by
+                // default), so a ring that never reached it used to leave no
+                // request behind and the popup never appeared.
+                val habit = runCatching {
+                    MindsetRepository(context).load().habits.firstOrNull { it.id == habitId }
+                }.getOrNull()
+                if (habit != null && habit.alarmBehavior != HabitAlarmBehavior.ONE_TAP) {
+                    runCatching {
+                        HabitTimerRequests.request(
+                            context = context,
+                            habitId = habitId,
+                            habitName = habitName,
+                            iconId = habit.iconId,
+                            mode = habit.trackingModeOrDefault,
+                            isSport = habit.isSportActivity,
+                        )
+                    }.onFailure { Log.w(TAG, "Could not record the timer/stopwatch request", it) }
+                }
 
                 if (result.doNotDisturbActive) {
                     Log.w(TAG, "Habit reminder for '$habitName' posted, but Do Not Disturb / a Focus mode is active — it may not visibly appear")

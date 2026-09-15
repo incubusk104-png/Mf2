@@ -38,6 +38,8 @@ object HabitTimerRequests {
     private const val KEY_HABIT_ID = "pending_habit_id"
     private const val KEY_HABIT_NAME = "pending_habit_name"
     private const val KEY_ICON_ID = "pending_icon_id"
+    private const val KEY_MODE = "pending_mode"
+    private const val KEY_IS_SPORT = "pending_is_sport"
     private const val KEY_AUTO_SYNC_HABIT_ID = "pending_auto_sync_habit_id"
 
     /** A pending "show me this habit's timer options" request. */
@@ -45,6 +47,19 @@ object HabitTimerRequests {
         val habitId: String,
         val habitName: String,
         val iconId: String?,
+        /**
+         * The habit's tracking mode at ring time, so the sheet can render the
+         * input this habit actually needs rather than guessing from the icon.
+         * Null only for a request written by an older build.
+         */
+        val mode: com.rork.mindsetframestracker.data.HabitTrackingMode? = null,
+        /**
+         * True when the habit is a physical-movement activity, which is what
+         * decides whether the sheet also offers the Strava / Health Connect /
+         * Polar sources. Additive only — it never changes whether the sheet
+         * opens at all.
+         */
+        val isSport: Boolean = false,
     )
 
     private fun prefs(context: Context): SharedPreferences =
@@ -55,12 +70,21 @@ object HabitTimerRequests {
      * should open. Overwrites any earlier unconsumed request, so the newest
      * ring always wins rather than queueing a backlog of sheets.
      */
-    fun request(context: Context, habitId: String, habitName: String, iconId: String?) {
+    fun request(
+        context: Context,
+        habitId: String,
+        habitName: String,
+        iconId: String?,
+        mode: com.rork.mindsetframestracker.data.HabitTrackingMode? = null,
+        isSport: Boolean = false,
+    ) {
         if (habitId.isBlank()) return
         prefs(context).edit()
             .putString(KEY_HABIT_ID, habitId)
             .putString(KEY_HABIT_NAME, habitName)
             .putString(KEY_ICON_ID, iconId)
+            .putString(KEY_MODE, mode?.name)
+            .putBoolean(KEY_IS_SPORT, isSport)
             .apply()
     }
 
@@ -73,6 +97,12 @@ object HabitTimerRequests {
             habitId = id,
             habitName = p.getString(KEY_HABIT_NAME, null).orEmpty(),
             iconId = p.getString(KEY_ICON_ID, null),
+            mode = p.getString(KEY_MODE, null)?.let { name ->
+                runCatching {
+                    com.rork.mindsetframestracker.data.HabitTrackingMode.valueOf(name)
+                }.getOrNull()
+            },
+            isSport = p.getBoolean(KEY_IS_SPORT, false),
         )
     }
 
@@ -82,6 +112,8 @@ object HabitTimerRequests {
             .remove(KEY_HABIT_ID)
             .remove(KEY_HABIT_NAME)
             .remove(KEY_ICON_ID)
+            .remove(KEY_MODE)
+            .remove(KEY_IS_SPORT)
             .apply()
     }
 

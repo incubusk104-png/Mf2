@@ -274,6 +274,80 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             }
         }
 
+        // ── "Your week in numbers" — what the habits' own tools recorded ──
+        //
+        // The two cards above count *check-ins*: they answer "how many days did
+        // you do it". They cannot answer "how much did you do", because a
+        // check-in is a boolean and the payload lives in the habit's log
+        // entries. Without this section a week of five walks (measured, with
+        // durations) and a week of five taps looked identical — and a habit
+        // like "Drink water", whose whole point is the quantity, showed nothing
+        // about the water at all.
+        //
+        // Only habits that actually recorded something appear, so a CHECK-only
+        // user sees no empty card.
+        val weekKeys = week.map { Dates.key(it) }
+        val loggedHabits = data.habits.filter { habit ->
+            data.habitLogs.any { it.habitId == habit.id && it.dayKey in weekKeys }
+        }
+        if (loggedHabits.isNotEmpty()) {
+            EntranceItem(index = 2) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "Your week in numbers",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        loggedHabits.forEach { habit ->
+                            val entries = data.habitLogs.filter {
+                                it.habitId == habit.id && it.dayKey in weekKeys
+                            }
+                            val totalCount = entries.sumOf { it.count ?: 0 }
+                            val totalSeconds = entries.sumOf { it.durationSeconds ?: 0 }
+                            val noteCount = entries.count {
+                                !it.note.isNullOrBlank() || !it.title.isNullOrBlank()
+                            }
+                            val line = when {
+                                totalCount > 0 -> com.rork.mindsetframestracker.data.RuleBasedInsight
+                                    .forCount(
+                                        unit = habit.trackingUnit.orEmpty(),
+                                        total = totalCount,
+                                        target = habit.trackingTargetCount,
+                                        label = habit.name,
+                                    )
+                                totalSeconds > 0 -> com.rork.mindsetframestracker.data.RuleBasedInsight
+                                    .forDuration(
+                                        label = habit.name,
+                                        totalSeconds = totalSeconds,
+                                        targetSeconds = habit.trackingTargetSeconds,
+                                    )
+                                noteCount > 0 ->
+                                    "$noteCount ${if (noteCount == 1) "entry" else "entries"} written for ${habit.name}."
+                                else ->
+                                    "${entries.size} ${if (entries.size == 1) "session" else "sessions"} recorded for ${habit.name}."
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = line,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Insights — Premium gets the full stats panel; free users see a
         // locked teaser with greyed placeholder rows and an upgrade CTA.
         if (hasAccess) {

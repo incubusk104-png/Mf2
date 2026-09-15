@@ -29,6 +29,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -40,6 +42,14 @@ data class RemoteSnapshot(
     val habits: List<Habit>,
     val checkIns: Map<String, List<String>>,
     val moodHistory: Map<String, MoodMode>,
+    /**
+     * What each habit's tracking tool actually recorded. Defaults to empty so
+     * a project that hasn't run the habit_logs migration yet still restores
+     * cleanly rather than failing the whole pull.
+     */
+    val habitLogs: List<HabitLogEntry> = emptyList(),
+    /** Activity sessions previously uploaded from any device. */
+    val activityRecords: List<ActivityRecord> = emptyList(),
 )
 
 /**
@@ -844,6 +854,56 @@ class SupabaseSync(context: Context) {
     )
 
     /**
+     * One [HabitLogEntry]. Field names mirror the `habit_logs` table exactly,
+     * so PostgREST can upsert this straight through.
+     */
+    @Serializable
+    private data class HabitLogRow(
+        val id: String,
+        val user_id: String? = null,
+        val device_id: String? = null,
+        val habit_id: String,
+        val day: String,
+        val mode: String? = null,
+        val title: String? = null,
+        val note: String? = null,
+        val count: Int? = null,
+        val unit: String? = null,
+        val duration_seconds: Int? = null,
+        val logged_at_ms: Long = 0L,
+    )
+
+    /**
+     * One device-captured [ActivityRecord], written into the EXISTING
+     * `activity_data` table that `smart-alarms` and `consistency-report`
+     * already read.
+     *
+     * Two deliberate choices:
+     * - `provider` is 'health_connect' (currently the only device-side
+     *   source), and `provider_activity_id` is the record's own id, which is
+     *   what makes the upload idempotent against the table's
+     *   UNIQUE (user_id, provider, provider_activity_id).
+     * - `connection_id` is omitted: a locally-captured record has no
+     *   third-party OAuth connection, and the column is nullable for exactly
+     *   this case.
+     */
+    @Serializable
+    private data class ActivityRow(
+        val user_id: String? = null,
+        val provider: String,
+        val provider_activity_id: String,
+        val activity_type: String,
+        val started_at: String,
+        val activity_date: String,
+        val duration_seconds: Int? = null,
+        val distance_meters: Double? = null,
+        val calories_burned: Double? = null,
+        val heart_rate_avg: Int? = null,
+        val steps: Int? = null,
+        val raw_data: JsonObject? = null,
+    )
+
+    /**
      * Upserts the full local snapshot into Supabase. Returns null on success
      * or a short user-facing error message on failure.
      */
@@ -885,6 +945,51 @@ class SupabaseSync(context: Context) {
             val settings = listOf(
                 SettingsRow(id = deviceId, device_id = deviceId, user_id = uid, payload = data.settings)
             )
+            // The tracking payloads. habit_id is a uuid column server-side, so
+            // an entry whose habit id isn't a UUID is dropped here rather than
+            // failing the entire push — the same defence the check-ins above
+            // use, and for the same reason: one stray key must not be able to
+            // wedge sync permanently.
+            val habitLogs = data.habitLogs
+                .filter { runCatching { UUID.fromString(it.habitId) }.isSuccess }
+                .map {
+                    HabitLogRow(
+                        id = it.id,
+                        user_id = uid,
+                        device_id = deviceId,
+                        habit_id = it.habitId,
+                        day = it.dayKey,
+                        mode = it.mode?.name,
+                        title = it.title,
+                        note = it.note,
+                        count = it.count,
+                        unit = it.unit,
+                        duration_seconds = it.durationSeconds,
+                        logged_at_ms = it.recordedAtEpochMs,
+                    )
+                }
+            val activities = data.activityRecords
+                .filter { runCatching { UUID.fromString(it.habitId) }.isSuccess }
+                .map { record ->
+                    val startedAt = java.time.Instant.ofEpochMilli(record.timestamp)
+                    ActivityRow(
+                        user_id = uid,
+                        provider = DEVICE_ACTIVITY_PROVIDER,
+                        provider_activity_id = record.id,
+                        activity_type = record.activityType,
+                        started_at = startedAt.toString(),
+                        activity_date = startedAt
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDate()
+                            .toString(),
+                        duration_seconds = record.durationMinutes?.let { it * 60 },
+                        distance_meters = record.distanceMeters,
+                        calories_burned = record.calories?.toDouble(),
+                        heart_rate_avg = record.heartRateAvg,
+                        steps = record.steps?.toInt(),
+                        raw_data = buildJsonObject { put("source", JsonPrimitive(record.source)) },
+                    )
+                }
 
             // Apply deletions before upserts: a habit removed locally must
             // actually be removed from Supabase, not just left out of this
@@ -896,6 +1001,16 @@ class SupabaseSync(context: Context) {
             upsert("checkins", checkins, onConflict = "user_id,habit_id,day")?.let { return it }
             upsert("mood_log", moods, onConflict = "user_id,day")?.let { return it }
             upsert("settings", settings, onConflict = "id")?.let { return it }
+            // The tracking payloads. These two were the gap: habit logs were
+            // device-local only (a journal note was lost on reinstall), and
+            // device-captured Health Connect activity never reached the server,
+            // so smart-alarms and consistency-report could not see it.
+            upsert("habit_logs", habitLogs, onConflict = "id")?.let { return it }
+            upsert(
+                "activity_data",
+                activities,
+                onConflict = "user_id,provider,provider_activity_id",
+            )?.let { return it }
             prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
             null
         } catch (e: Exception) {
@@ -917,6 +1032,9 @@ class SupabaseSync(context: Context) {
             val habits = select<HabitRow>("habits") ?: return null to PULL_ERROR
             val checkins = select<CheckinRow>("checkins") ?: return null to PULL_ERROR
             val moods = select<MoodLogRow>("mood_log") ?: return null to PULL_ERROR
+            // Additive: absence of these tables must not break a restore.
+            val habitLogs = selectOrEmpty<HabitLogRow>("habit_logs")
+            val activities = selectOrEmpty<ActivityRow>("activity_data")
             val snapshot = RemoteSnapshot(
                 habits = habits.map {
                     Habit(
@@ -937,6 +1055,39 @@ class SupabaseSync(context: Context) {
                 moodHistory = moods.mapNotNull { row ->
                     runCatching { row.day to MoodMode.valueOf(row.mode) }.getOrNull()
                 }.toMap(),
+                habitLogs = habitLogs.map { row ->
+                    HabitLogEntry(
+                        id = row.id,
+                        habitId = row.habit_id,
+                        dayKey = row.day,
+                        mode = row.mode?.let { name ->
+                            runCatching { HabitTrackingMode.valueOf(name) }.getOrNull()
+                        },
+                        title = row.title,
+                        note = row.note,
+                        count = row.count,
+                        unit = row.unit,
+                        durationSeconds = row.duration_seconds,
+                        recordedAtEpochMs = row.logged_at_ms,
+                    )
+                },
+                activityRecords = activities.map { row ->
+                    ActivityRecord(
+                        id = row.provider_activity_id,
+                        habitId = "",
+                        source = row.raw_data?.get("source")?.jsonPrimitive?.contentOrNull
+                            ?: row.provider,
+                        activityType = row.activity_type,
+                        timestamp = runCatching {
+                            java.time.Instant.parse(row.started_at).toEpochMilli()
+                        }.getOrDefault(0L),
+                        durationMinutes = row.duration_seconds?.let { it / 60 },
+                        distanceMeters = row.distance_meters,
+                        steps = row.steps?.toLong(),
+                        heartRateAvg = row.heart_rate_avg,
+                        calories = row.calories_burned?.toInt(),
+                    )
+                },
             )
             snapshot to null
         } catch (e: Exception) {
@@ -957,6 +1108,24 @@ class SupabaseSync(context: Context) {
         }
         return response.body()
     }
+
+    /**
+     * [select], but a failure returns an empty list instead of failing the
+     * caller.
+     *
+     * Used for the two tracking-payload tables, which are additive to restore:
+     * if `habit_logs` doesn't exist yet on this project (migration not run),
+     * the user must still get their habits, check-ins and moods back rather
+     * than an all-or-nothing restore failure. Losing the logs is recoverable
+     * and visible; losing the whole account restore is not.
+     */
+    private suspend inline fun <reified T> selectOrEmpty(table: String): List<T> =
+        try {
+            select<T>(table) ?: emptyList()
+        } catch (e: Exception) {
+            Log.w(TAG, "Optional select $table failed: ${e.message}")
+            emptyList()
+        }
 
     private suspend fun authedGet(table: String, uid: String): HttpResponse =
         client.get("$baseUrl/rest/v1/$table?user_id=eq.$uid&select=*") {
@@ -1076,5 +1245,11 @@ class SupabaseSync(context: Context) {
          */
         private const val UNKNOWN_REGION = "ZZ"
         private const val PULL_ERROR = "Couldn't restore your data. Check your connection and try again."
+
+        /**
+         * `provider` value for activity rows captured on the device rather
+         * than pulled from a third-party OAuth connection.
+         */
+        private const val DEVICE_ACTIVITY_PROVIDER = "health_connect"
     }
 }

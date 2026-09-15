@@ -1347,10 +1347,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val mergedCheckIns = (data.checkIns.keys + snapshot.checkIns.keys).associateWith { habitId ->
                 (data.checkIns[habitId].orEmpty() + snapshot.checkIns[habitId].orEmpty()).distinct()
             }
+            // Restored tracking payloads. Union by entry id so re-restoring (or
+            // restoring twice) can't duplicate a journal note or double-count
+            // glasses of water, and local entries always win on a conflict.
+            val mergedLogs = (data.habitLogs + snapshot.habitLogs)
+                .associateBy { it.id }
+                .values
+                .sortedBy { it.loggedAtMs }
+            val mergedActivity = (data.activityRecords + snapshot.activityRecords)
+                .associateBy { it.id }
+                .values
+                .sortedBy { it.timestamp }
             data.copy(
                 habits = mergedHabits,
                 checkIns = mergedCheckIns,
                 moodHistory = snapshot.moodHistory + data.moodHistory,
+                habitLogs = mergedLogs,
+                activityRecords = mergedActivity,
             )
         }
     }
@@ -1583,9 +1596,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         queueSync()
     }
 
-    /** Today's recorded entry for a habit, if anything was logged yet. */
-    fun todayTrackingLogFor(habitId: String): HabitLogEntry? =
-        _state.value.habitLogsFor(habitId).firstOrNull { it.dayKey == Dates.todayKey() }
+    /** Today's recorded entries for a habit, newest first (empty when none). */
+    fun todayTrackingLogsFor(habitId: String): List<HabitLogEntry> =
+        _state.value.habitLogsOn(habitId, Dates.todayKey())
+
+    /** Most recent recorded entries for a habit — what its dialog shows. */
+    fun recentTrackingLogsFor(habitId: String, limit: Int = 3): List<HabitLogEntry> =
+        _state.value.habitLogsFor(habitId).take(limit)
 
     fun canAddHabit(): Boolean =
         _state.value.settings.hasFeatureAccess() || _state.value.habits.size < MAX_FREE_HABITS

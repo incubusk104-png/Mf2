@@ -62,13 +62,10 @@ object PolarClient {
      */
     val CLIENT_ID: String = BuildConfig.POLAR_CLIENT_ID
 
-    /**
-     * Legacy: Polar AccessLink OAuth client secret for the direct token
-     * exchange fallback. New builds should leave this BLANK and rely on the
-     * polar-token-exchange Edge Function instead, so no secret ships in the
-     * APK.
-     */
-    val CLIENT_SECRET: String = BuildConfig.POLAR_CLIENT_SECRET
+    // NOTE: there is deliberately no CLIENT_SECRET here. The client secret
+    // lives only in the polar-token-exchange Edge Function, so it can never
+    // be read out of the shipped APK's dex. All token exchange goes through
+    // that function — see [exchangeCodeForTokens].
 
     private const val REDIRECT_URI = "mindsetframes://polar-callback"
     private const val AUTH_URL = "https://flow.polar.com/oauth2/authorization"
@@ -80,13 +77,17 @@ object PolarClient {
 
     /**
      * True when the Polar Connect button can work. Only the PUBLIC client id
-     * is required now — the secret lives server-side in the Edge Function.
-     * (Previously this also demanded CLIENT_SECRET, which made every build
-     * without the extra CI secret show "Polar isn't configured".)
+     * (baked in, or discoverable from the Edge Function) is required — the
+     * client secret is server-side and never present in this build.
+     *
+     * This now means exactly [canAttemptConnect]. It previously OR'd in a
+     * BuildConfig secret that no longer exists, which made the two disagree:
+     * a build with a Supabase URL but no baked-in client id reported
+     * "configured" while `canAttemptConnect` was false, so the UI offered a
+     * Connect button that could only ever fail.
      */
     val isConfigured: Boolean
-        get() = CLIENT_ID.isNotBlank() &&
-            (BuildConfig.SUPABASE_URL.isNotBlank() || CLIENT_SECRET.isNotBlank())
+        get() = canAttemptConnect
 
     /**
      * True when a Connect attempt can be made AT ALL — either the client id
@@ -141,23 +142,8 @@ object PolarClient {
      * Same set of physical-movement activities supported via step-based
      * tracking from the Polar device/app.
      */
-    val supportedActivityIconIds = setOf(
-        "walking", "running", "basketball", "gym", "stretch",
-        "strava_badminton", "strava_crossfit", "strava_dance",
-        "strava_elliptical", "strava_football", "strava_hiit",
-        "strava_hike", "strava_inline_skate", "strava_pilates",
-        "strava_racquetball", "strava_ride", "strava_rock_climb",
-        "strava_rowing", "strava_squash", "strava_stair_stepper",
-        "strava_swim", "strava_tennis", "strava_trail_run",
-        "strava_volleyball", "strava_weight_training", "strava_workout",
-        "strava_yoga", "strava_mountain_bike_ride", "strava_gravel_ride",
-        "strava_ebike_ride", "strava_emtb_ride", "strava_virtual_ride",
-        "strava_virtual_run", "strava_virtual_rowing", "strava_pickleball",
-        "strava_padel", "strava_cricket", "strava_skateboarding",
-        "strava_ice_skate", "strava_snowboard", "strava_snowshoe",
-        "strava_alpine_ski", "strava_backcountry_ski", "strava_nordic_ski",
-        "strava_roller_ski", "table_tennis",
-    )
+    val supportedActivityIconIds: Set<String> =
+        com.rork.mindsetframestracker.data.SPORT_ACTIVITY_ICON_IDS
 
     fun isActivitySupported(iconId: String): Boolean = iconId in supportedActivityIconIds
 
@@ -181,16 +167,16 @@ object PolarClient {
     /**
      * Exchanges the authorization code for an access token.
      *
-     * Primary path: the polar-token-exchange Edge Function (client secret
-     * stays server-side). Fallback: legacy direct Basic-auth exchange, used
-     * only when the Edge Function is unreachable AND a client secret was
-     * baked into this build.
+     * The ONLY path is the polar-token-exchange Edge Function, where the
+     * client secret stays server-side. There is deliberately no direct
+     * Basic-auth fallback: that variant required the secret inside the APK,
+     * which is exactly the exposure this avoids. If the function is
+     * unreachable the exchange fails, and the caller surfaces a real error.
      *
      * Returns a [PolarTokens] on success, or null on failure.
      */
     suspend fun exchangeCodeForTokens(code: String): PolarTokens? = withContext(Dispatchers.IO) {
         exchangeViaEdgeFunction(code)
-            ?: if (CLIENT_SECRET.isNotBlank()) exchangeDirect(code) else null
     }
 
     private fun exchangeViaEdgeFunction(code: String): PolarTokens? = runCatching {
@@ -215,33 +201,6 @@ object PolarClient {
         parseTokenResponse(body)
     }.onFailure {
         Log.w(TAG, "Edge token exchange error: ${it.message}")
-    }.getOrNull()
-
-    /** Legacy direct exchange — requires the client secret in BuildConfig. */
-    private fun exchangeDirect(code: String): PolarTokens? = runCatching {
-        val conn = URL(TOKEN_URL).openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-        conn.setRequestProperty("Accept", "application/json")
-        val credentials = "$CLIENT_ID:$CLIENT_SECRET"
-        val encoded = android.util.Base64.encodeToString(
-            credentials.toByteArray(), android.util.Base64.NO_WRAP,
-        )
-        conn.setRequestProperty("Authorization", "Basic $encoded")
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 15_000
-        conn.doOutput = true
-        val body = "grant_type=authorization_code&code=$code" +
-            "&redirect_uri=${Uri.encode(REDIRECT_URI)}"
-        conn.outputStream.use { it.write(body.toByteArray()) }
-        if (conn.responseCode != 200) {
-            Log.w(TAG, "Direct token exchange failed: HTTP ${conn.responseCode}")
-            return null
-        }
-        val responseBody = conn.inputStream.bufferedReader().use { it.readText() }
-        parseTokenResponse(responseBody)
-    }.onFailure {
-        Log.w(TAG, "Direct token exchange error: ${it.message}")
     }.getOrNull()
 
     private fun parseTokenResponse(body: String): PolarTokens? {
