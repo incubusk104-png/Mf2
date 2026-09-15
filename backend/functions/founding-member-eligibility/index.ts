@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyHuaweiOrder } from "../_shared/huaweiOrder.ts";
 
 /**
  * Founding-member cap: 500 slots PER COUNTRY / REGION.
@@ -24,6 +25,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  */
 const MAX_CLAIMS = 500;
 
+/**
+ * The only plan ids that may consume a founding slot.
+ *
+ * This is an ALLOW-LIST, deliberately server-side: `plan_id` arrives from the
+ * client, so without it a caller could claim a founding slot while naming any
+ * plan at all. Anything not in this set is refused before Huawei is even
+ * consulted, which also keeps a non-founding purchase from burning a slot.
+ */
+const FOUNDING_PLAN_IDS = new Set([
+  "mindset_premium_founding_monthly",
+  "mindset_premium_founding_yearly",
+]);
+
 /** Region bucket for anything unresolvable. 'ZZ' is ISO-3166's unknown value. */
 const UNKNOWN_REGION = "ZZ";
 
@@ -37,6 +51,14 @@ interface ClaimBody {
   user_id?: string;
   country?: string;
   plan_id?: string;
+  /**
+   * The signed purchase, straight from Huawei's IAP result. Required: the slot
+   * is only consumed after these are verified against Huawei's Order Service.
+   * `purchaseData` is the `inAppPurchaseData` JSON string and `signature` is
+   * the `inAppDataSignature` that accompanies it.
+   */
+  purchase_data?: string;
+  signature?: string;
 }
 
 function adminClient() {
@@ -130,6 +152,7 @@ interface AtomicClaimResult {
   ok?: boolean;
   claimed?: boolean;
   charged?: boolean;
+  reason?: string;
   region?: string;
   remaining?: number;
 }
@@ -145,6 +168,11 @@ interface AtomicClaimResult {
  * as gone. `user_identifier UNIQUE` alone never covered this — it only stops
  * the SAME user double-claiming, and two different users racing the last slot
  * have distinct identifiers, so it never fires for them.
+ *
+ * The proof arguments are what stop a slot being consumed without payment. They
+ * are passed straight through from the Huawei verification above and are the
+ * ONLY source the SQL function trusts; the client's own assertion of success is
+ * never forwarded.
  */
 async function claimFoundingMember(
   supabase: ReturnType<typeof adminClient>,
@@ -152,12 +180,22 @@ async function claimFoundingMember(
   country: string,
   planId: string,
   maxClaims: number,
+  proof: {
+    verified: boolean;
+    orderId: string | null;
+    purchaseToken: string | null;
+    purchaseState: number | null;
+  },
 ): Promise<AtomicClaimResult> {
   const { data, error } = await supabase.rpc("claim_founding_member", {
     p_user_id: userId,
     p_country: country || "",
     p_plan_id: planId || "",
     p_max_claims: maxClaims,
+    p_verified: proof.verified,
+    p_order_id: proof.orderId,
+    p_purchase_token: proof.purchaseToken,
+    p_purchase_state: proof.purchaseState,
   });
   if (error) throw error;
   return (data ?? {}) as AtomicClaimResult;
@@ -218,30 +256,138 @@ Deno.serve(async (req) => {
       const region = regionFor(body.country);
       const cap = await getRegionCap(supabase, region);
 
+      const planId = (body.plan_id ?? "").trim();
+
+      // ── Gate 1: is this even a founding plan? ──────────────────────────────
+      // Refused before any network call, so a non-founding purchase can never
+      // burn a slot and an unknown plan id is not reported as a payment problem.
+      if (!FOUNDING_PLAN_IDS.has(planId)) {
+        return json(
+          {
+            eligible: false,
+            claimed: false,
+            charged: false,
+            reason: "not_a_founding_plan",
+            region,
+            cap,
+          },
+          400,
+        );
+      }
+
+      const purchaseData = body.purchase_data?.trim();
+      if (!purchaseData || purchaseData.length > 24576) {
+        return json(
+          {
+            eligible: false,
+            claimed: false,
+            charged: false,
+            reason: "missing_purchase_data",
+            region,
+            cap,
+          },
+          400,
+        );
+      }
+
+      // The product inside the signed payload must also be a founding plan —
+      // the client-supplied plan_id and the payload can disagree, and Huawei's
+      // copy is the one that counts.
+      let productId = "";
+      try {
+        const parsed = JSON.parse(purchaseData);
+        productId = typeof parsed.productId === "string" ? parsed.productId : "";
+      } catch {
+        return json({ error: "purchase_data is not valid JSON" }, 400);
+      }
+      if (!FOUNDING_PLAN_IDS.has(productId)) {
+        return json(
+          {
+            eligible: false,
+            claimed: false,
+            charged: false,
+            reason: "payload_not_a_founding_plan",
+            region,
+            cap,
+          },
+          400,
+        );
+      }
+
+      // ── Gate 2: did Huawei actually take the money? ────────────────────────
+      // This is the whole point of the endpoint. The on-device
+      // SubscriptionResult.Success is NOT evidence: it is produced locally from
+      // the purchase-result Intent, and it is also produced from
+      // ORDER_PRODUCT_OWNED, which can carry an empty payload. So the signed
+      // purchase is replayed against Huawei's Order Service and only a
+      // completed, purchased order is accepted.
+      const verification = await verifyHuaweiOrder(
+        // The token is read from the payload Huawei signed, never from a
+        // separate client field that could be substituted.
+        (() => {
+          try {
+            const parsed = JSON.parse(purchaseData);
+            return typeof parsed.purchaseToken === "string" ? parsed.purchaseToken : "";
+          } catch {
+            return "";
+          }
+        })(),
+        productId,
+      );
+
+      if (verification.status !== "verified" || !verification.order) {
+        // "rejected" and "unavailable" are different diagnoses but the same
+        // outcome for a scarce slot: fail CLOSED. Consuming a slot we could not
+        // verify would permanently sell something we may never have been paid
+        // for, and a slot cannot be given back.
+        return json(
+          {
+            eligible: false,
+            claimed: false,
+            charged: false,
+            reason: verification.status === "rejected"
+              ? "purchase_rejected"
+              : "verification_unavailable",
+            detail: verification.reason,
+            region,
+            cap,
+          },
+          verification.status === "rejected" ? 402 : 503,
+        );
+      }
+
       const result = await claimFoundingMember(
         supabase,
         userId,
         body.country ?? "",
-        body.plan_id ?? "",
+        planId,
         cap,
+        {
+          verified: true,
+          orderId: verification.order.orderId || null,
+          purchaseToken: verification.order.purchaseToken || null,
+          purchaseState: verification.order.purchaseState,
+        },
       );
 
       const claimed = result.claimed === true;
+      const charged = result.charged === true;
       return json({
         // `eligible` stays false on a successful claim: the caller has now
         // consumed their slot, so they are no longer eligible to claim again.
         // Only a repeat call for an already-recorded claim reports it back.
         eligible: false,
         claimed,
+        // `charged` is the field the client keys on: it is true ONLY when THIS
+        // call consumed a slot, so a retry (or a rejected claim) never shows the
+        // user a success message they did not earn.
+        charged,
+        reason: result.reason ?? (claimed ? "claimed" : "not_claimed"),
         remaining: typeof result.remaining === "number"
           ? Math.max(0, result.remaining)
           : 0,
         cap,
         region: result.region ?? region,
-        // True only when THIS call consumed a slot (not when it re-read an
-        // existing claim). Lets the client tell "recorded now" from "already
-        // recorded", which is what makes a retry safe.
-        charged: result.charged === true,
       });
     }
 

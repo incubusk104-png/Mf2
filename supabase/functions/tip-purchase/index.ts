@@ -10,6 +10,13 @@
 // with the purchaseToken as the dedup key. Recording still happens (marked
 // unverified) when the Huawei secrets are absent, so tips are never lost.
 //
+// NOTE ON THE SHARED VERIFIER: the Huawei Order Service call lives in
+// ../_shared/huaweiOrder.ts, because founding-member-eligibility needs the
+// exact same "did Huawei really take money for this?" answer — and a slot,
+// unlike a tip, must never be granted on an unverified purchase. One
+// implementation means the two can never drift into disagreeing about what a
+// verified purchase is.
+//
 // Deploy:  supabase functions deploy tip-purchase --no-verify-jwt
 // Secrets (optional but recommended):
 //   supabase secrets set HUAWEI_IAP_CLIENT_ID=<AGC OAuth client id> \
@@ -29,17 +36,7 @@
 // The function never logs tokens or the client secret.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const HUAWEI_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
-// Site-specific order-service roots. Verification is attempted against each
-// until one answers (Huawei routes by the developer account's site).
-const ORDER_VERIFY_URLS = [
-  "https://orders-drcn.iap.cloud.huawei.com.cn/applications/purchases/tokens/verify",
-  "https://orders-drcn.iap.hicloud.com/applications/purchases/tokens/verify",
-  "https://orders-dre.iap.hicloud.com/applications/purchases/tokens/verify",
-  "https://orders-dra.iap.hicloud.com/applications/purchases/tokens/verify",
-  "https://orders-drru.iap.hicloud.com/applications/purchases/tokens/verify",
-];
+import { verifyHuaweiOrder } from "../_shared/huaweiOrder.ts";
 
 const KNOWN_TIP_PRODUCTS = new Set(["tip_small", "tip_medium", "tip_large"]);
 
@@ -55,84 +52,6 @@ function json(status: number, body: Record<string, unknown>): Response {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-/** App-level access token from Huawei's OAuth server (client_credentials). */
-async function getHuaweiAccessToken(
-  clientId: string,
-  clientSecret: string,
-): Promise<string | null> {
-  try {
-    const response = await fetch(HUAWEI_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
-    if (!response.ok) {
-      console.warn(`tip-purchase: Huawei token endpoint returned ${response.status}`);
-      return null;
-    }
-    const data = await response.json();
-    return typeof data.access_token === "string" ? data.access_token : null;
-  } catch (e) {
-    console.warn(
-      "tip-purchase: Huawei token endpoint unreachable:",
-      e instanceof Error ? e.message : e,
-    );
-    return null;
-  }
-}
-
-/**
- * Verifies a purchase token with Huawei's Order Service. Returns true when
- * Huawei confirms the order, false when Huawei rejects it, and null when
- * verification could not be performed (network / not configured).
- */
-async function verifyWithHuawei(
-  purchaseToken: string,
-  productId: string,
-): Promise<boolean | null> {
-  const clientId = Deno.env.get("HUAWEI_IAP_CLIENT_ID");
-  const clientSecret = Deno.env.get("HUAWEI_IAP_CLIENT_SECRET");
-  if (!clientId || !clientSecret) return null; // not configured — best effort
-
-  const accessToken = await getHuaweiAccessToken(clientId, clientSecret);
-  if (!accessToken) return null;
-
-  // Huawei requires: Authorization: Basic base64("APPAT:" + accessToken)
-  const authHeader = `Basic ${btoa(`APPAT:${accessToken}`)}`;
-
-  for (const url of ORDER_VERIFY_URLS) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-          Authorization: authHeader,
-        },
-        body: JSON.stringify({ purchaseToken, productId }),
-      });
-      if (!response.ok) continue; // wrong site root — try the next one
-      const data = await response.json();
-      // responseCode "0" = success; purchaseTokenData carries the order state.
-      if (data.responseCode === "0" && typeof data.purchaseTokenData === "string") {
-        const tokenData = JSON.parse(data.purchaseTokenData);
-        // purchaseState 0 = purchased
-        return tokenData.purchaseState === 0;
-      }
-      if (data.responseCode && data.responseCode !== "0") {
-        console.warn(`tip-purchase: Huawei rejected the token (rc=${data.responseCode})`);
-        return false;
-      }
-    } catch {
-      // network issue with this root — try the next
-    }
-  }
-  return null;
 }
 
 function adminClient() {
@@ -186,11 +105,26 @@ Deno.serve(async (req) => {
     return json(400, { error: `Unknown tip product: ${productId}` });
   }
 
-  // Server-side verification (best effort — see header comment).
-  const verified = await verifyWithHuawei(purchaseToken, productId);
-  if (verified === false) {
-    return json(402, { recorded: false, verified: false, error: "Huawei rejected this purchase" });
+  // Server-side verification.
+  //
+  // Three states, and a tip deliberately treats them differently from a
+  // founding slot: a tip is not scarce, so "could not verify" is recorded as an
+  // unverified tip rather than discarded — the user did pay. A definitive
+  // refusal from Huawei ("rejected"), however, is never recorded at all.
+  const verification = await verifyHuaweiOrder(purchaseToken, productId);
+  if (verification.status === "rejected") {
+    return json(402, {
+      recorded: false,
+      verified: false,
+      error: "Huawei rejected this purchase",
+      detail: verification.reason,
+    });
   }
+  const verified = verification.status === "verified";
+
+  // Prefer the order id HUAWEI reported over the one in the client's payload:
+  // the client's is unverified, and order_id is the audit handle for this row.
+  const authoritativeOrderId = verification.order?.orderId || orderId;
 
   try {
     const supabase = adminClient();
@@ -198,10 +132,10 @@ Deno.serve(async (req) => {
       {
         purchase_token: purchaseToken,
         product_id: productId,
-        order_id: orderId || null,
+        order_id: authoritativeOrderId || null,
         user_identifier: body.userId?.trim().slice(0, 128) || null,
         signature: body.signature?.trim().slice(0, 4096) || null,
-        verified: verified === true,
+        verified,
       },
       { onConflict: "purchase_token" },
     );
@@ -216,7 +150,7 @@ Deno.serve(async (req) => {
 
   return json(200, {
     recorded: true,
-    verified: verified === true,
+    verified,
     productId,
   });
 });

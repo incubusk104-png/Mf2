@@ -228,7 +228,22 @@ object SubscriptionBilling {
                             onError("Could not open the payment sheet. Try again.")
                         }
                     } else {
-                        onError("Payment unavailable (code ${status.statusCode}): ${status.statusMessage ?: "no details"}")
+                        // No resolution to launch, so this is a hard failure and
+                        // the code is the only useful diagnostic. Route it
+                        // through the shared table rather than an ad-hoc string:
+                        // the old text appended Huawei's `statusMessage`, which
+                        // is frequently empty, leaving the user with a bare
+                        // "Payment unavailable (code 60002): no details" — a
+                        // message that names nothing they can act on. The code
+                        // is still logged, just not pasted at the user.
+                        HuaweiIapErrors.log(status.statusCode, "Subscription createPurchaseIntent (no resolution)")
+                        onError(
+                            HuaweiIapErrors.message(
+                                status.statusCode,
+                                fallback = status.statusMessage,
+                                context = "subscription purchase",
+                            ),
+                        )
                     }
                 }
                 .addOnFailureListener { e ->

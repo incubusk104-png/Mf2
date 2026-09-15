@@ -238,21 +238,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         pendingSubscriptionProductId = ""
         when (result) {
             is SubscriptionResult.Success -> {
+                // The entitlement is granted here and ONLY here for a purchase:
+                // Success is produced solely from ORDER_STATE_SUCCESS or
+                // ORDER_PRODUCT_OWNED, i.e. the store says the user owns it.
+                // Cancelled and Error never reach this branch, so a failed or
+                // abandoned payment leaves isPremium and the plan tier untouched.
                 grantSubscription(result.productId)
+                _subscriptionMessage.value = "Premium unlocked \u2014 welcome aboard! \uD83C\uDF89"
                 // A founding-tier purchase also consumes one of this region's
-                // founding slots, so record the claim server-side. Same
-                // fire-and-forget shape as [recordTipPurchase]: the payment
-                // already succeeded through Huawei, so a failed record must
-                // never delay or block the success message. Safe to retry —
-                // the endpoint re-reads an existing claim instead of burning a
-                // second slot.
+                // founding slots. The server re-verifies the signed purchase
+                // against Huawei's Order Service before it will consume one, so
+                // the payload is passed through rather than a bare plan id.
+                //
+                // ORDER_PRODUCT_OWNED can arrive with an EMPTY purchase payload
+                // (a re-tap of a button for something already owned). That is
+                // not evidence of a new payment, so no claim is attempted at
+                // all \u2014 attempting one would either be refused by the server or,
+                // worse, burn a slot on a purchase that was never made.
                 if (Entitlements.tierForProductId(result.productId) == SubscriptionTier.FOUNDING) {
-                    recordFoundingMemberClaim(result.productId)
+                    if (result.purchaseData.isBlank()) {
+                        Log.i(
+                            "AppViewModel",
+                            "Founding purchase reported owned with no signed payload \u2014 " +
+                                "not claiming a slot (no payment evidence).",
+                        )
+                    } else {
+                        recordFoundingMemberClaim(result.productId, result.purchaseData, result.signature)
+                    }
                 }
-                _subscriptionMessage.value = "Premium unlocked — welcome aboard! \uD83C\uDF89"
             }
             is SubscriptionResult.Cancelled -> {
-                // Silent — the user closed the payment sheet.
+                // Silent \u2014 the user closed the payment sheet. Nothing is granted
+                // and no slot is claimed.
             }
             is SubscriptionResult.Error -> {
                 _subscriptionMessage.value = result.message
@@ -868,6 +885,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Retries a subscription purchase after the IAP environment became ready
+     * (the user completed the sign-in / HMS Core resolution launched by
+     * [com.rork.mindsetframestracker.billing.SubscriptionBilling.checkEnvironment]).
+     *
+     * This mirrors [retryPendingTipPurchase], which already existed for tips. The
+     * subscription path was missing it: its ENV_READY branch only logged the
+     * outcome, so a user who signed in to Huawei ID from the isEnvReady prompt
+     * was returned to the app with nothing happening — they had to find the plan
+     * again and tap it a second time. No-op when there is no pending product.
+     */
+    fun retryPendingSubscriptionPurchase(activity: android.app.Activity) {
+        val productId = pendingSubscriptionProductId
+        if (productId.isBlank()) return
+        pendingSubscriptionProductId = ""
+        // Surface failures through the same channel the sheet uses, since the
+        // sheet may already be gone by the time the resolution returns.
+        _subscriptionMessage.value = null
+        com.rork.mindsetframestracker.billing.SubscriptionBilling.purchase(
+            activity = activity,
+            productId = productId,
+            onError = { message -> _subscriptionMessage.value = message },
+        )
+    }
+
+    /**
      * Retries the tip purchase after the IAP environment became ready (the
      * user completed the sign-in / HMS Core resolution launched by
      * [com.rork.mindsetframestracker.billing.TipBilling.checkEnvironment]).
@@ -915,19 +957,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         supabaseSync.checkFoundingMemberEligibility()
 
     /**
-     * Fire-and-forget server-side record of a founding-member claim, fired
-     * after a successful founding-tier purchase. Mirrors [recordTipPurchase]:
-     * never blocks the UI, and safe to retry because the server re-reads the
-     * existing claim instead of consuming another slot.
+     * Server-side record of a founding-member claim, from a successful
+     * founding-tier purchase.
+     *
+     * Unlike a tip this is not fire-and-forget in spirit: the server verifies
+     * the signed purchase with Huawei before consuming a slot, so the outcome
+     * is only known once it answers. The user has already been granted the
+     * entitlement locally (Huawei completed the payment), so a refusal here
+     * never revokes it \u2014 but it must be visible, because it means the founding
+     * slot was not recorded and support may need to reconcile it.
      */
-    fun recordFoundingMemberClaim(productId: String) {
+    fun recordFoundingMemberClaim(productId: String, purchaseData: String, signature: String?) {
         viewModelScope.launch {
-            runCatching { supabaseSync.recordFoundingMemberClaim(productId) }
-                .onFailure {
-                    if (BuildConfig.DEBUG) {
-                        Log.w("AppViewModel", "Founding claim record failed: ${it.message}")
-                    }
-                }
+            val charged = runCatching {
+                supabaseSync.recordFoundingMemberClaim(productId, purchaseData, signature)
+            }.getOrElse { e ->
+                if (BuildConfig.DEBUG) Log.w("AppViewModel", "Founding claim record failed: ${e.message}")
+                false
+            }
+            if (!charged) {
+                // Distinguish "we could not verify/record it" from silence. The
+                // entitlement stands; the slot bookkeeping needs a look.
+                _subscriptionMessage.value =
+                    "Premium unlocked \u2014 welcome aboard! \uD83C\uDF89\n" +
+                        "We couldn't register your founding slot just yet; it will be " +
+                        "reconciled automatically, or contact support if it doesn't appear."
+            }
         }
     }
 

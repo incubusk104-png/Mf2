@@ -216,9 +216,17 @@ object TipBilling {
                             onError("Could not open the payment sheet. Try again.")
                         }
                     } else {
+                        // Same fix as the subscription path: a code with no
+                        // resolution is a hard failure, so explain it through
+                        // the shared table instead of echoing the raw code and
+                        // an often-empty statusMessage at the user.
+                        HuaweiIapErrors.log(status.statusCode, "Tip createPurchaseIntent (no resolution)")
                         onError(
-                            "Payment unavailable (code ${status.statusCode}): " +
-                                "${status.statusMessage ?: "no details"}",
+                            HuaweiIapErrors.message(
+                                status.statusCode,
+                                fallback = status.statusMessage,
+                                context = "tip purchase",
+                            ),
                         )
                     }
                 }

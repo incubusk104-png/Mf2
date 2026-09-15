@@ -705,6 +705,22 @@ class SupabaseSync(context: Context) {
         val soldOut: Boolean = false,
     )
 
+    /**
+     * The claim (POST) response. `charged` is the field that matters: it is true
+     * only when THIS call consumed a founding slot, so it — and not `claimed`,
+     * which is also true for a retry of an existing claim — is what decides
+     * whether the user earned a slot just now.
+     */
+    @Serializable
+    private data class FoundingClaimResponse(
+        val claimed: Boolean = false,
+        val charged: Boolean = false,
+        val reason: String = "",
+        val remaining: Int = 0,
+        val cap: Int = 0,
+        val region: String = "",
+    )
+
     @Serializable
     private data class FoundingClaimBody(
         val user_id: String,

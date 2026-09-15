@@ -273,9 +273,13 @@ class MainActivity : ComponentActivity() {
             }
         } else if (requestCode == com.rork.mindsetframestracker.billing.SubscriptionBilling.ENV_READY_REQUEST_CODE) {
             // IAP environment resolution completed (e.g. user signed in to
-            // Huawei ID). The next purchase attempt will succeed now.
+            // Huawei ID). Resume the pending subscription purchase instead of
+            // dead-ending: the previous version only logged here, so the user
+            // signed in and was then returned to the app with no purchase and
+            // no explanation.
             if (resultCode == RESULT_OK) {
                 android.util.Log.i("MainActivity", "IAP environment is now ready after user action")
+                appViewModel.retryPendingSubscriptionPurchase(this)
             } else {
                 android.util.Log.w("MainActivity", "IAP environment resolution was cancelled/failed")
             }
