@@ -29,6 +29,7 @@ import com.rork.mindsetframestracker.data.HabitSuggestion
 import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.habitLogsFor
+import com.rork.mindsetframestracker.data.habitLogsOn
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.MoodMode
@@ -1353,7 +1354,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val mergedLogs = (data.habitLogs + snapshot.habitLogs)
                 .associateBy { it.id }
                 .values
-                .sortedBy { it.loggedAtMs }
+                .sortedBy { it.recordedAtEpochMs }
             val mergedActivity = (data.activityRecords + snapshot.activityRecords)
                 .associateBy { it.id }
                 .values

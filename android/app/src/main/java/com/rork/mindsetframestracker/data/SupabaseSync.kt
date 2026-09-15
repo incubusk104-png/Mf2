@@ -1062,7 +1062,7 @@ class SupabaseSync(context: Context) {
                         dayKey = row.day,
                         mode = row.mode?.let { name ->
                             runCatching { HabitTrackingMode.valueOf(name) }.getOrNull()
-                        },
+                        } ?: HabitTrackingMode.CHECK,
                         title = row.title,
                         note = row.note,
                         count = row.count,
