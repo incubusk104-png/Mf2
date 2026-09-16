@@ -32,6 +32,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.Locale
@@ -939,13 +940,18 @@ class SupabaseSync(context: Context) {
         val provider: String,
         val provider_activity_id: String,
         val activity_type: String,
+        val activity_name: String? = null,
+        /** OffsetDateTime, in the format Strava sends. */
         val started_at: String,
+        val ended_at: String? = null,
         val activity_date: String,
         val duration_seconds: Int? = null,
         val distance_meters: Double? = null,
         val calories_burned: Double? = null,
         val heart_rate_avg: Int? = null,
+        val heart_rate_max: Int? = null,
         val steps: Int? = null,
+        val elevation_gain_meters: Double? = null,
         val raw_data: JsonObject? = null,
     )
 
@@ -1020,20 +1026,38 @@ class SupabaseSync(context: Context) {
                     val startedAt = java.time.Instant.ofEpochMilli(record.timestamp)
                     ActivityRow(
                         user_id = uid,
-                        provider = DEVICE_ACTIVITY_PROVIDER,
+                        // The SOURCE decides the provider, not a single constant.
+                        // Every device row used to be uploaded as
+                        // 'health_connect' — so a Strava run and a Polar day
+                        // landed under the wrong provider, and the per-source
+                        // breakdown the Insight screen is built on showed all of
+                        // the user's activity as one source.
+                        provider = activityProviderFor(record.source),
                         provider_activity_id = record.id,
                         activity_type = record.activityType,
-                        started_at = startedAt.toString(),
+                        activity_name = record.activityName,
+                        started_at = startedAt.atOffset(java.time.ZoneOffset.UTC).toString(),
+                        ended_at = record.endedAtMs
+                            ?.let { java.time.Instant.ofEpochMilli(it).atOffset(java.time.ZoneOffset.UTC).toString() },
                         activity_date = startedAt
                             .atZone(java.time.ZoneId.systemDefault())
                             .toLocalDate()
                             .toString(),
                         duration_seconds = record.durationMinutes?.let { it * 60 },
                         distance_meters = record.distanceMeters,
+                        // Sleep has no calorie figure, and the table has no
+                        // sleep column — so the minutes ride in raw_data rather
+                        // than being smuggled into calories_burned, which would
+                        // report sleep as energy burned.
                         calories_burned = record.calories?.toDouble(),
                         heart_rate_avg = record.heartRateAvg,
+                        heart_rate_max = record.heartRateMax,
                         steps = record.steps?.toInt(),
-                        raw_data = buildJsonObject { put("source", JsonPrimitive(record.source)) },
+                        elevation_gain_meters = record.elevationGainMeters,
+                        raw_data = buildJsonObject {
+                            put("source", JsonPrimitive(record.source))
+                            record.sleepMinutes?.let { put("sleep_minutes", JsonPrimitive(it)) }
+                        },
                     )
                 }
 
@@ -1131,7 +1155,15 @@ class SupabaseSync(context: Context) {
                         distanceMeters = row.distance_meters,
                         steps = row.steps?.toLong(),
                         heartRateAvg = row.heart_rate_avg,
+                        heartRateMax = row.heart_rate_max,
                         calories = row.calories_burned?.toInt(),
+                        endedAtMs = row.ended_at?.let { parsed ->
+                            runCatching { java.time.Instant.parse(parsed).toEpochMilli() }.getOrNull()
+                        },
+                        activityName = row.activity_name,
+                        elevationGainMeters = row.elevation_gain_meters,
+                        sleepMinutes = row.raw_data?.get("sleep_minutes")
+                            ?.jsonPrimitive?.intOrNull,
                     )
                 },
             )
@@ -1297,5 +1329,26 @@ class SupabaseSync(context: Context) {
          * than pulled from a third-party OAuth connection.
          */
         private const val DEVICE_ACTIVITY_PROVIDER = "health_connect"
+
+        /**
+         * Maps an [ActivityRecord.source] onto the `activity_data.provider`
+         * CHECK constraint's vocabulary.
+         *
+         * The constraint accepts only ('strava', 'google_fit',
+         * 'huawei_health', 'health_connect'), which does not include the
+         * device-side literal the app actually writes (`health_connect_device`),
+         * so that one is folded into 'health_connect' — same platform, same
+         * store, and the precise origin is preserved in `raw_data.source`.
+         * Anything unrecognised falls back to the device provider rather than
+         * being rejected by the constraint on upload.
+         */
+        private fun activityProviderFor(source: String): String = when (source) {
+            "strava" -> "strava"
+            "google_fit" -> "google_fit"
+            "huawei_health" -> "huawei_health"
+            "health_connect", "health_connect_device" -> "health_connect"
+            "polar" -> DEVICE_ACTIVITY_PROVIDER
+            else -> DEVICE_ACTIVITY_PROVIDER
+        }
     }
 }

@@ -867,14 +867,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // Verify permissions are still valid before attempting a sync
             if (!verifyHealthConnectPermissions()) return@launch
-            val ok = com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
-                .syncTodayToHabit(getApplication(), habitId, activityType)
+            // A sleep habit reads last night's sleep, not today's movement: the
+            // two are different questions and a sleep habit had no way to get
+            // its number at all, since the sleep reader was never called. Every
+            // other habit takes today's measured activity.
+            val isSleepHabit = activityType == com.rork.mindsetframestracker.integrations.ActivityMonitor
+                .SLEEP_ACTIVITY_TYPE
+            val ok = if (isSleepHabit) {
+                com.rork.mindsetframestracker.integrations.ActivityMonitor
+                    .captureSleepForHabit(getApplication(), habitId, activityType) != null
+            } else {
+                com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
+                    .syncTodayToHabit(getApplication(), habitId, activityType)
+            }
             if (ok) {
                 update { it.copy(settings = it.settings.copy(healthConnectLastSyncMs = System.currentTimeMillis())) }
             }
-            _stravaMessage.value =
-                if (ok) "Today's steps synced from Health Connect."
-                else "No step data from Health Connect yet — open Health Connect and check permissions."
+            // Named for what was actually imported, and phrased so a partial
+            // import (steps but no heart rate, say) is not misreported as a
+            // full success of every metric.
+            _stravaMessage.value = when {
+                ok && isSleepHabit -> "Last night's sleep synced from Health Connect."
+                ok -> "Today's activity synced from Health Connect."
+                else -> "No new data from Health Connect yet — open Health Connect and check permissions."
+            }
         }
     }
 

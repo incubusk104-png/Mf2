@@ -12,6 +12,7 @@ import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.rork.mindsetframestracker.data.ActivityRecord
+import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.MindsetRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -167,6 +168,19 @@ object ActivityMonitor {
                 ?.let { Duration.between(it.startTime, it.endTime).seconds }
         }.onFailure { Log.w(TAG, "Could not read exercise sessions", it) }.getOrNull()
 
+        // The session record also carries the athlete-facing TITLE and the end
+        // instant. Both were being dropped: the title is the only human label
+        // the device ever supplies ("Morning walk"), and the end time is what
+        // lets a reader show a real time range instead of inferring one.
+        val session = runCatching {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = filter,
+                ),
+            ).records.maxByOrNull { it.endTime }
+        }.onFailure { Log.w(TAG, "Could not read exercise session detail", it) }.getOrNull()
+
         // \u2500\u2500 Aggregates \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         // One request rather than four round-trips. Guarded as a whole because a
         // single ungranted record type makes Health Connect reject the entire
@@ -180,6 +194,10 @@ object ActivityMonitor {
         val distanceMeters = metrics?.get(DistanceRecord.DISTANCE_TOTAL)?.inMeters
         val calories = metrics?.get(TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories
         val heartRateAvg = metrics?.get(HeartRateRecord.BPM_AVG)?.toInt()
+        // Peak heart rate, already in the same aggregate response and equally
+        // free — the record carried only the average, so the peak was paid for
+        // and thrown away.
+        val heartRateMax = metrics?.get(HeartRateRecord.BPM_MAX)?.toInt()
 
         // \u2500\u2500 Honesty gate \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         // If literally nothing real came back, record nothing at all. Persisting an
@@ -208,7 +226,10 @@ object ActivityMonitor {
             distanceMeters = distanceMeters,
             steps = steps,
             heartRateAvg = heartRateAvg,
+            heartRateMax = heartRateMax,
             calories = calories?.toInt(),
+            endedAtMs = session?.endTime?.toEpochMilli(),
+            activityName = session?.title?.takeIf { it.isNotBlank() },
         )
 
         runCatching { MindsetRepository(context).saveActivityRecord(record) }
@@ -224,9 +245,59 @@ object ActivityMonitor {
     }
 
     /**
+     * Persists last night's sleep as an [ActivityRecord] against [habitId].
+     *
+     * Sleep was the one Health Connect signal the app could read but never
+     * stored: `MindsetHealthConnectClient.lastNightSleepMinutes` existed with
+     * **zero call sites**, so a user's sleep appeared nowhere — not in Weekly,
+     * not in Insight — no matter how long it was. It has no distance, steps or
+     * pace, so it could not ride on an existing field; it lands in
+     * [ActivityRecord.sleepMinutes] instead.
+     *
+     * Reads through the same single reader rather than opening a second sleep
+     * query here, so the number shown is the number measured. Returns the
+     * record it wrote, or null when there is no sleep to record — a zero would
+     * read as a real measurement of no sleep, which is worse than nothing.
+     */
+    suspend fun captureSleepForHabit(
+        context: Context,
+        habitId: String,
+        activityType: String = SLEEP_ACTIVITY_TYPE,
+    ): ActivityRecord? {
+        if (!MindsetHealthConnectClient.hasAllPermissions(context)) {
+            Log.d(TAG, "Health Connect not authorised \u2014 no sleep captured")
+            return null
+        }
+        val minutes = runCatching {
+            MindsetHealthConnectClient.lastNightSleepMinutes(context)
+        }.onFailure { Log.w(TAG, "Could not read sleep", it) }.getOrNull()
+            ?: return null
+
+        val record = ActivityRecord(
+            id = "hc_sleep_${Dates.todayKey()}_$habitId",
+            habitId = habitId,
+            source = SOURCE,
+            activityType = activityType,
+            timestamp = System.currentTimeMillis(),
+            durationMinutes = minutes.toInt(),
+            sleepMinutes = minutes.toInt(),
+        )
+        runCatching { MindsetRepository(context).saveActivityRecord(record) }
+            .onFailure { Log.w(TAG, "Could not persist sleep record", it) }
+        Log.i(TAG, "Captured $minutes min of sleep for $habitId")
+        return record
+    }
+
+    /**
      * Captures activity for EVERY habit whose activity Health Connect can supply
      * data for. Called once, at the moment the user grants Health Connect access
      * — the first point at which the app can see real data at all.
+     *
+     * Sleep is handled separately, and deliberately: it is not a movement
+     * activity, and it has no habit of its own to attach to unless the user
+     * created one. It is booked onto the sleep habit when one exists, so the
+     * data has somewhere real to land rather than being dropped or attached to
+     * an arbitrary habit.
      *
      * Kept here, rather than at the call site, so all coroutine usage stays inside
      * this object: the caller is a Compose permission-result lambda, and it should
@@ -236,7 +307,8 @@ object ActivityMonitor {
         val appContext = context.applicationContext
         scope.launch {
             runCatching {
-                MindsetRepository(appContext).load().habits
+                val habits = MindsetRepository(appContext).load().habits
+                habits
                     .filter { habit ->
                         habit.iconId
                             ?.let { MindsetHealthConnectClient.isActivitySupported(it) } == true
@@ -248,6 +320,11 @@ object ActivityMonitor {
                             activityType = habit.iconId ?: FALLBACK_ACTIVITY_TYPE,
                         )
                     }
+                // Sleep habits get last night's measured sleep. Matched on the
+                // catalog's "sleep" icon, the same way movement habits are.
+                habits.firstOrNull { it.iconId == SLEEP_ICON_ID }?.let { habit ->
+                    captureSleepForHabit(appContext, habit.id)
+                }
             }.onFailure { Log.w(TAG, "Bulk activity capture failed", it) }
         }
     }
@@ -282,6 +359,12 @@ object ActivityMonitor {
 
     /** Value of `ActivityRecord.source` for records captured here. */
     const val SOURCE = "health_connect_device"
+
+    /** Catalog icon id that marks a habit as a sleep habit. */
+    private const val SLEEP_ICON_ID = "sleep"
+
+    /** `activityType` for a sleep record — distinct from any movement type. */
+    const val SLEEP_ACTIVITY_TYPE = "sleep"
 
     /** Used when a habit's icon cannot be resolved, so capture still happens. */
     private const val FALLBACK_ACTIVITY_TYPE = "activity"

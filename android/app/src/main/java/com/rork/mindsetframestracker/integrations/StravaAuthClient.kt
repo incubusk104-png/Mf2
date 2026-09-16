@@ -10,6 +10,7 @@ import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.billing.SubscriptionTier
 import com.rork.mindsetframestracker.data.ActivityRecord
 import com.rork.mindsetframestracker.data.MindsetRepository
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -150,16 +151,48 @@ object StravaAuthClient {
                 
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
+                    // Each activity carries its OWN start time. Stamping the
+                    // import moment instead \u2014 which this did \u2014 filed a
+                    // three-day-old run under today, so the Weekly and Insight
+                    // day buckets were wrong for every Strava activity that was
+                    // not imported on the day it happened. Fall back to now only
+                    // when Strava genuinely omits the field.
+                    val startMs = obj.optString("start_date").takeIf { it.isNotBlank() }
+                        ?.let { parsed ->
+                            runCatching { Instant.parse(parsed).toEpochMilli() }.getOrNull()
+                        }
+                        ?: System.currentTimeMillis()
+                    val movingSeconds = obj.optInt("moving_time", 0)
+                        .takeIf { it > 0 } ?: obj.optInt("elapsed_time", 0)
+                    val avgHr = obj.optDouble("average_heartrate", 0.0)
+                        .takeIf { it > 0 }?.toInt()
+                    val maxHr = obj.optDouble("max_heartrate", 0.0)
+                        .takeIf { it > 0 }?.toInt()
+                    val elevation = obj.optDouble("total_elevation_gain", 0.0)
+                        .takeIf { it > 0 }
                     val record = ActivityRecord(
                         id = "strava_${obj.optLong("id")}",
                         habitId = habitId,
                         source = "strava",
                         activityType = activityType,
-                        timestamp = System.currentTimeMillis(),
-                        durationMinutes = obj.optInt("moving_time", 0) / 60,
-                        distanceMeters = obj.optDouble("distance", 0.0),
-                        heartRateAvg = if (obj.has("average_heartrate")) obj.getInt("average_heartrate") else null,
-                        calories = obj.optInt("calories", 0),
+                        timestamp = startMs,
+                        // Round up so a 40-second activity is never reported as
+                        // "0 min", which would read as "you did nothing".
+                        durationMinutes = movingSeconds
+                            .takeIf { it > 0 }?.let { (it + 59) / 60 },
+                        distanceMeters = obj.optDouble("distance", 0.0).takeIf { it > 0 },
+                        steps = null,
+                        heartRateAvg = avgHr,
+                        heartRateMax = maxHr,
+                        calories = obj.optDouble("calories", 0.0).takeIf { it > 0 }?.toInt()
+                            ?: obj.optDouble("kilojoules", 0.0).takeIf { it > 0 }?.toInt(),
+                        endedAtMs = obj.optString("start_date").takeIf { it.isNotBlank() }
+                            ?.let { parsed ->
+                                runCatching { Instant.parse(parsed).toEpochMilli() }.getOrNull()
+                            }
+                            ?.let { start -> movingSeconds.takeIf { s -> s > 0 }?.let { start + it * 1000L } },
+                        activityName = obj.optString("name").takeIf { it.isNotBlank() },
+                        elevationGainMeters = elevation,
                     )
                     repo.saveActivityRecord(record)
                     saved++

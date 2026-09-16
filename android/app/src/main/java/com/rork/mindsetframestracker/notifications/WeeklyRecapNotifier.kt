@@ -117,6 +117,34 @@ object WeeklyRecapNotifier {
             }
         }
 
+        // Append the sourced-activity line when any integration produced
+        // something this week. Appended rather than replacing the copy so the
+        // check-in message is never lost, and built as a single formatted
+        // phrase so it stays grammatical in every language. Absent entirely
+        // when nothing was measured, so a user with no connected app sees no
+        // activity line instead of one claiming zero.
+        val activityLine = week.activity?.let { activity ->
+            val parts = buildList {
+                if (activity.steps > 0) add("%,d steps".format(activity.steps))
+                if (activity.distanceMeters > 0) {
+                    add(
+                        if (activity.distanceMeters < 1000.0) {
+                            "${activity.distanceMeters.toInt()} m"
+                        } else {
+                            "%.1f km".format(activity.distanceMeters / 1000.0)
+                        },
+                    )
+                }
+                if (activity.durationMinutes > 0) add("${activity.durationMinutes} min")
+            }
+            if (parts.isEmpty()) null
+            else String.format(s.ntfRecapActivityLine, parts.joinToString(" \u00b7 "))
+        }
+        val finalBigText = listOf(bigText, activityLine)
+            .filterNotNull()
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -131,7 +159,7 @@ object WeeklyRecapNotifier {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(finalBigText))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setContentIntent(contentIntent)
@@ -173,14 +201,42 @@ object WeeklyRecapNotifier {
         val perfectDays: Int,
         /** Display label of the most-logged mood this week, e.g. "Calm". */
         val dominantMood: String?,
+        /**
+         * Sourced activity for the same 7 days, or null when nothing was
+         * recorded.
+         *
+         * Null rather than an all-zero object so "no integration produced
+         * anything" stays distinguishable from a week of genuinely zero
+         * activity — the recap must not tell a user with no connected apps
+         * that they walked 0 steps.
+         */
+        val activity: SourcedActivity?,
     )
 
-    /** Reads the local app-data JSON and summarizes the last 7 days. */
+    /** The activity figures the recap can quote, all optional. */
+    private data class SourcedActivity(
+        val steps: Long,
+        val distanceMeters: Double,
+        val durationMinutes: Int,
+        /** How many sources contributed, for the "from N apps" phrasing. */
+        val sourceCount: Int,
+    )
+
+    /**
+     * Reads the local app-data JSON and summarizes the last 7 days.
+     *
+     * Reads Straight from SharedPreferences rather than through the repository
+     * because this runs from a BroadcastReceiver; the activity aggregates are
+     * therefore recomputed here from `activityRecords` instead of reusing
+     * [com.rork.mindsetframestracker.data.activityTotalsOver]. The two must
+     * agree on the day keys (local calendar days, ending today) or the recap
+     * would quote a different week than the Weekly screen.
+     */
     private fun readWeekStats(context: Context): WeekStats {
         return runCatching {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val jsonStr = prefs.getString(KEY_DATA, null)
-                ?: return WeekStats(0, 0, 0, null)
+                ?: return WeekStats(0, 0, 0, null, null)
             val json = JSONObject(jsonStr)
 
             val formatter = DateTimeFormatter.ISO_LOCAL_DATE
@@ -227,10 +283,63 @@ object WeeklyRecapNotifier {
                 else -> null
             }
 
-            WeekStats(totalHabits, daysActive, perfectDays, dominantMood)
+            // ── Sourced activity (Strava / Health Connect / Polar) ──
+            //
+            // The recap previously reported check-ins and mood only, so a user
+            // whose week was mostly measured activity — a run Strava logged,
+            // sleep Health Connect recorded — got a recap that mentioned none
+            // of it. Read from the same `activityRecords` array the screens use,
+            // and bucketed by each record's OWN start day so a run synced late
+            // still counts on the day it happened.
+            val weekKeySet = weekKeys.toSet()
+            var steps = 0L
+            var distanceMeters = 0.0
+            var durationMinutes = 0
+            val contributingSources = mutableSetOf<String>()
+            val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
+            val records = json.optJSONArray("activityRecords")
+            if (records != null) {
+                for (i in 0 until records.length()) {
+                    val record = records.optJSONObject(i) ?: continue
+                    val startMs = record.optLong("timestamp", 0L)
+                    if (startMs <= 0L) continue
+                    val dayKey = java.time.Instant.ofEpochMilli(startMs)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toLocalDate()
+                        .format(dateFormatter)
+                    if (dayKey !in weekKeySet) continue
+                    record.optLong("steps", 0L).takeIf { it > 0 }?.let { steps += it }
+                    record.optDouble("distanceMeters", 0.0)
+                        .takeIf { it > 0 }?.let { distanceMeters += it }
+                    record.optInt("durationMinutes", 0)
+                        .takeIf { it > 0 }?.let { durationMinutes += it }
+                    // Normalised so a device-captured row and a session row
+                    // from the same platform count as one source, not two.
+                    val raw = record.optString("source", "")
+                    if (raw.isNotEmpty()) {
+                        contributingSources.add(
+                            if (raw == "health_connect_device") "health_connect" else raw,
+                        )
+                    }
+                }
+            }
+            val sourcedActivity = if (
+                steps > 0 || distanceMeters > 0.0 || durationMinutes > 0
+            ) {
+                SourcedActivity(
+                    steps = steps,
+                    distanceMeters = distanceMeters,
+                    durationMinutes = durationMinutes,
+                    sourceCount = contributingSources.size,
+                )
+            } else {
+                null
+            }
+
+            WeekStats(totalHabits, daysActive, perfectDays, dominantMood, sourcedActivity)
         }.onFailure {
             Log.w(TAG, "Failed to read week stats: ${it.message}")
-        }.getOrDefault(WeekStats(0, 0, 0, null))
+        }.getOrDefault(WeekStats(0, 0, 0, null, null))
     }
 
     private fun ensureChannel(context: Context, name: String, desc: String) {

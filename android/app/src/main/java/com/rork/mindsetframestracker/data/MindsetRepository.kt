@@ -144,12 +144,37 @@ class MindsetRepository(context: Context) {
         return cleaned
     }
 
-    /** Appends one ActivityRecord and persists — used by Polar / Health Connect / Strava sync. */
-    fun saveActivityRecord(record: ActivityRecord) {
+    /**
+     * Upserts one [ActivityRecord] \u2014 used by Polar / Health Connect / Strava sync.
+     *
+     * **Keyed by [ActivityRecord.id], replacing rather than appending.** This was
+     * an unconditional append, which made every sync run add a duplicate: Strava
+     * derives a stable id from the provider's activity id (`strava_<id>`) and
+     * Health Connect mints one per session, and the sync path is deliberately
+     * repeatable (auto-sync on launch, a manual re-sync, a restored backup), so
+     * the same activity was written again on every pass. Steps and minutes are
+     * summed across records when they are displayed, so the visible symptom was
+     * not "a duplicate row" but steadily inflating totals \u2014 the user's weekly
+     * step count growing on every app launch with nothing new done.
+     *
+     * Re-syncing is still meaningful with upsert semantics: a record whose
+     * values were later refined (Strava finalising an activity, a heart-rate
+     * strap syncing late) overwrites its earlier version instead of being
+     * dropped by a plain "does this id exist" check.
+     *
+     * @return the stored record, or null when persistence failed.
+     */
+    fun saveActivityRecord(record: ActivityRecord): ActivityRecord? = runCatching {
         val current = load()
-        val updated = current.copy(activityRecords = current.activityRecords + record)
-        save(updated)
-    }
+        val existing = current.activityRecords.indexOfFirst { it.id == record.id }
+        val merged = if (existing >= 0) {
+            current.activityRecords.toMutableList().apply { this[existing] = record }
+        } else {
+            current.activityRecords + record
+        }
+        save(current.copy(activityRecords = merged))
+        record
+    }.onFailure { Log.w(TAG, "Failed to persist activity record ${record.id}", it) }.getOrNull()
 
     /**
      * Appends one [HabitLogEntry] and persists — the record of what a habit's

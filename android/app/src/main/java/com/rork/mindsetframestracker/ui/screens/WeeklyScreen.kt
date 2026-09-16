@@ -55,11 +55,18 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rork.mindsetframestracker.data.ActivitySources
+import com.rork.mindsetframestracker.data.ActivityTotals
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.MoodMode
-import com.rork.mindsetframestracker.data.completedCountOn
+import com.rork.mindsetframestracker.data.activitySourceTotals
+import com.rork.mindsetframestracker.data.activityTotalsOver
+import com.rork.mindsetframestracker.data.completedCountOnIncludingLogs
+import com.rork.mindsetframestracker.data.formatCount
+import com.rork.mindsetframestracker.data.formatDistance
+import com.rork.mindsetframestracker.data.formatMinutes
 import com.rork.mindsetframestracker.data.hasFeatureAccess
-import com.rork.mindsetframestracker.data.isCheckedOn
+import com.rork.mindsetframestracker.data.isHabitDoneOn
 import com.rork.mindsetframestracker.data.streakFor
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.appStrings
@@ -90,6 +97,16 @@ fun WeeklyScreen(viewModel: AppViewModel) {
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
     val hasAccess = data.settings.hasFeatureAccess()
+
+    // The week's own day keys, computed once and shared by every section below
+    // so the bars, the grid and the activity card can never disagree about
+    // which seven days "this week" means.
+    val weekKeys = remember(week) { week.map { Dates.key(it) } }
+    val weekActivity: ActivityTotals = remember(data.activityRecords, weekKeys) {
+        data.activityTotalsOver(weekKeys)
+    }
+    val weekActivityBySource: Map<String, ActivityTotals> =
+        remember(data.activityRecords, weekKeys) { data.activitySourceTotals(weekKeys) }
 
 
     Column(
@@ -130,7 +147,12 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             ) {
                 week.forEachIndexed { index, day ->
                     val key = Dates.key(day)
-                    val done = data.completedCountOn(key)
+                    // Counts a recorded log entry as completion, matching the
+                    // Insight screen. A measured walk written by Strava or
+                    // Health Connect is evidence the habit was done; showing
+                    // it as an unfinished day here made the two screens
+                    // contradict each other about the same week.
+                    val done = data.completedCountOnIncludingLogs(key)
                     val total = data.habits.size.coerceAtLeast(1)
                     val fraction = (done.toFloat() / total).coerceIn(0f, 1f)
                     val mood = data.moodHistory[key]
@@ -219,7 +241,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
 
         // Per-habit weekly grid
         if (data.habits.isNotEmpty()) {
-            EntranceItem(index = 2) {
+            EntranceItem(index = 3) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.extraLarge,
@@ -245,7 +267,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
                                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                             ) {
                                 week.forEach { day ->
-                                    val checked = data.isCheckedOn(habit.id, Dates.key(day))
+                                    val checked = data.isHabitDoneOn(habit.id, Dates.key(day))
                                     Box(
                                         modifier = Modifier
                                             .size(22.dp)
@@ -286,7 +308,6 @@ fun WeeklyScreen(viewModel: AppViewModel) {
         //
         // Only habits that actually recorded something appear, so a CHECK-only
         // user sees no empty card.
-        val weekKeys = week.map { Dates.key(it) }
         val loggedHabits = data.habits.filter { habit ->
             data.habitLogs.any { it.habitId == habit.id && it.dayKey in weekKeys }
         }
@@ -348,18 +369,118 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             }
         }
 
+        // ── Sourced activity: Strava / Google Health Connect / Polar ──
+        //
+        // The sourced activity for the same 7 days, or nothing when no
+        // integration recorded anything — so an un-connected user sees no
+        // empty card rather than a row of zeros reading as "you did nothing".
+        if (weekActivity.sessions > 0) {
+            EntranceItem(index = 4) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = s.weeklyActivityTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+
+                        val weekMetrics = buildList {
+                            if (weekActivity.steps > 0) {
+                                add(s.weeklyActivitySteps to formatCount(weekActivity.steps))
+                            }
+                            if (weekActivity.distanceMeters > 0) {
+                                add(s.weeklyActivityDistance to formatDistance(weekActivity.distanceMeters))
+                            }
+                            if (weekActivity.durationMinutes > 0) {
+                                add(s.weeklyActivityDuration to formatMinutes(weekActivity.durationMinutes))
+                            }
+                            if (weekActivity.calories > 0) {
+                                add(s.weeklyActivityCalories to "%,d".format(weekActivity.calories))
+                            }
+                            if (weekActivity.sleepMinutes > 0) {
+                                add(s.weeklyActivitySleep to formatMinutes(weekActivity.sleepMinutes))
+                            }
+                            weekActivity.heartRateAvg?.let {
+                                add(s.weeklyActivityHeartRate to "$it bpm")
+                            }
+                            add(s.weeklyActivitySessions to "${weekActivity.sessions}")
+                        }
+                        weekMetrics.forEach { (label, value) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = value,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+
+                        if (weekActivityBySource.isNotEmpty()) {
+                            Text(
+                                text = s.weeklyActivityBySource,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                            weekActivityBySource.forEach { (source, totals) ->
+                                val parts = buildList {
+                                    if (totals.sessions > 0) add("${totals.sessions}\u00d7")
+                                    if (totals.steps > 0) add("${formatCount(totals.steps)} steps")
+                                    if (totals.distanceMeters > 0) add(formatDistance(totals.distanceMeters))
+                                    if (totals.durationMinutes > 0) add(formatMinutes(totals.durationMinutes))
+                                    if (totals.calories > 0) add("${formatCount(totals.calories)} kcal")
+                                    if (totals.sleepMinutes > 0) add("${formatMinutes(totals.sleepMinutes)} sleep")
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = ActivitySources.label(source),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        text = parts.joinToString(" \u00b7 "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Insights — Premium gets the full stats panel; free users see a
         // locked teaser with greyed placeholder rows and an upgrade CTA.
         if (hasAccess) {
             val totalPossible = data.habits.size * 7
-            val totalDone = week.sumOf { data.completedCountOn(Dates.key(it)) }
+            val totalDone = week.sumOf { data.completedCountOnIncludingLogs(Dates.key(it)) }
             val rate = if (totalPossible > 0) (totalDone * 100 / totalPossible) else 0
-            val bestDay = week.maxByOrNull { data.completedCountOn(Dates.key(it)) }
+            val bestDay = week.maxByOrNull { data.completedCountOnIncludingLogs(Dates.key(it)) }
             val topHabit = data.habits.maxByOrNull { data.streakFor(it.id) }
 
             // Premium insights on a rich mood-gradient panel.
             val insightInk = Color(0xFFFFFCF5)
-            EntranceItem(index = 3) {
+            EntranceItem(index = 5) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -377,7 +498,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
                             color = insightInk,
                         )
                         InsightRow(s.weeklyCompletionRate, "$rate%", insightInk)
-                        if (bestDay != null && data.completedCountOn(Dates.key(bestDay)) > 0) {
+                        if (bestDay != null && data.completedCountOnIncludingLogs(Dates.key(bestDay)) > 0) {
                             InsightRow(
                                 s.weeklyBestDay,
                                 bestDay.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault()),
@@ -391,7 +512,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
                 }
             }
         } else {
-            EntranceItem(index = 3) {
+            EntranceItem(index = 5) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
@@ -439,9 +560,9 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             }
         }
 
-        // Share CTA — renders the stylized weekly habits + moods card and
+        // Shares CTA — renders the stylized weekly habits + moods card and
         // opens the system share sheet (a copy is saved to the gallery too).
-        EntranceItem(index = 4) {
+        EntranceItem(index = 6) {
             val shareInk = Color(0xFFFFFCF5)
             Box(
                 modifier = Modifier

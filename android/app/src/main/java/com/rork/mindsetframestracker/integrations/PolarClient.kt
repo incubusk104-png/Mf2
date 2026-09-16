@@ -12,6 +12,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.contentOrNull
 import java.net.HttpURLConnection
 import java.net.URL
@@ -253,20 +255,26 @@ object PolarClient {
     // ── Data Reading (transaction flow) ──────────────────────────────
 
     /**
-     * Reads the newest available daily step count through Polar's
+     * Reads the newest available daily activity summary through Polar's
      * transaction API:
      *
      *  1. POST /users/{userId}/activity-transactions
      *     → 201 + transaction-id (new data available) or 204 (nothing new)
      *  2. GET the transaction's activity list
-     *  3. GET each daily-activity summary, keep the newest "active-steps"
+     *  3. GET each daily-activity summary, keep the newest one
      *  4. PUT (commit) the transaction so Polar can release the data
      *
-     * Returns the step count, or null when there is no new data / any
-     * request fails. [userId] is the numeric Polar user id captured at
-     * token exchange (x_user_id).
+     * Returns the summary, or null when there is no new data / any request
+     * fails. [userId] is the numeric Polar user id captured at token exchange
+     * (x_user_id).
+     *
+     * This used to return a bare `Long?` step count, reading **only**
+     * `active-steps` and discarding every other field Polar sent in the same
+     * response — distance, calories and active duration were fetched and then
+     * thrown away, so a Polar user's Weekly and Insight views showed steps and
+     * nothing else however much Polar actually reported.
      */
-    suspend fun readLatestSteps(accessToken: String, userId: Long): Long? =
+    suspend fun readLatestDailyActivity(accessToken: String, userId: Long): PolarDailyActivity? =
         withContext(Dispatchers.IO) {
             runCatching {
                 // 1. Open a transaction.
@@ -310,8 +318,8 @@ object PolarClient {
                     ?.mapNotNull { it.jsonPrimitive.contentOrNull }
                     .orEmpty()
 
-                // 3. Read each summary; keep the newest active-steps value.
-                var latestSteps: Long? = null
+                // 3. Read each summary; keep the newest one by its own date.
+                var latest: PolarDailyActivity? = null
                 for (activityUrl in activityUrls) {
                     val actConn = URL(activityUrl).openConnection() as HttpURLConnection
                     actConn.setRequestProperty("Authorization", "Bearer $accessToken")
@@ -321,19 +329,57 @@ object PolarClient {
                     if (actConn.responseCode != 200) continue
                     val actBody = actConn.inputStream.bufferedReader().use { it.readText() }
                     val actObj = json.parseToJsonElement(actBody).jsonObject
+                    val date = actObj["date"]?.jsonPrimitive?.contentOrNull ?: continue
                     val steps = actObj["active-steps"]?.jsonPrimitive?.longOrNull
-                    if (steps != null) latestSteps = steps
+                    // active-calories is the activity's own burn; total-calories
+                    // includes resting metabolism, so it is the wrong number for
+                    // "what did this workout cost me". Prefer active, fall back.
+                    val calories = actObj["active-calories"]?.jsonPrimitive?.intOrNull
+                        ?: actObj["total-calories"]?.jsonPrimitive?.intOrNull
+                    val distance = actObj["distance"]?.jsonPrimitive?.doubleOrNull
+                    val durationMinutes = parsePolarDurationMinutes(
+                        actObj["duration"]?.jsonPrimitive?.contentOrNull,
+                    )
+                    if (steps == null && calories == null &&
+                        distance == null && durationMinutes == null
+                    ) {
+                        continue
+                    }
+                    val candidate = PolarDailyActivity(
+                        date = date,
+                        steps = steps,
+                        calories = calories,
+                        distanceMeters = distance,
+                        durationMinutes = durationMinutes,
+                    )
+                    if (latest == null || candidate.date >= latest.date) latest = candidate
                 }
 
                 // 4. Commit so Polar releases this batch (otherwise the same
                 //    transaction blocks all future reads for 10 minutes).
                 commitTransaction(txUrl, transactionId, accessToken)
 
-                latestSteps
+                latest
             }.onFailure {
-                Log.w(TAG, "readLatestSteps error: ${it.message}")
+                Log.w(TAG, "readLatestDailyActivity error: ${it.message}")
             }.getOrNull()
         }
+
+    /**
+     * Parses Polar's ISO-8601 duration ("PT2H30M", "PT45M") into whole minutes,
+     * rounding up so a 40-second entry is never reported as "0 min".
+     *
+     * Returns null rather than 0 on an unparseable value: 0 would be a claim
+     * that no time was spent, which is a different statement from "Polar did
+     * not tell us".
+     */
+    private fun parsePolarDurationMinutes(raw: String?): Int? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val seconds = java.time.Duration.parse(raw).seconds
+            if (seconds <= 0) null else ((seconds + 59) / 60).toInt()
+        }.getOrNull()
+    }
 
     private fun commitTransaction(txUrl: String, transactionId: Long, accessToken: String) {
         runCatching {
@@ -347,7 +393,7 @@ object PolarClient {
     }
 
     /**
-     * Reads the latest steps and books them onto [habitId] as an
+     * Reads the latest daily activity and books it onto [habitId] as an
      * ActivityRecord. Returns true when new data was saved.
      */
     suspend fun syncTodayToHabit(
@@ -357,23 +403,53 @@ object PolarClient {
         habitId: String,
         activityType: String,
     ): Boolean {
-        val steps = readLatestSteps(accessToken, userId)
-        if (steps == null) {
-            Log.w(TAG, "syncTodayToHabit: no new step data from Polar")
+        val activity = readLatestDailyActivity(accessToken, userId)
+        if (activity == null) {
+            Log.w(TAG, "syncTodayToHabit: no new activity data from Polar")
             return false
         }
         val record = ActivityRecord(
-            id = UUID.randomUUID().toString(),
+            // Stable per (day, habit) rather than a fresh UUID per sync. Polar's
+            // daily summary is a ROLL-UP for one calendar date, so re-reading it
+            // is the same data, not a new session — and the old random id made
+            // every sync append a duplicate row whose steps then got summed into
+            // the user's daily and weekly totals again.
+            id = "polar_${activity.date}_$habitId",
             habitId = habitId,
             source = "polar",
             activityType = activityType,
-            timestamp = System.currentTimeMillis(),
-            steps = steps,
+            timestamp = parsePolarDate(activity.date) ?: System.currentTimeMillis(),
+            durationMinutes = activity.durationMinutes,
+            distanceMeters = activity.distanceMeters,
+            steps = activity.steps,
+            calories = activity.calories,
         )
         MindsetRepository(context).saveActivityRecord(record)
         return true
     }
+
+    /** Polar's daily `date` ("2026-09-14") as epoch millis at local midnight. */
+    private fun parsePolarDate(raw: String): Long? = runCatching {
+        java.time.LocalDate.parse(raw)
+            .atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }.getOrNull()
 }
+
+/**
+ * One of Polar's daily activity roll-ups, as Polar actually reports it.
+ *
+ * Every field except [date] is nullable because Polar omits what it has no
+ * data for, and "absent" must stay distinguishable from "zero".
+ */
+data class PolarDailyActivity(
+    val date: String,
+    val steps: Long? = null,
+    val calories: Int? = null,
+    val distanceMeters: Double? = null,
+    val durationMinutes: Int? = null,
+)
 
 data class PolarTokens(
     val accessToken: String,

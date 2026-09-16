@@ -128,6 +128,17 @@ class AppStrings(private val table: Map<String, String>) {
     val weeklyBestDay: String get() = s("weeklyBestDay")
     val weeklyMostConsistent: String get() = s("weeklyMostConsistent")
     val weeklyDeeperInsights: String get() = s("weeklyDeeperInsights")
+    // ── Sourced activity (Strava / Health Connect / Polar) ──
+    val weeklyActivityTitle: String get() = s("weeklyActivityTitle")
+    val weeklyActivityBySource: String get() = s("weeklyActivityBySource")
+    val weeklyActivitySteps: String get() = s("weeklyActivitySteps")
+    val weeklyActivityDistance: String get() = s("weeklyActivityDistance")
+    val weeklyActivityDuration: String get() = s("weeklyActivityDuration")
+    val weeklyActivityCalories: String get() = s("weeklyActivityCalories")
+    val weeklyActivitySleep: String get() = s("weeklyActivitySleep")
+    val weeklyActivityHeartRate: String get() = s("weeklyActivityHeartRate")
+    val weeklyActivitySessions: String get() = s("weeklyActivitySessions")
+    val insightsActivityTitle: String get() = s("insightsActivityTitle")
     val weeklyGoPremium: String get() = s("weeklyGoPremium")
     val weeklyShareMyWeek: String get() = s("weeklyShareMyWeek")
     val weeklyShareDesc: String get() = s("weeklyShareDesc")
@@ -494,6 +505,8 @@ class AppStrings(private val table: Map<String, String>) {
     val ntfRecapShareAction: String get() = s("ntfRecapShareAction")
     val ntfRecapShareChooser: String get() = s("ntfRecapShareChooser")
     val ntfRecapShareText: String get() = s("ntfRecapShareText")
+    /** Formatted with the week's sourced-activity summary; see WeeklyRecapNotifier. */
+    val ntfRecapActivityLine: String get() = s("ntfRecapActivityLine")
 
     // ── Notifications — companion & reflection ────────────
     val ntfChannelCompanionName: String get() = s("ntfChannelCompanionName")

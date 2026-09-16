@@ -122,14 +122,44 @@ fun Habit.screenTimeSummary(): String {
 data class ActivityRecord(
     val id: String,
     val habitId: String,
-    val source: String,          // "polar" | "health_connect" | "strava"
+    val source: String,          // "polar" | "health_connect" | "health_connect_device" | "strava"
     val activityType: String,    // "walking", "running", "cycling", etc.
+    /**
+     * Start of the activity, epoch millis.
+     *
+     * NOT the moment it was imported. Strava returns each activity's own
+     * `start_date`, and a sync run today can import a run from three days ago;
+     * stamping the import time would file that run under today and make the
+     * Weekly and Insight day buckets wrong. Sources that genuinely have no
+     * start time of their own (Polar's daily step roll-up) leave this as the
+     * read moment, which is the only truthful value available.
+     */
     val timestamp: Long,
     val durationMinutes: Int? = null,
     val distanceMeters: Double? = null,
     val steps: Long? = null,
     val heartRateAvg: Int? = null,
+    /** Peak heart rate, when the source recorded samples. */
+    val heartRateMax: Int? = null,
     val calories: Int? = null,
+    /**
+     * End of the activity, epoch millis — null when the source gave only a
+     * duration or nothing at all. Persisted rather than derived so a future
+     * reader never has to guess whether `timestamp + duration` is exact.
+     */
+    val endedAtMs: Long? = null,
+    /** Provider-supplied name ("Morning Run"), when there is one. */
+    val activityName: String? = null,
+    /** Cumulative climb in metres, when the provider reports it. */
+    val elevationGainMeters: Double? = null,
+    /**
+     * Sleep duration in minutes, for sleep records only.
+     *
+     * Sleep has no distance, steps or pace, so it could not ride on any
+     * existing field without lying about what the number meant. Null on every
+     * non-sleep record.
+     */
+    val sleepMinutes: Int? = null,
 )
 
 @Serializable
@@ -342,6 +372,22 @@ fun AppData.currentMood(): MoodMode =
 
 fun AppData.completedCountOn(dayKey: String): Int =
     habits.count { isCheckedOn(it.id, dayKey) }
+
+/**
+ * Habits that count as done on [dayKey], counting a recorded log entry as
+ * evidence of completion as well as an explicit check-in.
+ *
+ * [completedCountOn] is check-in only. A habit that records a measured value —
+ * a walk Strava wrote, water logged by hand, a measured sleep — produces a
+ * `habitLogEntry` and, for the alarm/timer path, a check-in too; but a value
+ * recorded by an integration owns no check-in at all. Counting only check-ins
+ * therefore reported a measured 8,000-step walk as an unfinished day, and the
+ * Weekly bar and the grid disagreed with the habit's own history about the
+ * same day. This is the count the screens should agree on; [completedCountOn]
+ * stays for callers that specifically mean explicit check-ins.
+ */
+fun AppData.completedCountOnIncludingLogs(dayKey: String): Int =
+    habits.count { isHabitDoneOn(it.id, dayKey) }
 
 /**
  * True when every current habit was checked in on the given day. A day with

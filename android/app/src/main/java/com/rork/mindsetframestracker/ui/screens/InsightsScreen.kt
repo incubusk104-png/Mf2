@@ -54,10 +54,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.data.ActivityRecord
+import com.rork.mindsetframestracker.data.ActivitySources
+import com.rork.mindsetframestracker.data.ActivityTotals
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.MoodMode
+import com.rork.mindsetframestracker.data.activitySourceTotals
+import com.rork.mindsetframestracker.data.activityTotalsOver
+import com.rork.mindsetframestracker.data.dayKey
+import com.rork.mindsetframestracker.data.formatCount
+import com.rork.mindsetframestracker.data.formatDistance
+import com.rork.mindsetframestracker.data.formatMinutes
 import com.rork.mindsetframestracker.data.isCheckedOn
+import com.rork.mindsetframestracker.data.totals
 import com.rork.mindsetframestracker.ui.AppStrings
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.appStrings
@@ -69,9 +78,7 @@ import com.rork.mindsetframestracker.ui.components.YearHeatmap
 import com.rork.mindsetframestracker.ui.components.YearHeatmapData
 import com.rork.mindsetframestracker.ui.components.buildYearHeatmapData
 import com.rork.mindsetframestracker.ui.theme.LocalMoodTheme
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -122,9 +129,24 @@ private data class ActivityDayIndex(
     val habitIdsByDay: Map<String, Set<String>>,
     val stepsByDay: Map<String, Long>,
     val sourcesByDay: Map<String, List<String>>,
+    /**
+     * Full per-day totals — steps, distance, calories, duration, sleep and
+     * heart rate.
+     *
+     * The index used to carry only `steps` and a list of source names, so
+     * everything else the integrations returned was decoded, persisted and
+     * then never shown: a Strava run's distance and calories, and all of
+     * Health Connect's sleep, were in the data and invisible in this screen.
+     */
+    val totalsByDay: Map<String, ActivityTotals>,
 ) {
     companion object {
-        val EMPTY = ActivityDayIndex(emptyMap(), emptyMap(), emptyMap())
+        val EMPTY = ActivityDayIndex(
+            habitIdsByDay = emptyMap(),
+            stepsByDay = emptyMap(),
+            sourcesByDay = emptyMap(),
+            totalsByDay = emptyMap(),
+        )
     }
 }
 
@@ -133,18 +155,21 @@ private fun buildActivityDayIndex(records: List<ActivityRecord>): ActivityDayInd
     val habitIdsByDay = HashMap<String, MutableSet<String>>()
     val stepsByDay = HashMap<String, Long>()
     val sourcesByDay = HashMap<String, MutableSet<String>>()
+    val recordsByDay = HashMap<String, MutableList<ActivityRecord>>()
     records.forEach { record ->
-        val key = Dates.key(
-            Instant.ofEpochMilli(record.timestamp).atZone(ZoneId.systemDefault()).toLocalDate(),
-        )
+        // Grouped by the record's OWN start day, never by when it was imported,
+        // so a run synced three days late still counts on the day it happened.
+        val key = record.dayKey()
         habitIdsByDay.getOrPut(key) { mutableSetOf() }.add(record.habitId)
         record.steps?.let { steps -> stepsByDay.merge(key, steps, Long::plus) }
         sourcesByDay.getOrPut(key) { mutableSetOf() }.add(record.source)
+        recordsByDay.getOrPut(key) { mutableListOf() }.add(record)
     }
     return ActivityDayIndex(
         habitIdsByDay = habitIdsByDay,
         stepsByDay = stepsByDay,
         sourcesByDay = sourcesByDay.mapValues { it.value.toList() },
+        totalsByDay = recordsByDay.mapValues { (_, day) -> day.totals() },
     )
 }
 
@@ -258,6 +283,16 @@ fun InsightsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     // string-prefix-stripping hack that only worked for English/Tagalog.
     val selectedRangeLabel = rangeOptions.first { it.days == rangeDays }.label(s)
 
+    // Sourced activity over the SAME selected range as the trend chart, so the
+    // card and the chart can never disagree about what "this week" means.
+    val rangeKeys = remember(rangeDays) { Dates.lastDays(rangeDays).map { Dates.key(it) } }
+    val rangeActivity: ActivityTotals = remember(data.activityRecords, rangeDays) {
+        data.activityTotalsOver(rangeKeys)
+    }
+    val sourceTotals: Map<String, ActivityTotals> = remember(data.activityRecords, rangeDays) {
+        data.activitySourceTotals(rangeKeys)
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -347,6 +382,156 @@ fun InsightsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 MoodConsistencyCard(moodStats = moodStats)
             }
         }
+
+        // Sourced activity: Strava / Google Health Connect / Polar.
+        //
+        // Outside the `habitCount == 0` branch on purpose — a user who linked
+        // Strava but has not created a habit yet still has real data to see,
+        // and hiding it behind a habit-count gate is how it becomes invisible
+        // again. Renders nothing at all when no source has recorded anything,
+        // so an un-connected user sees no empty shell.
+        if (rangeActivity.sessions > 0) {
+            EntranceItem(index = 7) {
+                ActivitySourcesCard(
+                    totals = rangeActivity,
+                    bySource = sourceTotals,
+                    rangeLabel = selectedRangeLabel,
+                    strings = s,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Sourced activity: the headline totals, then a row per source that actually
+ * produced data. Sources the user has not connected contribute no row at all,
+ * so "not connected" never renders as "you did none of this".
+ */
+@Composable
+private fun ActivitySourcesCard(
+    totals: ActivityTotals,
+    bySource: Map<String, ActivityTotals>,
+    rangeLabel: String,
+    strings: AppStrings,
+    modifier: Modifier = Modifier,
+) {
+    InsightsCard(modifier = modifier) {
+        Text(
+            text = strings.insightsActivityTitle,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = rangeLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+
+        // Headline metrics. Each is omitted rather than shown as "—" when the
+        // whole range has no value for it: a dash in a summary row reads as a
+        // failed measurement, which is worse than not claiming one.
+        val activityLabels = buildList {
+            if (totals.steps > 0) add(strings.weeklyActivitySteps to formatCount(totals.steps))
+            if (totals.distanceMeters > 0) add(strings.weeklyActivityDistance to formatDistance(totals.distanceMeters))
+            if (totals.durationMinutes > 0) add(strings.weeklyActivityDuration to formatMinutes(totals.durationMinutes))
+            if (totals.calories > 0) add(strings.weeklyActivityCalories to "%,d".format(totals.calories))
+            if (totals.sleepMinutes > 0) add(strings.weeklyActivitySleep to formatMinutes(totals.sleepMinutes))
+            totals.heartRateAvg?.let { add(strings.weeklyActivityHeartRate to "$it bpm") }
+            if (totals.sessions > 0) add(strings.weeklyActivitySessions to "${totals.sessions}")
+        }
+        val headline = activityLabels
+        if (headline.isNotEmpty()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(vertical = 4.dp),
+            ) {
+                headline.take(2).forEach { (label, value) ->
+                    StatCard(
+                        icon = Icons.Outlined.Bolt,
+                        value = value,
+                        label = label,
+                        caption = "",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            headline.drop(2).forEach { (label, value) ->
+                ActivityMetricRow(label = label, value = value)
+            }
+        }
+
+        if (bySource.isNotEmpty()) {
+            Text(
+                text = strings.weeklyActivityBySource,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+            )
+            bySource.forEach { (source, sourceTotals) ->
+                ActivitySourceRow(source = source, totals = sourceTotals, strings = strings)
+            }
+        }
+    }
+}
+
+/** One metric line inside the activity card. */
+@Composable
+private fun ActivityMetricRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/**
+ * One source's contribution. Only metrics that source actually reported are
+ * listed, so a Polar day (steps, no heart rate) reads as a steps row rather
+ * than as a row of dashes suggesting Polar failed.
+ */
+@Composable
+private fun ActivitySourceRow(source: String, totals: ActivityTotals, strings: AppStrings) {
+    val parts = buildList {
+        if (totals.sessions > 0) add("${totals.sessions}\u00d7")
+        if (totals.steps > 0) add("${formatCount(totals.steps)} steps")
+        if (totals.distanceMeters > 0) add(formatDistance(totals.distanceMeters))
+        if (totals.durationMinutes > 0) add(formatMinutes(totals.durationMinutes))
+        if (totals.calories > 0) add("${formatCount(totals.calories)} kcal")
+        if (totals.sleepMinutes > 0) add("${formatMinutes(totals.sleepMinutes)} sleep")
+        totals.heartRateAvg?.let { add("$it bpm avg") }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = ActivitySources.label(source),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = parts.joinToString(" \u00b7 "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+        )
     }
 }
 
