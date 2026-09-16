@@ -16,6 +16,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.MainActivity
 import com.rork.mindsetframestracker.R
+import com.rork.mindsetframestracker.data.alarmMinutes
 
 object HabitCheckInNotifier {
 
@@ -337,9 +338,16 @@ object HabitCheckInNotifier {
                         .load().habits.firstOrNull { it.id == habitId }
                         ?.alarmMinutes?.firstOrNull()
                 if (nextMinutes != null) {
+                    // The fired time is passed explicitly: scheduleNext re-arms
+                    // THIS occurrence only, leaving the habit's other times
+                    // untouched (see its own note). It refuses if the time was
+                    // edited away in the meantime, which is the correct
+                    // no-op — the editor's schedule() already owns the new set.
                     HabitAlarmScheduler.scheduleNext(context, habitId, habitName, nextMinutes)
                 } else {
-                    HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
+                    // The habit was deleted (or its alarms cleared) between the
+                    // ring and this re-arm, so there is nothing left to arm.
+                    Log.d(TAG, "No alarm time to re-arm for '$habitName'")
                 }
             }
         }.fold(
