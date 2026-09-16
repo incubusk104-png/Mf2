@@ -41,9 +41,10 @@ import com.rork.mindsetframestracker.data.HabitIconCatalog
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerStatus
 import com.rork.mindsetframestracker.data.formatTimerDuration
+import com.rork.mindsetframestracker.data.habitCountOn
 import com.rork.mindsetframestracker.notifications.HabitTimerRequests
 import com.rork.mindsetframestracker.notifications.TimerController
-import com.rork.mindsetframestracker.notifications.TimerRepository
+import com.rork.mindsetframestracker.data.TimerRepository
 import kotlinx.coroutines.delay
 
 /**
