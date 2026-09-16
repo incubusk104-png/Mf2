@@ -374,22 +374,6 @@ fun AppData.completedCountOn(dayKey: String): Int =
     habits.count { isCheckedOn(it.id, dayKey) }
 
 /**
- * Habits that count as done on [dayKey], counting a recorded log entry as
- * evidence of completion as well as an explicit check-in.
- *
- * [completedCountOn] is check-in only. A habit that records a measured value —
- * a walk Strava wrote, water logged by hand, a measured sleep — produces a
- * `habitLogEntry` and, for the alarm/timer path, a check-in too; but a value
- * recorded by an integration owns no check-in at all. Counting only check-ins
- * therefore reported a measured 8,000-step walk as an unfinished day, and the
- * Weekly bar and the grid disagreed with the habit's own history about the
- * same day. This is the count the screens should agree on; [completedCountOn]
- * stays for callers that specifically mean explicit check-ins.
- */
-fun AppData.completedCountOnIncludingLogs(dayKey: String): Int =
-    habits.count { isHabitDoneOn(it.id, dayKey) }
-
-/**
  * True when every current habit was checked in on the given day. A day with
  * zero habits is never considered complete.
  */
