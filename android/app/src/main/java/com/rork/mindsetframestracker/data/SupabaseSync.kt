@@ -22,16 +22,19 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -1091,22 +1094,52 @@ class SupabaseSync(context: Context) {
             // actually be removed from Supabase, not just left out of this
             // upsert (upsert only ever adds/updates rows, it never deletes
             // ones that are missing from the payload).
-            applyPendingDeletions(uid)?.let { return it }
+            //
+            // The result is no longer discarded. It used to be thrown away
+            // (`?.let { return it }` was absent entirely), so a delete the
+            // server kept rejecting stayed queued forever while every push
+            // reported success — and the habit the user had deleted came back
+            // on the next restore. Collected here and reported at the end.
+            val pendingDeleteError = applyPendingDeletions(uid)
 
-            upsert("habits", habits, onConflict = "id")?.let { return it }
-            upsert("checkins", checkins, onConflict = "user_id,habit_id,day")?.let { return it }
-            upsert("mood_log", moods, onConflict = "user_id,day")?.let { return it }
-            upsert("settings", settings, onConflict = "id")?.let { return it }
+            // EVERY table is attempted, and the failures are collected rather
+            // than short-circuiting.
+            //
+            // These used to be `upsert(...)?.let { return it }`, so the FIRST
+            // failing table aborted the whole push and every later write was
+            // skipped. That is what turned one schema problem into total data
+            // loss: on a project whose `habits` table predates the alarm_times
+            // migration, a single 400 on `habits` discarded the user's
+            // check-ins, moods, settings and habit logs on every sync, forever,
+            // while the app blamed the one table it happened to hit first.
+            //
+            // Order is kept (habits before the rows that reference a habit id),
+            // but a failure in an earlier table no longer blocks an independent
+            // later one from landing.
+            val failures = mutableListOf<String>()
+            upsert("habits", habits, onConflict = "id")?.let { failures += it }
+            upsert("checkins", checkins, onConflict = "user_id,habit_id,day")?.let { failures += it }
+            upsert("mood_log", moods, onConflict = "user_id,day")?.let { failures += it }
+            upsert("settings", settings, onConflict = "id")?.let { failures += it }
             // The tracking payloads. These two were the gap: habit logs were
             // device-local only (a journal note was lost on reinstall), and
             // device-captured Health Connect activity never reached the server,
             // so smart-alarms and consistency-report could not see it.
-            upsert("habit_logs", habitLogs, onConflict = "id")?.let { return it }
+            upsert("habit_logs", habitLogs, onConflict = "id")?.let { failures += it }
             upsert(
                 "activity_data",
                 activities,
                 onConflict = "user_id,provider,provider_activity_id",
-            )?.let { return it }
+            )?.let { failures += it }
+            // Report before the "backed up" timestamp is written: a push that
+            // lost payloads must not be recorded as a clean sync, or the daily
+            // backup would treat a partial failure as done for the whole day.
+            if (failures.isNotEmpty()) {
+                return if (failures.size == 1) failures.first()
+                else "Sync partly failed \u2014 ${failures.size} tables rejected: " +
+                    failures.joinToString("; ")
+            }
+            pendingDeleteError?.let { return it }
             prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
             null
         } catch (e: Exception) {
@@ -1259,10 +1292,15 @@ class SupabaseSync(context: Context) {
             if (!checkinsOk || !habitOk) stillPending += habitId
         }
         pendingDeletedHabitIds = stillPending
-        // Only surface an error if some ids are still stuck after a real
-        // attempt — a partial success still leaves the rest queued silently
-        // and retries next time rather than blocking the whole sync.
-        return null
+        // An id that survived a real delete attempt stays queued for the next
+        // sync, but it is no longer SILENT. A delete the server keeps rejecting
+        // (an RLS policy that does not cover DELETE, a row still referenced
+        // elsewhere) would otherwise retry forever while every push reported
+        // success — and the deleted habit would reappear on the next restore
+        // with the user never told anything had gone wrong.
+        return if (stillPending.isEmpty()) null
+        else "${stillPending.size} deleted habit(s) could not be removed from the backup \u2014 " +
+            "they may come back if you restore on another device."
     }
 
     /** DELETE /rest/v1/{table}?{column}=eq.{value}&user_id=eq.{uid}. Returns true on success (incl. "nothing to delete"). */
@@ -1286,10 +1324,52 @@ class SupabaseSync(context: Context) {
 
     private suspend inline fun <reified T> upsert(table: String, rows: List<T>, onConflict: String): String? {
         if (rows.isEmpty()) return null
-        var response = upsertRequest(table, rows, onConflict)
+        // Serialized once, and carried as raw JSON, so a retry after dropping an
+        // unsupported field re-sends the very body the server just judged —
+        // it cannot drift from it, and there is no second serialization pass.
+        var payload: JsonElement = json.encodeToJsonElement(rows)
+        var response = upsertRequest(table, payload, onConflict)
         if (response.status == HttpStatusCode.Unauthorized && tryRefreshSession()) {
-            response = upsertRequest(table, rows, onConflict)
+            response = upsertRequest(table, payload, onConflict)
         }
+
+        // ── A column the live database does not have is NOT a reason to lose
+        // the user's data ────────────────────────────────────────────────────
+        //
+        // This is the failure the app actually hit. `alarm_times` was added to
+        // the client's HabitRow AND to a migration file
+        // (20260916140000_habit_multiple_alarms_and_occurrences.sql) — but the
+        // migration was never applied to the live project, and `encodeDefaults
+        // = true` means the field is sent on EVERY push. PostgREST rejected
+        // each one with PGRST204. Because the tables were then attempted with a
+        // short-circuit, that single rejection also silently discarded
+        // check-ins, moods, settings and habit logs on every sync.
+        //
+        // Retrying without the unsupported field lets the rest of the row land,
+        // which is strictly better than losing it. The pull path already treats
+        // an absent `alarm_times` as "fall back to reminder_minutes" (see
+        // Habit.alarmMinutes), so the habit restores with its first alarm, and
+        // the full schedule is restored the moment the migration is applied.
+        // The dropped fields are RETURNED to the caller, so the user is told a
+        // field was not saved instead of being shown a fake clean success.
+        val rejected = mutableListOf<String>()
+        var dropAttempts = 0
+        while (!response.status.isSuccess() && dropAttempts < MAX_COLUMN_DROPS) {
+            val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
+            val missing = missingColumn(bodyText) ?: break
+            // Null means nothing changed (the field was not in the payload),
+            // so retrying would resend an identical body and loop.
+            val reduced = payload.dropObjectKeys(listOf(missing)) ?: break
+            payload = reduced
+            rejected += missing
+            dropAttempts++
+            Log.w(TAG, "Upsert $table: live schema has no '$missing'; retrying without it")
+            response = upsertRequest(table, payload, onConflict)
+            if (response.status == HttpStatusCode.Unauthorized && tryRefreshSession()) {
+                response = upsertRequest(table, payload, onConflict)
+            }
+        }
+
         if (!response.status.isSuccess()) {
             val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
             Log.w(TAG, "Upsert $table failed: ${response.status} ${bodyText.take(500)}")
@@ -1301,7 +1381,60 @@ class SupabaseSync(context: Context) {
             val suffix = if (detail != null) ": $detail" else ""
             return "Sync failed on '$table' (${response.status.value})$suffix"
         }
+        if (rejected.isNotEmpty()) {
+            return "$table saved, but ${rejected.size} field(s) were not stored — this " +
+                "project's database has no ${rejected.joinToString(", ")}. " +
+                "Apply the pending migration to save them."
+        }
         return null
+    }
+
+    /**
+     * The column name PostgREST reports as absent from the live schema, or null
+     * when the body is not a missing-column error.
+     *
+     * Two shapes are matched, because the same condition is reported differently
+     * depending on PostgREST's version and whether its schema cache is warm:
+     *  - `Could not find the 'alarm_times' column of 'habits' in the schema
+     *    cache` (PGRST204 — the literal text the user saw on screen)
+     *  - `column "alarm_times" of relation "habits" does not exist` (Postgres
+     *    42703, raised when the cache is bypassed)
+     */
+    private fun missingColumn(bodyText: String): String? {
+        val message = extractPostgrestMessage(bodyText) ?: return null
+        COULD_NOT_FIND_COLUMN.find(message)?.groupValues?.getOrNull(1)?.let { return it }
+        COLUMN_DOES_NOT_EXIST.find(message)?.groupValues?.getOrNull(1)?.let { return it }
+        return null
+    }
+
+    /**
+     * A copy of this payload with every occurrence of the keys in [keys]
+     * removed, at any depth, or null when nothing was removed.
+     *
+     * Depth matters: the payload is a JSON ARRAY of row objects, so the field to
+     * drop is a key of each element, not of the top-level value. Returning null
+     * for a no-op is what stops the retry loop — a key that is not actually
+     * present (because the server named a column this payload never sent) would
+     * otherwise resend an identical body forever.
+     */
+    private fun JsonElement.dropObjectKeys(keys: List<String>): JsonElement? {
+        val keySet = keys.toSet()
+        var removed = false
+        fun scrub(element: JsonElement): JsonElement = when (element) {
+            is JsonObject -> JsonObject(
+                element.entries
+                    .filter { entry ->
+                        val drop = entry.key in keySet
+                        if (drop) removed = true
+                        !drop
+                    }
+                    .associate { it.key to scrub(it.value) },
+            )
+            is JsonArray -> JsonArray(element.map { scrub(it) })
+            else -> element
+        }
+        val scrubbed = scrub(this)
+        return if (removed) scrubbed else null
     }
 
     /**
@@ -1320,17 +1453,23 @@ class SupabaseSync(context: Context) {
         }.getOrNull()
     }
 
-    private suspend inline fun <reified T> upsertRequest(
+    /**
+     * POSTs an already-serialized JSON payload.
+     *
+     * Takes raw [JsonElement] (via `TextContent`, so ktor's ContentNegotiation
+     * does not re-serialize it) rather than a `List<T>`, because the caller may
+     * need to retry with a reduced body after the live schema rejects a field.
+     */
+    private suspend fun upsertRequest(
         table: String,
-        rows: List<T>,
+        payload: JsonElement,
         onConflict: String,
     ): HttpResponse =
         client.post("$baseUrl/rest/v1/$table?on_conflict=$onConflict") {
             header("apikey", anonKey)
             header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
             header("Prefer", "resolution=merge-duplicates")
-            contentType(ContentType.Application.Json)
-            setBody(rows)
+            setBody(TextContent(payload.toString(), ContentType.Application.Json))
         }
 
     companion object {
@@ -1354,6 +1493,21 @@ class SupabaseSync(context: Context) {
          */
         private const val UNKNOWN_REGION = "ZZ"
         private const val PULL_ERROR = "Couldn't restore your data. Check your connection and try again."
+
+        /** PostgREST PGRST204: "Could not find the 'x' column of 'y' in the schema cache". */
+        private val COULD_NOT_FIND_COLUMN =
+            Regex("""Could not find the '([A-Za-z0-9_]+)' column""")
+
+        /** Postgres 42703: "column \"x\" of relation \"y\" does not exist". */
+        private val COLUMN_DOES_NOT_EXIST =
+            Regex("""column "([A-Za-z0-9_]+)" of relation""")
+
+        /**
+         * Bounds the missing-column retry loop. A schema this far behind is not
+         * going to be fixed by sending even less; the remaining error is then
+         * reported to the user intact rather than looping.
+         */
+        private const val MAX_COLUMN_DROPS = 8
 
         /**
          * `provider` value for activity rows captured on the device rather
