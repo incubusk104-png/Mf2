@@ -327,5 +327,17 @@
   "companionEmpty": "🌱 میں آپ کے ساتھ ہوں۔ آج آپ کا ایک منصوبہ کیا ہے؟",
   "companionNone": "😌 دن ابھی باقی ہے — ایک چھوٹا قدم اور ہم چل پڑے۔",
   "companionPartial": "🙂 خوب جا رہے ہیں — بس چند اور، اور آج آپ کا ہے۔",
-  "companionAllDone": "🥳 سب مکمل — آج واقعی آپ پر فخر ہے۔"
+  "companionAllDone": "🥳 سب مکمل — آج واقعی آپ پر فخر ہے۔",
+  "habitsMotivationalTitle": "Motivational message",
+  "habitsMotivationalHint": "Your reminder says this out loud to you at alarm time. Leave it empty to use the app's own encouraging line for this habit.",
+  "habitsMotivationalLabel": "Say this to me at alarm time",
+  "habitsMotivationalPlaceholder": "e.g. It's time to water up! 💧 Stay hydrated, you've got this!",
+  "habitsMotivationalSuggestions": "Suggestions for %s",
+  "habitsMotivationalPreview": "Preview: %s",
+  "notifHabitSnooze": "Snooze 5 min",
+  "notifHabitStop": "Stop alarm",
+  "notifHabitChannelName": "Habit Reminders",
+  "notifHabitChannelDesc": "Individual habit reminders that fire at the time you set",
+  "notifHabitFallbackBody": "Time for your habit",
+  "notifHabitOccurrence": "%1$s · %2$d of %3$d today"
 }

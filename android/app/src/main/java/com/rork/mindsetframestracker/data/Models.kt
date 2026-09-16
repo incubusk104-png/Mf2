@@ -152,10 +152,6 @@ val Habit.isScreenTimeHabit: Boolean
  * sorted, deduped list rather than the raw field is what lets the scheduler
  * (and the UI) treat one-time and many-time habits through the same path
  * without a per-call-site special case.
- *
- * Delegates to [legacyAlarmTimes] — the ONE rule, shared with the sync layer
- * and the reboot/ring-time reader, so a habit's real schedule cannot be
- * interpreted three different ways depending on which reader looked at it.
  */
 val Habit.alarmMinutes: List<Int>
     get() = legacyAlarmTimes(alarmTimes, reminderMinutes)

@@ -84,6 +84,15 @@ class AlarmRingingActivity : ComponentActivity() {
     private var habitName: String = ""
     private var ringingSubtitle: String = "Time for your habit"
     /**
+     * Which of the habit's alarm times is ringing, or null for a timer.
+     *
+     * Held on the Activity rather than passed down because the subtitle is
+     * resolved asynchronously (see the `LaunchedEffect` in [onCreate]) and needs
+     * the occurrence to describe itself correctly — a habit that rings three
+     * times a day must not show the same unqualified sentence three times.
+     */
+    private var ringingAlarmMinutes: Int? = null
+    /**
      * The ringing habit's own catalog artwork, or null for a timer
      * completion.
      *
@@ -164,6 +173,16 @@ class AlarmRingingActivity : ComponentActivity() {
         } else {
             habitId = intent.getStringExtra("habitId") ?: run { finish(); return }
             habitName = intent.getStringExtra("habitName") ?: "Habit"
+            // Which occurrence is ringing. The alarm time travels on the intent
+            // (see HabitAlarmScheduler), so this screen — and the subtitle it
+            // resolves below — can name the exact occurrence instead of
+            // describing the habit generically.
+            ringingAlarmMinutes = intent
+                .getIntExtra(
+                    HabitReminderReceiver.EXTRA_ALARM_MINUTES,
+                    HabitReminderReceiver.NO_ALARM_MINUTES,
+                )
+                .takeIf { it != HabitReminderReceiver.NO_ALARM_MINUTES }
 
             // This is a habit's own alarm ringing, so this screen resolves that
             // habit's artwork below.
@@ -195,22 +214,42 @@ class AlarmRingingActivity : ComponentActivity() {
                     // the habit's own icon simply appears a beat later, and the
                     // generic glyph covers the gap.
                     var resolvedIconId by remember { mutableStateOf<String?>(null) }
+                    // The subtitle STARTS as the generic fallback and is replaced
+                    // the moment the habit's own motivating line has been read.
+                    // The line is the one the notification already showed, so the
+                    // screen and the shade agree on what this alarm is about.
+                    var resolvedSubtitle by remember { mutableStateOf(ringingSubtitle) }
                     if (timerOptionsReady) {
                         LaunchedEffect(habitId) {
-                            resolvedIconId = withContext(Dispatchers.IO) {
+                            // One IO pass resolves both facts (the artwork and the
+                            // line) off the repository read this screen already
+                            // performs — so adding the motivational line costs no
+                            // extra storage read and, crucially, adds no blocking
+                            // work to the alarm's cold start.
+                            val resolved = withContext(Dispatchers.IO) {
                                 runCatching {
-                                    MindsetRepository(this@AlarmRingingActivity)
+                                    val habit = MindsetRepository(this@AlarmRingingActivity)
                                         .load()
                                         .habits
                                         .firstOrNull { it.id == habitId }
-                                        ?.iconId
+                                    habit?.iconId to HabitReminderText.lineFor(
+                                        context = this@AlarmRingingActivity,
+                                        habitId = habitId,
+                                        iconId = habit?.iconId,
+                                        alarmMinutes = ringingAlarmMinutes,
+                                    )
                                 }.getOrNull()
                             }
+                            resolvedIconId = resolved?.first
+                            // Blank is left alone so the generic fallback stands:
+                            // an empty line would leave the ring with nothing to
+                            // say, which is worse than the neutral default.
+                            resolved?.second?.takeIf { it.isNotBlank() }?.let { resolvedSubtitle = it }
                         }
                     }
                     AlarmRingingScreen(
                         habitName = habitName,
-                        subtitle = ringingSubtitle,
+                        subtitle = resolvedSubtitle,
                         habitIconRes = habitIconRes
                             ?: resolvedIconId?.let { HabitIconCatalog.byId(it)?.drawableRes },
                         // Snoozing a timer is meaningless (there is no

@@ -616,6 +616,30 @@ class AppStrings(private val table: Map<String, String>) {
     val settingsWellbeingGroundingDesc: String get() = s("settingsWellbeingGroundingDesc")
     val settingsWellbeingPixelsDesc: String get() = s("settingsWellbeingPixelsDesc")
     val settingsOpen: String get() = s("settingsOpen")
+
+    // ── Motivational habit reminders ─────────────────────────────────
+    // Labels for the per-habit motivational message editor, plus the strings
+    // the reminder notification itself uses. The content a user chooses between
+    // (the curated message packs) deliberately stays in Kotlin — see
+    // MotivationalMessages — so these are UI chrome only.
+    val habitsMotivationalTitle: String get() = s("habitsMotivationalTitle")
+    val habitsMotivationalHint: String get() = s("habitsMotivationalHint")
+    val habitsMotivationalLabel: String get() = s("habitsMotivationalLabel")
+    val habitsMotivationalPlaceholder: String get() = s("habitsMotivationalPlaceholder")
+    /** Formatted with the habit's label, e.g. "Suggestions for Drink water". */
+    val habitsMotivationalSuggestions: String get() = s("habitsMotivationalSuggestions")
+    /** Formatted with the previewed line, e.g. "Preview: Water break!". */
+    val habitsMotivationalPreview: String get() = s("habitsMotivationalPreview")
+
+    // ── Reminder notification ──────────────────────────────────────
+    val notifHabitSnooze: String get() = s("notifHabitSnooze")
+    val notifHabitStop: String get() = s("notifHabitStop")
+    val notifHabitChannelName: String get() = s("notifHabitChannelName")
+    val notifHabitChannelDesc: String get() = s("notifHabitChannelDesc")
+    /** Used only when no habit-specific line can be resolved at all. */
+    val notifHabitFallbackBody: String get() = s("notifHabitFallbackBody")
+    /** Formatted as (clock, position, total), e.g. "07:00 · 2 of 3 today". */
+    val notifHabitOccurrence: String get() = s("notifHabitOccurrence")
 }
 
 // ── JSON-based loading ──────────────────────────────────────

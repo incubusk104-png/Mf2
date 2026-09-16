@@ -327,5 +327,17 @@
   "companionEmpty": "🌱 Yanındayım. Bugün planladığın bir şey ne?",
   "companionNone": "😌 Gün hâlâ açık — küçük bir adım ve yoldayız.",
   "companionPartial": "🙂 Harika gidiyorsun — birkaç adım daha ve bugün senin.",
-  "companionAllDone": "🥳 Hepsi tamam — bugün seninle gurur duyuyorum."
+  "companionAllDone": "🥳 Hepsi tamam — bugün seninle gurur duyuyorum.",
+  "habitsMotivationalTitle": "Motivational message",
+  "habitsMotivationalHint": "Your reminder says this out loud to you at alarm time. Leave it empty to use the app's own encouraging line for this habit.",
+  "habitsMotivationalLabel": "Say this to me at alarm time",
+  "habitsMotivationalPlaceholder": "e.g. It's time to water up! 💧 Stay hydrated, you've got this!",
+  "habitsMotivationalSuggestions": "Suggestions for %s",
+  "habitsMotivationalPreview": "Preview: %s",
+  "notifHabitSnooze": "Snooze 5 min",
+  "notifHabitStop": "Stop alarm",
+  "notifHabitChannelName": "Habit Reminders",
+  "notifHabitChannelDesc": "Individual habit reminders that fire at the time you set",
+  "notifHabitFallbackBody": "Time for your habit",
+  "notifHabitOccurrence": "%1$s · %2$d of %3$d today"
 }

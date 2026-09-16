@@ -537,5 +537,17 @@
   "settingsWellbeingStudioDesc": "I-customize ang companion mo — kasarian, damit, ekspresyon, at mga alaga. Ang mga exclusive ay kinikita sa daily goals, hindi binebenta.",
   "settingsWellbeingGroundingDesc": "Box breathing, 5-4-3-2-1 senses, at isang linyang journal.",
   "settingsWellbeingPixelsDesc": "Nasa Insights tab ang mood calendar mo.",
-  "settingsOpen": "Buksan"
+  "settingsOpen": "Buksan",
+  "habitsMotivationalTitle": "Motivational message",
+  "habitsMotivationalHint": "Your reminder says this out loud to you at alarm time. Leave it empty to use the app's own encouraging line for this habit.",
+  "habitsMotivationalLabel": "Say this to me at alarm time",
+  "habitsMotivationalPlaceholder": "e.g. It's time to water up! 💧 Stay hydrated, you've got this!",
+  "habitsMotivationalSuggestions": "Suggestions for %s",
+  "habitsMotivationalPreview": "Preview: %s",
+  "notifHabitSnooze": "Snooze 5 min",
+  "notifHabitStop": "Stop alarm",
+  "notifHabitChannelName": "Habit Reminders",
+  "notifHabitChannelDesc": "Individual habit reminders that fire at the time you set",
+  "notifHabitFallbackBody": "Time for your habit",
+  "notifHabitOccurrence": "%1$s · %2$d of %3$d today"
 }

@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.MainActivity
 import com.rork.mindsetframestracker.R
 import com.rork.mindsetframestracker.data.alarmMinutes
+import com.rork.mindsetframestracker.ui.AppStrings
 
 object HabitCheckInNotifier {
 
@@ -134,6 +135,13 @@ object HabitCheckInNotifier {
             if (!granted) return NotifyResult.PermissionMissing
         }
 
+        // The user's chosen language, resolved from a bare Context because this
+        // runs inside the alarm's receiver with no Activity and no ViewModel.
+        // Labels (actions, channel name) are translated; the motivational LINE
+        // itself is the user's own words or the curated pack, never a
+        // translation of them.
+        val strings = NotificationStrings.resolve(context)
+
         // BUG FIX: POST_NOTIFICATIONS being granted is necessary but NOT
         // sufficient. If the app's notifications get turned off from system
         // settings after that permission was granted — including MIUI's own
@@ -153,12 +161,26 @@ object HabitCheckInNotifier {
         }
 
         return runCatching {
-            ensureChannel(context)
+            ensureChannel(context, strings)
 
             val channel = manager.getNotificationChannel(CHANNEL_ID)
             if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) {
                 return NotifyResult.Blocked
             }
+
+            // ── The motivating copy for THIS ring ───────────────────────────
+            // The user's own line when they wrote one, otherwise the curated
+            // pack for this habit (a water habit gets the hydration lines). Never
+            // blank: HabitReminderText degrades to a generic encouragement
+            // rather than to an empty notification body, which would render as a
+            // reminder with nothing in it at all.
+            val reminderLine = HabitReminderText.lineFor(
+                context = context,
+                habitId = habitId,
+                iconId = HabitReminderText.iconIdFor(context, habitId),
+                alarmMinutes = alarmMinutes,
+            )
+            val occurrenceLabel = HabitReminderText.subtitleFor(context, habitId, alarmMinutes)
 
             val tapIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -221,15 +243,36 @@ object HabitCheckInNotifier {
                 // small icon throws here — inside the alarm's own receiver.
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(habitName)
-                .setContentText("Time for your habit")
+                // ── The motivational line ──────────────────────────────────
+                // This is the whole point of the feature: the body is an
+                // ENCOURAGEMENT, not the habit name restated. "Drink Water" as
+                // the title plus "It's time to water up! 💧 Stay hydrated,
+                // you've got this!" as the body is a reminder the user wants to
+                // read; the old fixed "Time for your habit" was a bare alert
+                // that said nothing about *this* habit.
+                //
+                // Resolved from storage HERE rather than carried on the alarm's
+                // intent, so an armed alarm always delivers the message the user
+                // has right now — see HabitReminderText for why that matters.
+                .setContentText(reminderLine)
+                // Without BigTextStyle the line is ellipsised in the collapsed
+                // row and the encouraging half of the sentence is the half that
+                // gets cut. This makes the full line readable on expand.
+                .setStyle(NotificationCompat.BigTextStyle().bigText(reminderLine))
                 .setContentIntent(contentIntent)
+                // Which occurrence this is ("18:00 · 3 of 3 today"), so a habit
+                // that rings several times a day cannot read as one alarm
+                // firing repeatedly. Left unset when there is nothing useful to
+                // say rather than set to an empty string, which some OEM shades
+                // render as a blank second line.
+                .apply { if (occurrenceLabel.isNotBlank()) setSubText(occurrenceLabel) }
                 .setAutoCancel(true)
                 // Ensure heads-up display + sound on all API levels
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 // Vibrate pattern for attention
                 .setVibrate(longArrayOf(0, 250, 100, 250))
-                .addAction(0, "Snooze 5 min", snoozePendingIntent)
+                .addAction(0, strings.notifHabitSnooze, snoozePendingIntent)
             // ── The manual "Stop alarm" action ──────────────────────────────
             // Sits beside Snooze so a ringing alarm can be silenced from the shade
             // alone — without unlocking the phone, and without depending on the
@@ -244,7 +287,7 @@ object HabitCheckInNotifier {
                 habitId = habitId,
                 habitName = habitName,
                 alarmMinutes = alarmMinutes,
-            )?.let { stopIntent -> notificationBuilder.addAction(0, "Stop alarm", stopIntent) }
+            )?.let { stopIntent -> notificationBuilder.addAction(0, strings.notifHabitStop, stopIntent) }
             if (canUseFullScreenIntent) {
                 // Wakes the screen and rings even through silent/DND/Bedtime
                 // mode on devices that allow full-screen alarm intents.
@@ -364,7 +407,13 @@ object HabitCheckInNotifier {
         )
     }
 
-    private fun ensureChannel(context: Context) {
+    /**
+     * The string table is passed in rather than resolved here: [showResult]
+     * already resolved it, and re-reading `settings.language` out of the blob
+     * once more per notification would be a second parse on the alarm's critical
+     * path for no benefit.
+     */
+    private fun ensureChannel(context: Context, strings: AppStrings) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -383,10 +432,10 @@ object HabitCheckInNotifier {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Habit Reminders",
+            strings.notifHabitChannelName,
             NotificationManager.IMPORTANCE_HIGH,  // heads-up + sound + vibrate
         ).apply {
-            description = "Individual habit reminders that fire at the time you set"
+            description = strings.notifHabitChannelDesc
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 250, 100, 250)
             // RING, don't just buzz. IMPORTANCE_HIGH alone does NOT bypass

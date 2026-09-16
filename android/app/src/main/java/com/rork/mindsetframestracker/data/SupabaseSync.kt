@@ -928,6 +928,19 @@ class SupabaseSync(context: Context) {
          * what lets this client ship before the migration is applied.
          */
         val alarm_times: List<Int> = emptyList(),
+        /**
+         * The habit's motivational reminder line, or null for the curated
+         * default.
+         *
+         * Nullable **with a default** deliberately: on a project whose `habits`
+         * table has not yet had the companion migration applied, this field is
+         * reported as a dropped field for this sync pass (see the missing-table /
+         * dropped-column handling below) and the user's habits still sync — the
+         * exact same degrade-gracefully path `alarm_times` takes when it is
+         * absent. A non-default field here would instead fail the whole habit
+         * upsert and lose every other edit in the batch.
+         */
+        val alarm_message: String? = null,
         val is_pinned: Boolean = false,
         val duration_seconds: Int? = null,
         val repeat_days_mask: Int = REPEAT_DAILY,
@@ -1042,8 +1055,15 @@ class SupabaseSync(context: Context) {
                     name = it.name,
                     created_at_ms = it.createdAt,
                     icon_id = it.iconId,
+                    alarm_message = it.alarmMessage,
+                    // Both spellings go up, normalised by the ONE shared rule
+                    // (legacyAlarmTimes): the legacy column mirrors the first
+                    // entry, and an empty list falls back to it. The pull path
+                    // below applies the same function, which is what stops push
+                    // and pull from reinterpreting one another for a habit that
+                    // only ever had a single `reminder_minutes`.
                     reminder_minutes = it.reminderMinutes,
-                    alarm_times = it.alarmMinutes,
+                    alarm_times = legacyAlarmTimes(it.alarmTimes, it.reminderMinutes),
                     is_pinned = it.isPinned,
                     duration_seconds = it.durationSeconds,
                     repeat_days_mask = it.repeatDaysMask,
@@ -1253,11 +1273,15 @@ class SupabaseSync(context: Context) {
                         name = it.name,
                         createdAt = it.created_at_ms,
                         iconId = it.icon_id,
+                        alarmMessage = it.alarm_message,
                         reminderMinutes = it.reminder_minutes,
-                        // A project that predates the column returns it empty, in
-                        // which case the legacy single time is the schedule and
-                        // the extension's own fallback handles the rest.
-                        alarmTimes = it.alarm_times,
+                        // A project that predates the `alarm_times` column returns
+                        // it empty, in which case the legacy single time IS the
+                        // schedule. Normalised through the same shared function
+                        // the push path serialises with, so the round trip is
+                        // symmetric and neither direction can reinterpret the
+                        // other's rows.
+                        alarmTimes = legacyAlarmTimes(it.alarm_times, it.reminder_minutes),
                         isPinned = it.is_pinned,
                         durationSeconds = it.duration_seconds,
                         repeatDaysMask = it.repeat_days_mask,

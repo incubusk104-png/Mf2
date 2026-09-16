@@ -32,6 +32,7 @@ import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.data.hasAnsweredOccurrence
 import com.rork.mindsetframestracker.data.occurrenceKeyFor
 import com.rork.mindsetframestracker.data.withAlarmTimes
+import com.rork.mindsetframestracker.data.withAlarmMessage
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.screenTimeSummary
 import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
@@ -1863,12 +1864,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Scheduling is callers' business, deliberately: they already hold the
      * [android.content.Context] and re-arm from the updated habit.
      */
-    fun setHabitAlarmTimes(habitId: String, times: List<Int>, repeatDaysMask: Int) {
+    /**
+     * Saves a habit's schedule and its motivational reminder line together.
+     *
+     * The two are written in one call on purpose: they are edited on the same
+     * screen and are consumed together at ring time (the message is only ever
+     * delivered by one of these alarm times), so a single write means the saved
+     * state can never be a schedule from the new edit paired with a message from
+     * the old one.
+     *
+     * [alarmMessage] is normalised by [withAlarmMessage] — blank becomes null,
+     * which at ring time resolves to the habit's curated line pack rather than an
+     * empty notification body.
+     */
+    fun setHabitAlarmTimes(
+        habitId: String,
+        times: List<Int>,
+        repeatDaysMask: Int,
+        alarmMessage: String? = null,
+    ) {
         update { data ->
             data.copy(
                 habits = data.habits.map { habit ->
                     if (habit.id == habitId) {
-                        habit.withAlarmTimes(times).copy(repeatDaysMask = repeatDaysMask)
+                        habit
+                            .withAlarmTimes(times)
+                            .copy(repeatDaysMask = repeatDaysMask)
+                            .withAlarmMessage(alarmMessage)
                     } else {
                         habit
                     }
@@ -1882,16 +1904,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Single-time form, kept because most habits have exactly one alarm and the
      * create flow naturally has one value to hand over. Delegates rather than
      * writing the field, so it cannot disagree with the multi-time path.
+     *
+     * [alarmMessage] behaves exactly as it does on [setHabitAlarmTimes] —
+     * **omitting it clears the habit's custom line** rather than leaving it alone,
+     * because that same nullability is what lets the editor express "the user
+     * deleted their message". Any caller that only means to move an alarm time
+     * must therefore read the existing line off the habit and pass it back.
      */
-    fun setHabitReminder(habitId: String, reminderMinutes: Int?, repeatDaysMask: Int) {
-        setHabitAlarmTimes(habitId, listOfNotNull(reminderMinutes), repeatDaysMask)
+    fun setHabitReminder(
+        habitId: String,
+        reminderMinutes: Int?,
+        repeatDaysMask: Int,
+        alarmMessage: String? = null,
+    ) {
+        setHabitAlarmTimes(habitId, listOfNotNull(reminderMinutes), repeatDaysMask, alarmMessage)
     }
 
-    fun addHabitObject(habit: Habit): Boolean {
+    /**
+     * Adds a habit, optionally with the motivational line its reminders carry.
+     *
+     * [alarmMessage] is a separate parameter rather than something the caller
+     * bakes into [habit] because it must pass through [withAlarmMessage]: that is
+     * what turns a blank entry into `null` ("use the curated pack") instead of
+     * `""`, which would otherwise take priority over the curated line and post a
+     * reminder with an empty body.
+     */
+    fun addHabitObject(habit: Habit, alarmMessage: String? = null): Boolean {
         if (!canAddHabit()) return false
+        val toAdd = habit.withAlarmMessage(alarmMessage)
         update { data ->
             if (data.habits.any { it.id == habit.id }) data
-            else data.copy(habits = data.habits + habit)
+            else data.copy(habits = data.habits + toAdd)
         }
         queueSync()
         return true

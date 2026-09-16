@@ -57,7 +57,7 @@ class BootReceiver : BroadcastReceiver() {
         }
         scheduler.scheduleEveningReflection()
 
-        // ── Per-habit alarms (the critical missing piece) ──────────────
+        // ── Per-habit alarms (the critical missing piece) ───────────────
         // Load the full persisted habit list and re-arm every individual
         // habit alarm that has a reminderMinutes value. Without this,
         // rebooting or updating the app silently kills all habit reminders.

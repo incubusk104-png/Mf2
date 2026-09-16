@@ -55,10 +55,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.data.formatAlarmTimes
 import com.rork.mindsetframestracker.data.withAlarmTimes
+import com.rork.mindsetframestracker.data.withAlarmMessage
+import com.rork.mindsetframestracker.data.Dates
+import com.rork.mindsetframestracker.data.MotivationalMessages
 import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.REPEAT_DAILY
@@ -323,16 +327,21 @@ fun HabitsScreen(
         val existingForIcon = data.habits.firstOrNull { it.iconId == icon.id }
         AlarmPickerDialog(
             habitName = icon.label,
+            habitIconId = icon.id,
             defaultMinutes = icon.defaultReminderMinutes,
             // Every time already configured, so re-editing shows the whole
             // schedule rather than silently replacing it with the first time.
             initialTimes = existingForIcon?.alarmMinutes ?: emptyList(),
             initialRepeatMask = existingForIcon?.repeatDaysMask ?: REPEAT_DAILY,
+            // The line this habit currently carries, so re-editing shows what its
+            // reminders actually say instead of an empty field the user would
+            // read as "no message set".
+            initialMessage = existingForIcon?.alarmMessage.orEmpty(),
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
             },
-            onConfirm = onConfirm@{ times, repeatMask ->
+            onConfirm = onConfirm@{ times, repeatMask, alarmMessage ->
                 alarmPickerIcon = null
                 val existingHabitId = alarmSetupExistingHabitId
                 alarmSetupExistingHabitId = null
@@ -346,7 +355,7 @@ fun HabitsScreen(
                     // edit was the extra popup being flagged. Permission
                     // gaps are still checked and surfaced the first time an
                     // alarm is created, and any time from the Settings tab.
-                    viewModel.setHabitAlarmTimes(existingHabitId, times, repeatMask)
+                    viewModel.setHabitAlarmTimes(existingHabitId, times, repeatMask, alarmMessage)
                     val updated = data.habits.firstOrNull { it.id == existingHabitId }
                         ?.withAlarmTimes(times)
                         ?.copy(repeatDaysMask = repeatMask)
@@ -383,9 +392,12 @@ fun HabitsScreen(
                     iconId = icon.id,
                     repeatDaysMask = repeatMask,
                 )
-                if (viewModel.addHabitObject(habit)) {
+                if (viewModel.addHabitObject(habit, alarmMessage)) {
                     if (times.isNotEmpty()) {
-                        HabitAlarmScheduler.schedule(context, habit)
+                        // Armed with the message resolved back into it, because
+                        // that is the object the ring path and the ringing screen
+                        // read the habit's identity from.
+                        HabitAlarmScheduler.schedule(context, habit.withAlarmMessage(alarmMessage))
                         if (AlarmPermissions.needsAttention(context)) showAlarmPermissionPrompt = true
                     }
                     viewModel.queueSync()
@@ -607,7 +619,7 @@ fun HabitsScreen(
     if (showTodoDialog) {
         TodoListDialog(
             onDismiss = { showTodoDialog = false },
-            onConfirm = { name, reminderMinutes, repeatMask ->
+            onConfirm = { name, reminderMinutes, repeatMask, alarmMessage ->
                 val habit = Habit(
                     id = UUID.randomUUID().toString(),
                     name = name,
@@ -616,7 +628,7 @@ fun HabitsScreen(
                     iconId = "todoList",
                     repeatDaysMask = repeatMask,
                 )
-                if (viewModel.addHabitObject(habit)) {
+                if (viewModel.addHabitObject(habit, alarmMessage)) {
                     // ── ARM THE ALARM (only if one was actually set) ──
                     if (reminderMinutes != null) {
                         HabitAlarmScheduler.schedule(context, habit)
@@ -702,11 +714,15 @@ private fun formatAlarmTime(minutes: Int?): String {
 private fun AlarmPickerDialog(
     habitName: String,
     defaultMinutes: Int,
+    /** The habit's catalog icon id, which selects its curated message pack. */
+    habitIconId: String? = null,
     /** Times already set, so re-editing starts from the real schedule. */
     initialTimes: List<Int> = emptyList(),
     initialRepeatMask: Int = REPEAT_DAILY,
+    /** The motivational line already saved for this habit, if any. */
+    initialMessage: String = "",
     onDismiss: () -> Unit,
-    onConfirm: (times: List<Int>, repeatMask: Int) -> Unit,
+    onConfirm: (times: List<Int>, repeatMask: Int, alarmMessage: String) -> Unit,
 ) {
     val timeState = rememberTimePickerState(
         initialHour = defaultMinutes / 60,
@@ -714,6 +730,21 @@ private fun AlarmPickerDialog(
         is24Hour = false,
     )
     var repeatMask by remember { mutableStateOf(initialRepeatMask) }
+    // ── The habit's motivational reminder line ──────────────────────────────
+    // Seeded from what the habit already has. Blank is a valid, meaningful
+    // value here ("use the app's own encouraging line for this habit"), so an
+    // empty initial string is not a missing value to be filled in.
+    var alarmMessage by remember { mutableStateOf(initialMessage) }
+    // The user's own words when they wrote some, otherwise the curated line for
+    // this habit — so the live preview below always shows exactly what the
+    // alarm will say, including when the user has overridden it.
+    val previewLine = MotivationalMessages.lineFor(
+        habitId = "preview",
+        iconId = habitIconId,
+        dayKey = Dates.todayKey(),
+        customMessage = alarmMessage,
+    )
+    val messageSuggestions = remember(habitIconId) { MotivationalMessages.itemsFor(habitIconId) }
     // Seeded from the habit's real schedule. A brand-new habit arrives with the
     // icon's default time already in the list, so "add with alarm" keeps working
     // exactly as before for the common one-alarm case.
@@ -801,6 +832,14 @@ private fun AlarmPickerDialog(
 
                 Spacer(Modifier.height(8.dp))
                 RepeatSelector(mask = repeatMask, onMaskChange = { repeatMask = it })
+                Spacer(Modifier.height(12.dp))
+                MotivationalMessageEditor(
+                    habitLabel = habitName,
+                    value = alarmMessage,
+                    onValueChange = { alarmMessage = it },
+                    previewLine = previewLine,
+                    suggestions = messageSuggestions,
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = if (times.isEmpty()) {
@@ -817,7 +856,7 @@ private fun AlarmPickerDialog(
                 // the user add the habit with no alarm at all instead of
                 // being forced to pick a time for every single one.
                 TextButton(
-                    onClick = { onConfirm(emptyList(), repeatMask) },
+                    onClick = { onConfirm(emptyList(), repeatMask, alarmMessage) },
                     modifier = Modifier.padding(top = 4.dp),
                 ) { Text("Skip — no alarm for this habit") }
             }
@@ -825,7 +864,7 @@ private fun AlarmPickerDialog(
         confirmButton = {
             Button(
                 enabled = times.isNotEmpty(),
-                onClick = { onConfirm(times, repeatMask) },
+                onClick = { onConfirm(times, repeatMask, alarmMessage) },
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) {
                 Text(if (times.size > 1) "Save ${times.size} alarms" else "Save alarm")
@@ -835,6 +874,101 @@ private fun AlarmPickerDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+}
+
+/**
+ * The motivational message editor shared by both habit-creation dialogs.
+ *
+ * ## What it is for
+ *
+ * The default reminder is now an encouraging line rather than a bare alert, so
+ * this is where the user overrides it — or picks one of the suggestions — to make
+ * the alarm sound like something they would actually say to themselves. The
+ * water case the feature was built around ("It's time to water up! 💧 Stay
+ * hydrated, you've got this!") is the suggestion row's first entry for a water
+ * habit.
+ *
+ * ## Why the preview is the real sentence, not a mock
+ *
+ * [previewLine] is produced by the same [MotivationalMessages.lineFor] the alarm
+ * receiver uses, so what the user reads here is exactly what will land in their
+ * notification shade — including the empty-field case, where it correctly shows
+ * the curated pack line rather than a blank.
+ *
+ * ## Bounded on input
+ *
+ * The field trims to [MotivationalMessages.MAX_MESSAGE_LENGTH] as the user types.
+ * The limit is enforced again on write and again at ring time, but catching it
+ * here is what stops the user from composing a line they cannot save.
+ */
+@Composable
+private fun MotivationalMessageEditor(
+    habitLabel: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    previewLine: String,
+    suggestions: List<MotivationalMessages.MessagePack>,
+) {
+    // The editor's own labels come from the string table (see
+    // assets/strings/*.json) so they translate with the rest of the app. Only
+    // the SUGGESTION values stay in Kotlin: those are content — the lines the
+    // user is picking between — and they deliberately fall back to the English
+    // pack rather than being half-translated.
+    val s = appStrings()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = s.habitsMotivationalTitle,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
+        Text(
+            text = s.habitsMotivationalHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onValueChange(it.take(MotivationalMessages.MAX_MESSAGE_LENGTH)) },
+            placeholder = { Text(s.habitsMotivationalPlaceholder) },
+            label = { Text(s.habitsMotivationalLabel) },
+            // Two lines is the useful ceiling for a notification preview; more
+            // than that and the text is cut in the shade anyway.
+            maxLines = 2,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        // One tap to adopt an encouraging line, so the feature is useful without
+        // anyone having to write anything. Suggestions come from this habit's own
+        // pack first (water → hydration lines), so the first chip is the one that
+        // fits the habit rather than a generic platitude.
+        Text(
+            text = s.habitsMotivationalSuggestions.format(habitLabel),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+        ) {
+            suggestions.firstOrNull()?.lines.orEmpty().take(4).forEach { suggestion ->
+                FilterChip(
+                    selected = value.trim() == suggestion,
+                    onClick = { onValueChange(suggestion) },
+                    label = { Text(suggestion, maxLines = 1) },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = s.habitsMotivationalPreview.format(previewLine),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 /**
@@ -897,11 +1031,23 @@ private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
 @Composable
 private fun TodoListDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, reminderMinutes: Int?, repeatMask: Int) -> Unit,
+    onConfirm: (name: String, reminderMinutes: Int?, repeatMask: Int, alarmMessage: String) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("Custom habit") }
     var repeatMask by remember { mutableStateOf(REPEAT_DAILY) }
+    // A custom habit is not a catalog icon, so it inherits no curated pack and
+    // would otherwise have nothing to say at ring time beyond its own name. An
+    // empty value still resolves to the general encouragement pack, so this is
+    // genuinely optional — but the field is here because the user knows their own
+    // reason for the habit better than the app does.
+    var alarmMessage by remember { mutableStateOf("") }
     val timeState = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = false)
+    val subtotalPreview = MotivationalMessages.lineFor(
+        habitId = "preview",
+        iconId = "todoList",
+        dayKey = Dates.todayKey(),
+        customMessage = alarmMessage,
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -927,6 +1073,14 @@ private fun TodoListDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
+                MotivationalMessageEditor(
+                    habitLabel = "this habit",
+                    value = alarmMessage,
+                    onValueChange = { alarmMessage = it },
+                    previewLine = subtotalPreview,
+                    suggestions = MotivationalMessages.itemsFor("todoList"),
+                )
+                Spacer(Modifier.height(12.dp))
                 TimePicker(state = timeState)
                 Spacer(Modifier.height(8.dp))
                 RepeatSelector(mask = repeatMask, onMaskChange = { repeatMask = it })
@@ -939,7 +1093,7 @@ private fun TodoListDialog(
                 // Same "no alarm" escape hatch as the icon-picker flow — a
                 // custom to-do habit shouldn't be forced to carry an alarm.
                 TextButton(
-                    onClick = { onConfirm(name.trim(), null, repeatMask) },
+                    onClick = { onConfirm(name.trim(), null, repeatMask, alarmMessage) },
                     enabled = name.trim().isNotEmpty(),
                     modifier = Modifier.padding(top = 4.dp),
                 ) { Text("Skip — no alarm for this habit") }
@@ -947,7 +1101,7 @@ private fun TodoListDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name.trim(), timeState.hour * 60 + timeState.minute, repeatMask) },
+                onClick = { onConfirm(name.trim(), timeState.hour * 60 + timeState.minute, repeatMask, alarmMessage) },
                 enabled = name.trim().isNotEmpty(),
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) { Text("Add with alarm") }
