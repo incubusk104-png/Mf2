@@ -27,20 +27,42 @@
 ALTER TABLE habits
   ADD COLUMN IF NOT EXISTS alarm_times smallint[] NOT NULL DEFAULT '{}'::smallint[];
 
--- Bound each element to a real time of day. A CHECK over an array needs a
--- subquery-free predicate, so this uses a scalar array test: every element must
--- satisfy the same 0–1439 range reminder_minutes is held to, and the array must
--- not be absurdly long (a schedule of 100 alarms is not a user intent and would
--- mean 100 live AlarmManager entries per habit).
+-- Bound each element to a real time of day.
+--
+-- NOTE: this predicate CANNOT be a subquery. PostgreSQL refuses a subquery
+-- inside a CHECK ("cannot use subquery in check constraint", SQLSTATE 42P17),
+-- and "every element is a valid time of day" cannot be expressed without
+-- aggregating over the array — so it lives in an IMMUTABLE helper function
+-- that the constraint calls. An IMMUTABLE function is permitted in a CHECK; a
+-- subquery is not. An earlier revision of this file inlined the
+-- `SELECT bool_and(...) FROM unnest(alarm_times)` directly into the CHECK,
+-- which made the whole migration fail the moment it was applied.
+--
+-- Schema-qualified at both ends: a CHECK constraint is evaluated with the
+-- caller's search_path, so an unqualified function name would resolve
+-- differently for different roles.
+CREATE OR REPLACE FUNCTION public.habits_alarm_times_valid(times smallint[])
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT times IS NULL
+      OR (
+        coalesce(array_length(times, 1), 0) <= 12
+        AND NOT EXISTS (SELECT 1 FROM unnest(times) AS t WHERE t < 0 OR t > 1439)
+      );
+$$;
+
+COMMENT ON FUNCTION public.habits_alarm_times_valid(smallint[]) IS
+  'True when the array holds at most 12 times, each 0-1439. Backs the '
+  'habits_alarm_times_valid CHECK constraint, which cannot itself contain a '
+  'subquery.';
+
 ALTER TABLE habits
   DROP CONSTRAINT IF EXISTS habits_alarm_times_valid;
 ALTER TABLE habits
   ADD CONSTRAINT habits_alarm_times_valid CHECK (
-    array_length(alarm_times, 1) IS NULL
-    OR (
-      array_length(alarm_times, 1) <= 12
-      AND (SELECT bool_and(t >= 0 AND t <= 1439) FROM unnest(alarm_times) AS t)
-    )
+    public.habits_alarm_times_valid(alarm_times)
   );
 
 COMMENT ON COLUMN habits.alarm_times IS
