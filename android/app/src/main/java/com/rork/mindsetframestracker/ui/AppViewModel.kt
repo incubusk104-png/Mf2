@@ -28,8 +28,6 @@ import com.rork.mindsetframestracker.data.HabitRecommender
 import com.rork.mindsetframestracker.data.HabitSuggestion
 import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
-import com.rork.mindsetframestracker.data.habitLogsFor
-import com.rork.mindsetframestracker.data.habitLogsOn
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.screenTimeSummary
 import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
@@ -1770,45 +1768,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    /**
-     * Persists the user's explicit choice of tracking tool for a habit.
-     *
-     * Writing this is what makes the habit's mode sticky: an explicit value
-     * always outranks the icon-derived default (see [Habit.trackingModeOrDefault]),
-     * so changing a habit's tool is permanent rather than a preference that
-     * evaporates on the next recomposition.
-     */
-    fun setHabitTracking(
-        habitId: String,
-        mode: HabitTrackingMode,
-        targetSeconds: Int? = null,
-        targetCount: Int? = null,
-        unit: String? = null,
-    ) {
-        update { data ->
-            data.copy(
-                habits = data.habits.map { habit ->
-                    if (habit.id != habitId) habit
-                    else habit.copy(
-                        trackingMode = mode,
-                        trackingTargetSeconds = targetSeconds,
-                        trackingTargetCount = targetCount,
-                        trackingUnit = unit,
-                    )
-                },
-            )
-        }
-        queueSync()
-    }
-
-    /** Today's recorded entries for a habit, newest first (empty when none). */
-    fun todayTrackingLogsFor(habitId: String): List<HabitLogEntry> =
-        _state.value.habitLogsOn(habitId, Dates.todayKey())
-
-    /** Most recent recorded entries for a habit — what its dialog shows. */
-    fun recentTrackingLogsFor(habitId: String, limit: Int = 3): List<HabitLogEntry> =
-        _state.value.habitLogsFor(habitId).take(limit)
 
     fun canAddHabit(): Boolean =
         _state.value.settings.hasFeatureAccess() || _state.value.habits.size < MAX_FREE_HABITS

@@ -47,26 +47,6 @@ import com.rork.mindsetframestracker.data.ActivityRecord
 import com.rork.mindsetframestracker.data.RuleBasedInsight
 
 /**
- * Simple single-insight sheet — used for quick per-record popups.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ActivityInsightSheet(
-    title: String,
-    insightText: String,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(insightText, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-/**
  * Activity Report Sheet — full summary of synced fitness data from
  * Strava, Polar, and Google Health Connect.
  *

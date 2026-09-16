@@ -36,9 +36,6 @@ enum class TimerKind { TIMER, STOPWATCH }
 @Serializable
 enum class TimerStatus { RUNNING, PAUSED }
 
-/** Shortest timer target we accept (1 minute). */
-const val MIN_TIMER_TARGET_SECONDS = 60
-
 /** Longest target we accept (8 hours) \u2014 keeps a stuck timer from arming forever. */
 const val MAX_TIMER_TARGET_SECONDS = 8 * 60 * 60
 
