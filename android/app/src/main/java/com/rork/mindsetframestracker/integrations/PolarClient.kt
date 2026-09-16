@@ -424,7 +424,14 @@ object PolarClient {
             steps = activity.steps,
             calories = activity.calories,
         )
-        MindsetRepository(context).saveActivityRecord(record)
+        // Honest result: a failed write must not be reported to the caller as a
+        // successful sync. saveActivityRecord swallows its own exception and
+        // returns null, so its return value is the only signal available.
+        val stored = MindsetRepository(context).saveActivityRecord(record)
+        if (stored == null) {
+            Log.w(TAG, "Could not persist Polar activity for $habitId")
+            return false
+        }
         return true
     }
 

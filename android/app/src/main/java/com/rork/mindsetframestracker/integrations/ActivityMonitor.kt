@@ -232,8 +232,16 @@ object ActivityMonitor {
             activityName = session?.title?.takeIf { it.isNotBlank() },
         )
 
-        runCatching { MindsetRepository(context).saveActivityRecord(record) }
-            .onFailure { Log.w(TAG, "Could not persist activity record", it) }
+        // Persistence is CHECKED, not assumed. saveActivityRecord catches its own
+        // failure and returns null — so the runCatching this used to be wrapped in
+        // could never fire, and the failure was invisible. Reporting "Captured real
+        // activity" for a record that was never stored is precisely the fake-success
+        // state this audit set out to remove.
+        val stored = MindsetRepository(context).saveActivityRecord(record)
+        if (stored == null) {
+            Log.w(TAG, "Could not persist activity record for $habitId — not reporting it as captured")
+            return null
+        }
 
         Log.i(
             TAG,
@@ -282,10 +290,15 @@ object ActivityMonitor {
             durationMinutes = minutes.toInt(),
             sleepMinutes = minutes.toInt(),
         )
-        runCatching { MindsetRepository(context).saveActivityRecord(record) }
-            .onFailure { Log.w(TAG, "Could not persist sleep record", it) }
+        // Same check as the activity path above: a null return means the write
+        // failed, so the "Captured N min of sleep" line must not be emitted.
+        val stored = MindsetRepository(context).saveActivityRecord(record)
+        if (stored == null) {
+            Log.w(TAG, "Could not persist sleep record for $habitId — not reporting it as captured")
+            return null
+        }
         Log.i(TAG, "Captured $minutes min of sleep for $habitId")
-        return record
+        return stored
     }
 
     /**

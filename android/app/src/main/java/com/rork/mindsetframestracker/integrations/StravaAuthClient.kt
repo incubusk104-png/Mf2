@@ -194,8 +194,15 @@ object StravaAuthClient {
                         activityName = obj.optString("name").takeIf { it.isNotBlank() },
                         elevationGainMeters = elevation,
                     )
-                    repo.saveActivityRecord(record)
-                    saved++
+                    // Count only what was actually persisted. saveActivityRecord
+                    // returns null on a failed write, and incrementing regardless
+                    // made a total storage failure report as "N activities saved".
+                    val stored = repo.saveActivityRecord(record)
+                    if (stored == null) {
+                        Log.w(TAG, "Could not persist Strava activity ${record.id}")
+                    } else {
+                        saved++
+                    }
                 }
                 Result.success(saved)
             }
