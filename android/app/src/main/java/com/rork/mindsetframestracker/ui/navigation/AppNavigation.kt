@@ -78,6 +78,7 @@ import com.rork.mindsetframestracker.notifications.TimerService
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.ui.screens.TimerCompletionPopup
+import com.rork.mindsetframestracker.ui.components.MinimizedSessionChip
 import com.rork.mindsetframestracker.ui.components.SetNewPasswordSheet
 import com.rork.mindsetframestracker.ui.components.SyncStatusBanner
 import com.rork.mindsetframestracker.ui.components.moodBackdrop
@@ -208,6 +209,17 @@ private fun HabitTimerOptionsHost(
     val context = LocalContext.current
     var request by remember { mutableStateOf<HabitTimerRequests.Request?>(null) }
 
+    // A minimized sheet is restored from disk, not from memory: the point of
+    // minimizing is that the user comes back later, which may be after the app
+    // was backgrounded, rotated, or killed outright. `minimizeNonce` is bumped
+    // when the user minimizes so the read re-runs on the same frame.
+    var minimizeNonce by remember { mutableStateOf(0) }
+    LaunchedEffect(minimizeNonce) {
+        if (request == null) {
+            request = runCatching { HabitTimerRequests.peekMinimized(context) }.getOrNull()
+        }
+    }
+
     // ── Why this polls instead of waiting for ON_RESUME ──
     // A one-shot request is written to disk by HabitReminderReceiver at the
     // instant the alarm reaches the user. This host has to notice it *without
@@ -294,7 +306,16 @@ private fun HabitTimerOptionsHost(
                 durationSeconds = durationSeconds,
                 count = count,
                 unit = habit?.trackingUnit,
+                // Attributed to the alarm time that raised this sheet, so the
+                // record answers *this* occurrence. Without it a second ring of
+                // the day would be indistinguishable from the first, and the
+                // per-occurrence history the user asked for would collapse.
+                alarmMinutes = pending.alarmMinutes,
             )
+            // Recorded, so nothing is left waiting: the minimized copy (if any)
+            // is cleared BEFORE the sheet closes, so the chip cannot outlive
+            // the record it belonged to.
+            HabitTimerRequests.clearMinimized(context)
             request = null
         },
         onStartTimed = { kind, target ->
@@ -308,7 +329,20 @@ private fun HabitTimerOptionsHost(
             request = null
             onOpenTimerScreen()
         },
-        onDismiss = { request = null },
+        onDismiss = {
+            // Dismissing for real clears any minimized copy, so a later tick in
+            // the poll loop cannot resurrect a sheet the user explicitly closed.
+            HabitTimerRequests.clearMinimized(context)
+            request = null
+        },
+        onMinimize = {
+            // Keep the sheet reachable under the minimized chip. The request is
+            // COPIED to the minimized slot first, because the poll loop/consume
+            // discipline means the one-shot record is already gone by now.
+            HabitTimerRequests.minimize(context, pending)
+            request = null
+            minimizeNonce++
+        },
     )
 }
 
@@ -811,6 +845,38 @@ fun AppNavigation(viewModel: AppViewModel) {
                 onOpenTimerScreen = {
                     navController.navigate("timer") { launchSingleTop = true }
                 },
+            )
+
+            // ── Minimized sessions ─────────────────────────────────────────
+            // Hosted at the app root, directly above the bottom bar, so a
+            // running stopwatch or a sheet the user minimized is reachable from
+            // EVERY tab — which is the whole point of "take it anytime".
+            // Restoring a minimized sheet drives the same host that the alarm
+            // path uses, so there is exactly one component that can put a habit
+            // sheet on screen and no way for two to compete.
+            MinimizedSessionChip(
+                context = context,
+                onResumeSheet = { minimized ->
+                    // Stashed where HabitTimerOptionsHost looks, then cleared from
+                    // the minimized slot so the chip and the sheet cannot both
+                    // believe they own it.
+                    HabitTimerRequests.request(
+                        context = context,
+                        habitId = minimized.habitId,
+                        habitName = minimized.habitName,
+                        iconId = minimized.iconId,
+                        mode = minimized.mode,
+                        isSport = minimized.isSport,
+                        alarmMinutes = minimized.alarmMinutes,
+                    )
+                    HabitTimerRequests.clearMinimized(context)
+                },
+                onOpenTimer = {
+                    navController.navigate("timer") { launchSingleTop = true }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (showBottomBar) 74.dp else 12.dp),
             )
 
             TimerCompletionHost(

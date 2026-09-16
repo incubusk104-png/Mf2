@@ -119,6 +119,16 @@ fun HabitTrackingSheet(
     ) -> Unit,
     onStartTimed: (kind: TimerKind, targetSeconds: Int) -> Unit,
     onDismiss: () -> Unit,
+    /**
+     * Minimize this sheet instead of abandoning it — the "take it anytime" path.
+     *
+     * Null (the default) means the sheet has no minimized home to go to, in which
+     * case the button is simply not rendered rather than being shown and doing
+     * nothing. The Habits screen passes null because there the sheet *is* the
+     * destination; the root alarm host passes a real handler because a ring can
+     * arrive while the user is mid-something-else.
+     */
+    onMinimize: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val iconRes = remember(habitIconId) {
@@ -214,8 +224,31 @@ fun HabitTrackingSheet(
             }
 
             Spacer(Modifier.height(6.dp))
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel")
+            // ── Leave, or come back later ──────────────────────────────────
+            // "Minimize" and "Cancel" are deliberately different actions and
+            // both are named explicitly:
+            //
+            //  * **Minimize** keeps the sheet reachable under a running chip,
+            //    so a walk the user started can be paused mid-way and the rest
+            //    of the habit logged when they get back. Nothing is recorded
+            //    yet either way — the chip is a way back, not a submission.
+            //  * **Cancel** discards and writes nothing, exactly as before.
+            //
+            // Labelled "Minimize" rather than an icon-only chevron because an
+            // unlabelled collapse arrow next to a Cancel button reads as "close"
+            // — which would make the two buttons look like the same action and
+            // lose the user's in-progress state.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (onMinimize != null) {
+                    TextButton(onClick = onMinimize, modifier = Modifier.weight(1f)) {
+                        Text("Minimize")}
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
             }
         }
     }
