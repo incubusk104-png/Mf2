@@ -14,10 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -45,9 +50,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.alarmMinutes
+import com.rork.mindsetframestracker.data.formatAlarmTimes
+import com.rork.mindsetframestracker.data.withAlarmTimes
 import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.REPEAT_DAILY
@@ -306,14 +315,22 @@ fun HabitsScreen(
     // icon's default alarm time so they can customise it before adding.
     if (alarmPickerIcon != null) {
         val icon = alarmPickerIcon!!
+        // The habit this icon maps to, when one exists — used to pre-seed the
+        // editor with the schedule already set. Resolved once here rather than
+        // inside the dialog so the dialog stays a pure function of its inputs.
+        val existingForIcon = data.habits.firstOrNull { it.iconId == icon.id }
         AlarmPickerDialog(
             habitName = icon.label,
             defaultMinutes = icon.defaultReminderMinutes,
+            // Every time already configured, so re-editing shows the whole
+            // schedule rather than silently replacing it with the first time.
+            initialTimes = existingForIcon?.alarmMinutes ?: emptyList(),
+            initialRepeatMask = existingForIcon?.repeatDaysMask ?: REPEAT_DAILY,
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
             },
-            onConfirm = onConfirm@{ chosenMinutes, repeatMask ->
+            onConfirm = onConfirm@{ times, repeatMask ->
                 alarmPickerIcon = null
                 val existingHabitId = alarmSetupExistingHabitId
                 alarmSetupExistingHabitId = null
@@ -327,21 +344,25 @@ fun HabitsScreen(
                     // edit was the extra popup being flagged. Permission
                     // gaps are still checked and surfaced the first time an
                     // alarm is created, and any time from the Settings tab.
-                    viewModel.setHabitReminder(existingHabitId, chosenMinutes, repeatMask)
+                    viewModel.setHabitAlarmTimes(existingHabitId, times, repeatMask)
                     val updated = data.habits.firstOrNull { it.id == existingHabitId }
-                        ?.copy(reminderMinutes = chosenMinutes, repeatDaysMask = repeatMask)
-                    if (chosenMinutes != null && updated != null) {
-                        HabitAlarmScheduler.schedule(context, updated)
-                    } else if (updated != null) {
-                        // Switched back to "no alarm" — cancel any previously
-                        // scheduled alarm for this habit instead of leaving
-                        // a stale one armed.
-                        HabitAlarmScheduler.cancel(context, updated)
+                        ?.withAlarmTimes(times)
+                        ?.copy(repeatDaysMask = repeatMask)
+                    if (updated != null) {
+                        // schedule() arms one alarm per time (and clears the
+                        // pre-multi-alarm entry), cancel() clears all of them —
+                        // so switching a 3-alarm habit back to "no alarm" really
+                        // does quiet all three rather than leaving two ringing.
+                        if (times.isNotEmpty()) {
+                            HabitAlarmScheduler.schedule(context, updated)
+                        } else {
+                            HabitAlarmScheduler.cancel(context, updated)
+                        }
                     }
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            if (chosenMinutes != null)
-                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}"
+                            if (times.isNotEmpty())
+                                "Alarm set — ${formatRepeat(repeatMask)} at ${formatAlarmTimes(times)}"
                             else
                                 "Alarm removed for this habit.",
                         )
@@ -353,20 +374,23 @@ fun HabitsScreen(
                     id = UUID.randomUUID().toString(),
                     name = icon.label,
                     createdAt = System.currentTimeMillis(),
-                    reminderMinutes = chosenMinutes,
+                    // Both fields set from the same source so the list and the
+                    // legacy primary time can never disagree.
+                    reminderMinutes = times.firstOrNull(),
+                    alarmTimes = times,
                     iconId = icon.id,
                     repeatDaysMask = repeatMask,
                 )
                 if (viewModel.addHabitObject(habit)) {
-                    if (chosenMinutes != null) {
+                    if (times.isNotEmpty()) {
                         HabitAlarmScheduler.schedule(context, habit)
                         if (AlarmPermissions.needsAttention(context)) showAlarmPermissionPrompt = true
                     }
                     viewModel.queueSync()
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            if (chosenMinutes != null)
-                                "Added ${habit.name} — alarm ${formatRepeat(repeatMask)} at ${formatAlarmTime(chosenMinutes)}"
+                            if (times.isNotEmpty())
+                                "Added ${habit.name} — ${formatRepeat(repeatMask)} at ${formatAlarmTimes(times)}"
                             else
                                 "Added ${habit.name} — no alarm. Tap it anytime to add one.",
                         )
@@ -676,17 +700,26 @@ private fun formatAlarmTime(minutes: Int?): String {
 private fun AlarmPickerDialog(
     habitName: String,
     defaultMinutes: Int,
+    /** Times already set, so re-editing starts from the real schedule. */
+    initialTimes: List<Int> = emptyList(),
+    initialRepeatMask: Int = REPEAT_DAILY,
     onDismiss: () -> Unit,
-    onConfirm: (reminderMinutes: Int?, repeatMask: Int) -> Unit,
+    onConfirm: (times: List<Int>, repeatMask: Int) -> Unit,
 ) {
-    val defaultHour = defaultMinutes / 60
-    val defaultMinute = defaultMinutes % 60
     val timeState = rememberTimePickerState(
-        initialHour = defaultHour,
-        initialMinute = defaultMinute,
+        initialHour = defaultMinutes / 60,
+        initialMinute = defaultMinutes % 60,
         is24Hour = false,
     )
-    var repeatMask by remember { mutableStateOf(REPEAT_DAILY) }
+    var repeatMask by remember { mutableStateOf(initialRepeatMask) }
+    // Seeded from the habit's real schedule. A brand-new habit arrives with the
+    // icon's default time already in the list, so "add with alarm" keeps working
+    // exactly as before for the common one-alarm case.
+    var times by remember {
+        mutableStateOf(initialTimes.ifEmpty { listOf(defaultMinutes) }.distinct().sorted())
+    }
+    val pendingMinutes = timeState.hour * 60 + timeState.minute
+    val alreadyAdded = pendingMinutes in times
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -697,35 +730,104 @@ private fun AlarmPickerDialog(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Choose when you'd like to be reminded, or skip it — you can always add one later.",
+                    text = "Add as many times as you like — you can always change them later.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
+
+                // ── The schedule so far ────────────────────────────────
+                // Stacked rather than a scrolling row: with three or four times
+                // a wrapped column is easier to read than a horizontal scroller,
+                // and each chip is its own removable target the user can hit
+                // without precision.
+                if (times.isNotEmpty()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        times.forEach { minutes ->
+                            InputChip(
+                                selected = false,
+                                onClick = { times = times - minutes },
+                                label = { Text(formatAlarmTime(minutes)) },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Remove ${formatAlarmTime(minutes)}",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "No alarms set yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
                 TimePicker(state = timeState)
+                Spacer(Modifier.height(4.dp))
+
+                // Adding is explicit and disabled while the selected time is
+                // already in the list, so the schedule can never accumulate
+                // duplicates — which would arm two alarms for one time and ring
+                // the same reminder twice.
+                TextButton(
+                    enabled = !alreadyAdded,
+                    onClick = { times = (times + pendingMinutes).distinct().sorted() },
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (alreadyAdded) {
+                            "${formatAlarmTime(pendingMinutes)} is already set"
+                        } else {
+                            "Add ${formatAlarmTime(pendingMinutes)}"
+                        },
+                    )
+                }
+
                 Spacer(Modifier.height(8.dp))
                 RepeatSelector(mask = repeatMask, onMaskChange = { repeatMask = it })
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Alarm: ${formatAlarmTime(timeState.hour * 60 + timeState.minute)} · ${formatRepeat(repeatMask)}",
+                    text = if (times.isEmpty()) {
+                        "No alarm"
+                    } else {
+                        "Alarm ${formatAlarmTimes(times)} · ${formatRepeat(repeatMask)}"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
                 )
                 // "I want to remove setup because I didn't setup all of
                 // them alarm" — not every habit needs a reminder. This lets
                 // the user add the habit with no alarm at all instead of
                 // being forced to pick a time for every single one.
                 TextButton(
-                    onClick = { onConfirm(null, repeatMask) },
+                    onClick = { onConfirm(emptyList(), repeatMask) },
                     modifier = Modifier.padding(top = 4.dp),
                 ) { Text("Skip — no alarm for this habit") }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(timeState.hour * 60 + timeState.minute, repeatMask) },
+                enabled = times.isNotEmpty(),
+                onClick = { onConfirm(times, repeatMask) },
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-            ) { Text("Add with alarm") }
+            ) {
+                Text(if (times.size > 1) "Save ${times.size} alarms" else "Save alarm")
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

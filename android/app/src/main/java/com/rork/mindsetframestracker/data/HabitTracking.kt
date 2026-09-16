@@ -179,6 +179,31 @@ data class HabitLogEntry(
     val dayKey: String,
     /** Which tool produced this entry. */
     val mode: HabitTrackingMode,
+    /**
+     * The specific alarm occurrence this record answers, shaped
+     * `"<dayKey>@<minutesFromMidnight>"` — or null for a record the user made
+     * unprompted (tapping the habit on the Habits screen, logging water).
+     *
+     * ## Why a record has to be tied to its occurrence
+     *
+     * A habit can now ring several times a day, and **each ring is its own
+     * piece of history** — "did I walk at 07:00, and again at 18:00?" is a
+     * different question from "did I walk today", and only the first one is
+     * answerable if the records collapse.
+     *
+     * Without this key the second occurrence of a day would look like a
+     * duplicate of the first: the day-scoped readers take the most recent entry
+     * per habit per day ([AppData.habitLogOn]), so an evening walk would
+     * *replace* the morning one in the dialog's summary instead of joining it,
+     * and the ring-time fallback write would be unable to tell "already
+     * answered this occurrence" from "answered a different one".
+     *
+     * Carrying the time **inside the key** (rather than as a separate field the
+     * reader has to combine) means the uniqueness test is a single string
+     * comparison, which is what makes "exactly one check-in per occurrence"
+     * cheap enough to run on the ring path.
+     */
+    val occurrenceKey: String? = null,
     /** Journal headline, when the mode asks for one. */
     val title: String? = null,
     /** Journal body text. */
@@ -267,6 +292,41 @@ fun AppData.habitsLoggedOver(dayKeys: Collection<String>): List<Habit> {
     val days = dayKeys.toSet()
     val logged = habitLogs.filter { it.dayKey in days }.map { it.habitId }.toSet()
     return habits.filter { it.id in logged }
+}
+
+/** The key identifying one habit's alarm occurrence on one day. */
+fun occurrenceKeyFor(dayKey: String, alarmMinutes: Int): String = "$dayKey@$alarmMinutes"
+
+/**
+ * True when the user has already answered the alarm that fired at
+ * [alarmMinutes] on [dayKey].
+ *
+ * This is the guard that makes "exactly one record per occurrence" hold. It is
+ * deliberately narrower than "did they do the habit today": six alarms for six
+ * different times must each get their own record, so a check-in for the 07:00
+ * ring must not satisfy the 18:00 one.
+ */
+fun AppData.hasAnsweredOccurrence(habitId: String, dayKey: String, alarmMinutes: Int): Boolean {
+    val key = occurrenceKeyFor(dayKey, alarmMinutes)
+    return habitLogs.any { it.habitId == habitId && it.occurrenceKey == key }
+}
+
+/**
+ * Every entry recorded for [habitId] on [dayKey], **one per occurrence**, oldest
+ * first — the per-occurrence history the user asked to be able to look back on.
+ *
+ * Distinct from [habitLogsOn] only in intent: that one is the raw day slice for
+ * summing, this one is what a "what did I do at each time today" view reads.
+ * Both are needed, and they are the same filter, so this delegates rather than
+ * re-implementing it.
+ */
+fun AppData.habitOccurrencesOn(habitId: String, dayKey: String): List<HabitLogEntry> =
+    habitLogsOn(habitId, dayKey).sortedBy { it.recordedAtEpochMs }
+
+/** An "HH:mm" label for a log entry's alarm time, or null for an unprompted record. */
+fun HabitLogEntry.alarmTimeLabel(): String? {
+    val minutes = occurrenceKey?.substringAfter('@', "")?.toIntOrNull() ?: return null
+    return String.format(java.util.Locale.US, "%02d:%02d", minutes / 60, minutes % 60)
 }
 
 /**

@@ -12,13 +12,22 @@ import com.rork.mindsetframestracker.data.trackingModeOrDefault
 
 /**
  * Fired by the app's own [android.app.AlarmManager] alarm that
- * [HabitAlarmScheduler] scheduled for the user's chosen habit-reminder time
- * (or by [HabitSnoozeReceiver]'s 5-minute snooze re-fire).
+ * [HabitAlarmScheduler] scheduled for one of the user's chosen habit-reminder
+ * times (or by [HabitSnoozeReceiver]'s 5-minute snooze re-fire).
  *
- * Posts the reminder via [HabitCheckInNotifier.showResult]. Unless this run
- * was a snooze re-fire, that call also re-arms tomorrow's occurrence through
- * [HabitAlarmScheduler.scheduleNext] — mirroring how [CheckInReceiver] and
- * [StreakAlertReceiver] re-arm the global daily alarms.
+ * Posts the reminder via [HabitCheckInNotifier.showResult]. Unless this run was
+ * a snooze re-fire, that call also re-arms **this time's** next occurrence
+ * through [HabitAlarmScheduler.scheduleNext] — mirroring how [CheckInReceiver]
+ * and [StreakAlertReceiver] re-arm the global daily alarms.
+ *
+ * ## This receiver knows WHICH occurrence rang
+ *
+ * A habit can ring several times a day, so the alarm's time travels with the
+ * intent ([EXTRA_ALARM_MINUTES]) and is handed to both the re-arm and the
+ * record. That is what lets the app answer "what did I do at each time today"
+ * instead of collapsing a morning and an evening walk into one entry — and it
+ * is why the timer request carries it too, so the sheet that opens knows which
+ * occurrence it is recording against.
  */
 class HabitReminderReceiver : BroadcastReceiver() {
 
@@ -34,6 +43,10 @@ class HabitReminderReceiver : BroadcastReceiver() {
         val habitId = intent.getStringExtra(EXTRA_HABIT_ID) ?: return
         val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: "Habit"
         val isSnoozeRefire = intent.getBooleanExtra(EXTRA_IS_SNOOZE_REFIRE, false)
+        // Which of the habit's alarm times this is. Absent only for a snooze
+        // re-fire of a request written by an older build, in which case the
+        // record falls back to "the habit's first alarm time".
+        val alarmMinutes = intent.getIntExtra(EXTRA_ALARM_MINUTES, NO_ALARM_MINUTES)
 
         // showResult() already wraps its own body in runCatching, so this
         // can't throw — but log every non-success case with the real reason
@@ -43,6 +56,7 @@ class HabitReminderReceiver : BroadcastReceiver() {
             context,
             habitId,
             habitName,
+            alarmMinutes = alarmMinutes.takeIf { it != NO_ALARM_MINUTES },
             reschedule = !isSnoozeRefire,
         )) {
             is HabitCheckInNotifier.NotifyResult.Posted -> {
@@ -76,6 +90,7 @@ class HabitReminderReceiver : BroadcastReceiver() {
                             iconId = habit.iconId,
                             mode = habit.trackingModeOrDefault,
                             isSport = habit.isSportActivity,
+                            alarmMinutes = alarmMinutes.takeIf { it != NO_ALARM_MINUTES },
                         )
                     }.onFailure { Log.w(TAG, "Could not record the timer/stopwatch request", it) }
                 }
@@ -101,5 +116,11 @@ class HabitReminderReceiver : BroadcastReceiver() {
         const val EXTRA_HABIT_ID = "habitId"
         const val EXTRA_HABIT_NAME = "habitName"
         const val EXTRA_IS_SNOOZE_REFIRE = "isSnoozeRefire"
+
+        /** Which of the habit's alarm times fired, in minutes from midnight. */
+        const val EXTRA_ALARM_MINUTES = "alarmMinutes"
+
+        /** Sentinel for "this intent predates multi-time alarms". */
+        const val NO_ALARM_MINUTES = -1
     }
 }

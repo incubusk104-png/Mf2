@@ -84,9 +84,30 @@ class AlarmStopReceiver : BroadcastReceiver() {
         // stopped and then started ringing again on its own".
         if (!habitId.isNullOrBlank()) {
             runCatching {
-                MindsetRepository(context).load().habits
-                    .firstOrNull { it.id == habitId }
-                    ?.let { habit -> HabitAlarmScheduler.cancel(context, habit) }
+                // Cancel the alarm at the time that is actually ringing, not
+                // every alarm the habit has.
+                //
+                // This used to resolve the habit and call the all-times
+                // HabitAlarmScheduler.cancel(), which was harmless while a habit
+                // had one alarm and became destructive once it could have
+                // several: stopping the 07:00 ring would also silently cancel
+                // the user's 12:00 and 18:00 alarms. The alarm time travels on
+                // the same intent, so the precise one is available here.
+                val alarmMinutes = intent.getIntExtra(
+                    HabitReminderReceiver.EXTRA_ALARM_MINUTES,
+                    HabitReminderReceiver.NO_ALARM_MINUTES,
+                )
+                val habitName = intent.getStringExtra(EXTRA_HABIT_NAME)
+                if (alarmMinutes != HabitReminderReceiver.NO_ALARM_MINUTES) {
+                    HabitAlarmScheduler.cancelAt(context, habitId, habitName.orEmpty(), alarmMinutes)
+                } else {
+                    // A stop whose intent predates per-time alarms: fall back to
+                    // clearing the whole habit, which for a single-alarm habit is
+                    // exactly the same thing.
+                    MindsetRepository(context).load().habits
+                        .firstOrNull { it.id == habitId }
+                        ?.let { habit -> HabitAlarmScheduler.cancel(context, habit) }
+                }
             }.onFailure { Log.w(TAG, "Could not cancel the alarm for habit $habitId", it) }
         }
 
@@ -189,6 +210,16 @@ class AlarmStopReceiver : BroadcastReceiver() {
             habitId: String? = null,
             habitName: String? = null,
             eventId: String? = null,
+            /**
+             * The alarm time whose ring this button silences.
+             *
+             * Carried so the receiver cancels **that** occurrence rather than
+             * every alarm the habit has. Without it, stopping the 07:00 ring
+             * silently cancelled the user's 12:00 and 18:00 alarms — a stop
+             * button that deletes tomorrow's schedule is worse than one that
+             * does nothing.
+             */
+            alarmMinutes: Int? = null,
         ): PendingIntent? =
             runCatching {
                 PendingIntent.getBroadcast(
@@ -199,6 +230,10 @@ class AlarmStopReceiver : BroadcastReceiver() {
                         putExtra(EXTRA_HABIT_ID, habitId)
                         putExtra(EXTRA_HABIT_NAME, habitName)
                         putExtra(EXTRA_EVENT_ID, eventId)
+                        putExtra(
+                            HabitReminderReceiver.EXTRA_ALARM_MINUTES,
+                            alarmMinutes ?: HabitReminderReceiver.NO_ALARM_MINUTES,
+                        )
                     },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )

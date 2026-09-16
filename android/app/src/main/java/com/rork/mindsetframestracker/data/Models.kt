@@ -18,8 +18,38 @@ data class Habit(
     val createdAt: Long = 0L,
     /** Pinned (favorite) habits always sort to the top of habit lists. */
     val isPinned: Boolean = false,
-    /** Minutes from midnight for this habit's own reminder. Null = no individual alarm. */
+    /** Minutes from midnight for this habit's own reminder. Null = no individual alarm.
+     *
+     * ## Why this still exists alongside [alarmTimes]
+     *
+     * This is the habit's **first/primary** alarm time, and it is kept as the
+     * single source of truth for everything that only ever understood one time:
+     * the `reminder_minutes` column, the picker grid's "has an alarm" badge, the
+     * legacy re-arm path. [alarmTimes] is the full set, and the two are
+     * maintained together by [Habit.alarmMinutes] / [Habit.withAlarmTimes] so
+     * they can never disagree.
+     *
+     * Null means "no alarm" — which is also why a user cannot set one of
+     * several alarms to null: the list simply shrinks.
+     */
     val reminderMinutes: Int? = null,
+    /**
+     * **Every** time this habit rings, in minutes from midnight, ascending.
+     *
+     * A habit like "Walk" is commonly wanted at 07:00, 12:00 and 18:00, and the
+     * single [reminderMinutes] could express exactly one of those. Each entry
+     * here is armed as its **own** AlarmManager alarm with its own request code,
+     * so the three fire independently and each produces its own occurrence.
+     *
+     * `repeatDaysMask` is deliberately shared by the whole list rather than
+     * stored per time: the user's mental model is "this habit rings at these
+     * times on these days", and a per-time mask would mean editing the repeat
+     * row silently applied only to whichever time happened to be selected.
+     *
+     * Empty means the habit has no alarm at all. When non-empty, [reminderMinutes]
+     * is always the first entry — see [Habit.alarmMinutes].
+     */
+    val alarmTimes: List<Int> = emptyList(),
     /** For timed habits (meditation, workout). Null = simple checkbox habit. */
     val durationSeconds: Int? = null,
     /** Links to HabitIconCatalog.HabitIcon.id for visual picker display. */
@@ -84,6 +114,86 @@ const val REPEAT_WEEKENDS = 0b1100000
 /** True when this habit tracks phone screen time instead of a manual check-in. */
 val Habit.isScreenTimeHabit: Boolean
     get() = monitoredPackage != null && screenTimeLimitMinutes != null
+
+/**
+ * Every alarm time this habit rings at, in minutes from midnight, ascending
+ * and free of duplicates.
+ *
+ * Reads [Habit.alarmTimes] when it has been populated and falls back to the
+ * legacy [Habit.reminderMinutes] otherwise, so every habit created before
+ * multiple alarms existed keeps ringing exactly where it did. Returning a
+ * sorted, deduped list rather than the raw field is what lets the scheduler
+ * (and the UI) treat one-time and many-time habits through the same path
+ * without a per-call-site special case.
+ */
+val Habit.alarmMinutes: List<Int>
+    get() {
+        val times = if (alarmTimes.isNotEmpty()) alarmTimes else listOfNotNull(reminderMinutes)
+        return times.filter { it in 0..1439 }.distinct().sorted()
+    }
+
+/** True when this habit rings at more than one time of day. */
+val Habit.hasMultipleAlarms: Boolean
+    get() = alarmMinutes.size > 1
+
+/**
+ * The alarm time today that is most likely the one waiting on the user, given
+ * the current local time in minutes.
+ *
+ * Used to attribute a completion that happens *after* the ring — a stopwatch the
+ * user started from the alarm sheet and finished 40 minutes later. The record
+ * belongs on the occurrence that prompted it, not on "the habit" generically, or
+ * the 07:00 and 18:00 walks collapse into one entry and the user cannot tell
+ * what they did at each time.
+ *
+ * The **latest** already-due time is the right answer: alarms fire in ascending
+ * order, so if 07:00 and 12:00 have both passed and the user is finishing a walk
+ * now, 12:00 is the occurrence in progress.
+ *
+ * Falls back to the habit's last time of day when nothing is due yet (a
+ * completion arriving before the first alarm, e.g. from a manually started
+ * timer). Null only when the habit has no alarms at all, in which case the
+ * record is written day-scoped exactly as before.
+ */
+fun Habit.pendingOccurrenceMinutes(nowMinutes: Int): Int? {
+    val times = alarmMinutes
+    if (times.isEmpty()) return null
+    return times.filter { it <= nowMinutes }.lastOrNull() ?: times.last()
+}
+
+/**
+ * The habit with its alarm times replaced by [times].
+ *
+ * The **only** supported way to change a habit's alarms, because it is the one
+ * place that keeps [Habit.alarmTimes] and [Habit.reminderMinutes] consistent.
+ * Writing either field directly is what would let them drift — a habit whose
+ * list says 07:00/18:00 but whose `reminderMinutes` says 09:00 would ring at
+ * the wrong times depending on which reader looked at it.
+ *
+ * An empty [times] clears the alarm entirely and nulls [Habit.reminderMinutes],
+ * which is what the "no alarm for this habit" choice means.
+ */
+fun Habit.withAlarmTimes(times: List<Int>): Habit {
+    val clean = times.filter { it in 0..1439 }.distinct().sorted()
+    return copy(
+        alarmTimes = clean,
+        reminderMinutes = clean.firstOrNull(),
+    )
+}
+
+/**
+ * "07:00, 12:00, 18:00" — the alarm times as a readable list.
+ *
+ * Written here rather than in the UI so the schedule is described identically
+ * wherever it is shown (snackbar, habit row, settings), and so the
+ * always-24-hour clock is consistent: an alarm time is an appointment, not a
+ * locale-formatted timestamp, and mixing 12- and 24-hour renderings of the
+ * same schedule is how a user ends up misreading their own alarms.
+ */
+fun formatAlarmTimes(times: List<Int>): String =
+    times.sorted().joinToString(", ") { minutes ->
+        String.format(java.util.Locale.US, "%02d:%02d", minutes / 60, minutes % 60)
+    }
 
 /**
  * One app's screen-time limit as chosen in the limits manager.
@@ -311,6 +421,20 @@ object Dates {
     private val formatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
     fun todayKey(): String = LocalDate.now().format(formatter)
+
+    /**
+     * Minutes since local midnight, 0..1439.
+     *
+     * Used to decide which of a habit's alarm times is the one currently in
+     * progress, so a record made *after* a ring (a stopwatch the user started
+     * from the alarm sheet and stopped 40 minutes later) is attributed to the
+     * occurrence that prompted it rather than to the habit generically. Local
+     * rather than UTC on purpose: the user's "today" is their own midnight.
+     */
+    fun nowMinutes(): Int {
+        val now = java.time.LocalTime.now()
+        return now.hour * 60 + now.minute
+    }
 
     fun key(date: LocalDate): String = date.format(formatter)
 

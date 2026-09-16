@@ -870,6 +870,20 @@ class SupabaseSync(context: Context) {
         val created_at_ms: Long = 0L,
         val icon_id: String? = null,
         val reminder_minutes: Int? = null,
+        /**
+         * Every alarm time for this habit, minutes from midnight.
+         *
+         * Kept alongside [reminder_minutes] rather than replacing it: the legacy
+         * column is still written (as the first entry) so an older client can
+         * still restore a working single alarm, while this one carries the full
+         * schedule the current client re-arms from.
+         *
+         * Defaulted to empty rather than made required, because an un-migrated
+         * project returns no such column and PostgREST omits it — a non-null
+         * default keeps deserialization working against the old schema, which is
+         * what lets this client ship before the migration is applied.
+         */
+        val alarm_times: List<Int> = emptyList(),
         val is_pinned: Boolean = false,
         val duration_seconds: Int? = null,
         val repeat_days_mask: Int = REPEAT_DAILY,
@@ -918,6 +932,16 @@ class SupabaseSync(context: Context) {
         val unit: String? = null,
         val duration_seconds: Int? = null,
         val logged_at_ms: Long = 0L,
+        /**
+         * The alarm occurrence this record answers (`<day>@<minutes>`), or null
+         * for an unprompted record.
+         *
+         * Round-tripped verbatim rather than recomputed on pull: the occurrence
+         * is a fact about when the alarm actually rang on the device, and
+         * deriving it from `day` + `mode` after the fact would silently relabel
+         * a 07:00 entry as whatever the habit's current first alarm happens to be.
+         */
+        val occurrence_key: String? = null,
     )
 
     /**
@@ -972,6 +996,7 @@ class SupabaseSync(context: Context) {
                     created_at_ms = it.createdAt,
                     icon_id = it.iconId,
                     reminder_minutes = it.reminderMinutes,
+                    alarm_times = it.alarmMinutes,
                     is_pinned = it.isPinned,
                     duration_seconds = it.durationSeconds,
                     repeat_days_mask = it.repeatDaysMask,
@@ -1018,6 +1043,7 @@ class SupabaseSync(context: Context) {
                         unit = it.unit,
                         duration_seconds = it.durationSeconds,
                         logged_at_ms = it.recordedAtEpochMs,
+                        occurrence_key = it.occurrenceKey,
                     )
                 }
             val activities = data.activityRecords
@@ -1113,6 +1139,10 @@ class SupabaseSync(context: Context) {
                         createdAt = it.created_at_ms,
                         iconId = it.icon_id,
                         reminderMinutes = it.reminder_minutes,
+                        // A project that predates the column returns it empty, in
+                        // which case the legacy single time is the schedule and
+                        // the extension's own fallback handles the rest.
+                        alarmTimes = it.alarm_times,
                         isPinned = it.is_pinned,
                         durationSeconds = it.duration_seconds,
                         repeatDaysMask = it.repeat_days_mask,
@@ -1139,6 +1169,7 @@ class SupabaseSync(context: Context) {
                         unit = row.unit,
                         durationSeconds = row.duration_seconds,
                         recordedAtEpochMs = row.logged_at_ms,
+                        occurrenceKey = row.occurrence_key,
                     )
                 },
                 activityRecords = activities.map { row ->

@@ -103,7 +103,7 @@ object HabitCheckInNotifier {
      * distinction and the actual error text.
      */
     fun show(context: Context, habitId: String, habitName: String, reschedule: Boolean = true): Boolean =
-        showResult(context, habitId, habitName, reschedule) is NotifyResult.Posted
+        showResult(context, habitId, habitName, reschedule = reschedule) is NotifyResult.Posted
 
     /**
      * BUG FIX: previously the entire notification-building/posting body ran
@@ -119,7 +119,13 @@ object HabitCheckInNotifier {
      * captured as a [NotifyResult.Failed] with the real exception text
      * instead of an invisible crash.
      */
-    fun showResult(context: Context, habitId: String, habitName: String, reschedule: Boolean = true): NotifyResult {
+    fun showResult(
+        context: Context,
+        habitId: String,
+        habitName: String,
+        alarmMinutes: Int? = null,
+        reschedule: Boolean = true,
+    ): NotifyResult {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.POST_NOTIFICATIONS,
@@ -174,9 +180,15 @@ object HabitCheckInNotifier {
             // silent/Do-Not-Disturb/Bedtime modes can mute or dim entirely) into
             // an actual ringing alarm screen — this is the fix for "I set an
             // alarm but it never actually rang."
+            // ── Ring at THIS occurrence ──
+            // The alarm's own time travels on the intent so the record, the
+            // notification identity and the re-arm all refer to the same
+            // occurrence. Without it every one of the day's alarms was
+            // indistinguishable from the others.
             val ringingIntent = Intent(context, AlarmRingingActivity::class.java).apply {
                 putExtra("habitId", habitId)
                 putExtra("habitName", habitName)
+                alarmMinutes?.let { putExtra(HabitReminderReceiver.EXTRA_ALARM_MINUTES, it) }
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
@@ -230,6 +242,7 @@ object HabitCheckInNotifier {
                 requestCode = notificationId(habitId) + 1,
                 habitId = habitId,
                 habitName = habitName,
+                alarmMinutes = alarmMinutes,
             )?.let { stopIntent -> notificationBuilder.addAction(0, "Stop alarm", stopIntent) }
             if (canUseFullScreenIntent) {
                 // Wakes the screen and rings even through silent/DND/Bedtime
@@ -280,23 +293,54 @@ object HabitCheckInNotifier {
                 }
             }
 
-            // Finalize today's check-in the moment the alarm actually rings
-            // — this is the "record" the user's habit-tracking is built on,
-            // not a guess made back when they merely picked a time. Kept in
-            // its own runCatching: if persistence ever hiccups, the
-            // notification the user actually sees/hears should still count
-            // as successfully posted.
+            // ── Record the occurrence that just rang ───────────────────────
+            // Previously this marked the day done unconditionally, which was
+            // wrong twice over:
             //
-            // The diagnostic test button is not a real habit — never write a
-            // check-in for it (see DIAGNOSTIC_HABIT_ID doc above).
+            //  * It marked the habit done for ANY habit whose alarm rang —
+            //    including a JOURNAL habit, where a dismissal cannot possibly
+            //    mean "I wrote my entry", and a TOOL habit, whose measurement
+            //    has not happened yet. The user's habit was ticked for doing
+            //    nothing. It also contradicted the sheet's own behavior: a
+            //    CHECK habit logged an entry when answered in the sheet but
+            //    got a bare check-in when answered by dismissal.
+            //  * It wrote nothing at all about WHAT or WHEN, so with several
+            //    alarms a day there was no way to tell which occurrence had
+            //    been answered.
+            //
+            // HabitAlarmRecords.recordRingOccurrence decides per behavior: it
+            // records only the ONE_TAP case (where the dismissal genuinely IS
+            // the completion — "Take a vitamin" plus the ✓ the user hears is
+            // the record), and deliberately records nothing for a habit whose
+            // input only its sheet or timer can supply. "No completion without
+            // a record" is honoured there by NOT marking the completion, rather
+            // than by inventing a record.
+            //
+            // The diagnostic test button is not a real habit — never write for
+            // it (see DIAGNOSTIC_HABIT_ID doc above).
             if (habitId != DIAGNOSTIC_HABIT_ID) {
                 runCatching {
-                    com.rork.mindsetframestracker.data.MindsetRepository(context).markHabitDoneToday(habitId)
-                }.onFailure { Log.w(TAG, "Failed to record check-in for '$habitName' at ring-time", it) }
+                    HabitAlarmRecords.recordRingOccurrence(context, habitId, alarmMinutes)
+                }.onFailure { Log.w(TAG, "Failed to record the occurrence for '$habitName'", it) }
             }
 
+            // ── Re-arm ONLY this time ──────────────────────────────────────
+            // Per-time, not per-habit: when the 07:00 alarm fires, the 12:00 and
+            // 18:00 alarms are separate live entries and must be left alone.
+            // Re-arming the whole habit here would push the later ones a day
+            // forward and the user would silently lose them. Falls back to the
+            // habit's first time for a re-fire whose intent predates multi-time
+            // alarms.
             if (reschedule) {
-                HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
+                val nextMinutes = alarmMinutes
+                    ?: com.rork.mindsetframestracker.data.MindsetRepository(context)
+                        .load().habits.firstOrNull { it.id == habitId }
+                        ?.alarmMinutes?.firstOrNull()
+                if (nextMinutes != null) {
+                    HabitAlarmScheduler.scheduleNext(context, habitId, habitName, nextMinutes)
+                } else {
+                    HabitAlarmScheduler.scheduleNext(context, habitId, habitName)
+                }
             }
         }.fold(
             onSuccess = {

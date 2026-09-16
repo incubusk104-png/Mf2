@@ -28,6 +28,10 @@ import com.rork.mindsetframestracker.data.HabitRecommender
 import com.rork.mindsetframestracker.data.HabitSuggestion
 import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
+import com.rork.mindsetframestracker.data.alarmMinutes
+import com.rork.mindsetframestracker.data.hasAnsweredOccurrence
+import com.rork.mindsetframestracker.data.occurrenceKeyFor
+import com.rork.mindsetframestracker.data.withAlarmTimes
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.screenTimeSummary
 import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
@@ -206,7 +210,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * an already-armed alarm just replaces it with an identical one (no double-fire).
      */
     private fun rearmHabitAlarms() {
-        val habitsWithReminders = _state.value.habits.filter { it.reminderMinutes != null }
+        // Filtered on the resolved list, not on `reminderMinutes != null`: the
+        // legacy field only holds a habit's FIRST time, so filtering on it would
+        // leave a habit's 12:00 and 18:00 alarms un-armed after a restart —
+        // the morning one would ring and the rest would silently not.
+        val habitsWithReminders = _state.value.habits.filter { it.alarmMinutes.isNotEmpty() }
         if (habitsWithReminders.isNotEmpty()) {
             HabitAlarmScheduler.rescheduleAll(getApplication(), habitsWithReminders)
         }
@@ -1730,13 +1738,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         count: Int? = null,
         unit: String? = null,
         markDone: Boolean = true,
+        /**
+         * Which of the habit's alarm times this record answers, when the user is
+         * completing a *ring* rather than tapping the habit unprompted.
+         *
+         * The occurrence key is derived from it, which is what keeps the day's
+         * records separate: without it, recording at 18:00 would be
+         * indistinguishable from recording at 07:00, and the per-occurrence
+         * history the user asked for would collapse back into one entry per day.
+         */
+        alarmMinutes: Int? = null,
     ) {
         if (habitId.isBlank()) return
         val today = Dates.todayKey()
+
+        // One record per occurrence. Scoped to the occurrence rather than to the
+        // day on purpose — an 18:00 walk must still record after a 07:00 one —
+        // but a second answer to the SAME ring (a double tap, a re-shown sheet, a
+        // re-delivered intent) must not add a second entry that reads as a second
+        // walk.
+        if (alarmMinutes != null &&
+            _state.value.hasAnsweredOccurrence(habitId, today, alarmMinutes)
+        ) {
+            return
+        }
+
         val entry = HabitLogEntry(
             habitId = habitId,
             dayKey = today,
             mode = mode,
+            occurrenceKey = alarmMinutes?.let { occurrenceKeyFor(today, it) },
             title = title?.trim()?.takeIf { it.isNotEmpty() },
             note = note?.trim()?.takeIf { it.isNotEmpty() },
             durationSeconds = durationSeconds?.takeIf { it > 0 },
@@ -1794,17 +1825,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * and schedules its alarm, then hands it here. Respects the free-tier cap.
      */
     /**
-     * Sets/replaces the reminder time on an already-added habit. Used by the
+     * Sets/replaces the reminder times on an already-added habit. Used by the
      * "Set up alarm" flow when a habit exists but has no reminder configured
      * (reminderMinutes == null) — as opposed to [addHabitObject], which
      * creates a brand-new habit entirely.
+     *
+     * ## One time and several times are the same call
+     *
+     * A habit can ring at several times of day (07:00, 12:00, 18:00), so the
+     * single-time overload of this used to be the *only* way to set an alarm and
+     * therefore silently discarded the user's other times. Both overloads now
+     * funnel into here, which is the one place [Habit.withAlarmTimes] is applied
+     * — keeping `alarmTimes` and the legacy `reminderMinutes` in step rather
+     * than letting two writers drift apart.
+     *
+     * Scheduling is callers' business, deliberately: they already hold the
+     * [android.content.Context] and re-arm from the updated habit.
      */
-    fun setHabitReminder(habitId: String, reminderMinutes: Int?, repeatDaysMask: Int) {
+    fun setHabitAlarmTimes(habitId: String, times: List<Int>, repeatDaysMask: Int) {
         update { data ->
             data.copy(
                 habits = data.habits.map { habit ->
                     if (habit.id == habitId) {
-                        habit.copy(reminderMinutes = reminderMinutes, repeatDaysMask = repeatDaysMask)
+                        habit.withAlarmTimes(times).copy(repeatDaysMask = repeatDaysMask)
                     } else {
                         habit
                     }
@@ -1812,6 +1855,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         queueSync()
+    }
+
+    /**
+     * Single-time form, kept because most habits have exactly one alarm and the
+     * create flow naturally has one value to hand over. Delegates rather than
+     * writing the field, so it cannot disagree with the multi-time path.
+     */
+    fun setHabitReminder(habitId: String, reminderMinutes: Int?, repeatDaysMask: Int) {
+        setHabitAlarmTimes(habitId, listOfNotNull(reminderMinutes), repeatDaysMask)
     }
 
     fun addHabitObject(habit: Habit): Boolean {

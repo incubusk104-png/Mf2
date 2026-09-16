@@ -40,7 +40,30 @@ object HabitTimerRequests {
     private const val KEY_ICON_ID = "pending_icon_id"
     private const val KEY_MODE = "pending_mode"
     private const val KEY_IS_SPORT = "pending_is_sport"
+    private const val KEY_ALARM_MINUTES = "pending_alarm_minutes"
+
+    /** Sentinel for "this request has no specific alarm time". */
+    private const val NO_ALARM_MINUTES = -1
     private const val KEY_AUTO_SYNC_HABIT_ID = "pending_auto_sync_habit_id"
+
+    // ── The minimized sheet's OWN storage ──────────────────────────────────
+    // Deliberately separate from the one-shot request keys above rather than a
+    // boolean flag on them.
+    //
+    // The one-shot request is *consumed* the instant the sheet is shown — that is
+    // what makes "the sheet appears exactly once per ring" hold against
+    // re-render, resume and reboot. A minimized sheet therefore cannot live on
+    // that record: by the time the user taps Minimize the request is already
+    // gone, so a flag stored alongside it could never be written — and reading
+    // it back would return null, silently turning "minimize" into "dismiss".
+    // So minimizing SAVES a copy of the request here, and the one-shot record is
+    // consumed as normal.
+    private const val KEY_MIN_HABIT_ID = "minimized_habit_id"
+    private const val KEY_MIN_HABIT_NAME = "minimized_habit_name"
+    private const val KEY_MIN_ICON_ID = "minimized_icon_id"
+    private const val KEY_MIN_MODE = "minimized_mode"
+    private const val KEY_MIN_IS_SPORT = "minimized_is_sport"
+    private const val KEY_MIN_ALARM_MINUTES = "minimized_alarm_minutes"
 
     /** A pending "show me this habit's timer options" request. */
     data class Request(
@@ -60,6 +83,16 @@ object HabitTimerRequests {
          * opens at all.
          */
         val isSport: Boolean = false,
+        /**
+         * Which of the habit's alarm times rang, in minutes from midnight.
+         *
+         * Carried on the request so the sheet's record can be attributed to
+         * *this* occurrence rather than merely to the day — see
+         * [com.rork.mindsetframestracker.data.HabitLogEntry.occurrenceKey]. Null
+         * only for a request written by an older build, in which case the record
+         * falls back to a plain day-scoped entry.
+         */
+        val alarmMinutes: Int? = null,
     )
 
     private fun prefs(context: Context): SharedPreferences =
@@ -77,6 +110,7 @@ object HabitTimerRequests {
         iconId: String?,
         mode: com.rork.mindsetframestracker.data.HabitTrackingMode? = null,
         isSport: Boolean = false,
+        alarmMinutes: Int? = null,
     ) {
         if (habitId.isBlank()) return
         prefs(context).edit()
@@ -85,6 +119,7 @@ object HabitTimerRequests {
             .putString(KEY_ICON_ID, iconId)
             .putString(KEY_MODE, mode?.name)
             .putBoolean(KEY_IS_SPORT, isSport)
+            .putInt(KEY_ALARM_MINUTES, alarmMinutes ?: NO_ALARM_MINUTES)
             .apply()
     }
 
@@ -103,6 +138,8 @@ object HabitTimerRequests {
                 }.getOrNull()
             },
             isSport = p.getBoolean(KEY_IS_SPORT, false),
+            alarmMinutes = p.getInt(KEY_ALARM_MINUTES, NO_ALARM_MINUTES)
+                .takeIf { it != NO_ALARM_MINUTES },
         )
     }
 
@@ -114,6 +151,67 @@ object HabitTimerRequests {
             .remove(KEY_ICON_ID)
             .remove(KEY_MODE)
             .remove(KEY_IS_SPORT)
+            .remove(KEY_ALARM_MINUTES)
+            .apply()
+    }
+
+    /**
+     * Keeps [request] as the sheet the user put away, so the minimized chip can
+     * offer it back later.
+     *
+     * Survives navigation, backgrounding, a configuration change and a process
+     * kill because it is on disk, not in Compose state — those are precisely the
+     * things that happen between minimizing and coming back, and an in-memory
+     * flag would turn "minimize" into "dismiss" for all of them.
+     *
+     * Overwrites any earlier minimized sheet: there is one chip, and showing two
+     * would reintroduce exactly the "which one is running?" confusion this is
+     * meant to remove.
+     */
+    fun minimize(context: Context, request: Request) {
+        if (request.habitId.isBlank()) return
+        prefs(context).edit()
+            .putString(KEY_MIN_HABIT_ID, request.habitId)
+            .putString(KEY_MIN_HABIT_NAME, request.habitName)
+            .putString(KEY_MIN_ICON_ID, request.iconId)
+            .putString(KEY_MIN_MODE, request.mode?.name)
+            .putBoolean(KEY_MIN_IS_SPORT, request.isSport)
+            .putInt(KEY_MIN_ALARM_MINUTES, request.alarmMinutes ?: NO_ALARM_MINUTES)
+            .apply()
+    }
+
+    /** The minimized sheet, without clearing it — what the chip renders. */
+    fun peekMinimized(context: Context): Request? {
+        val p = prefs(context)
+        val id = p.getString(KEY_MIN_HABIT_ID, null)
+        if (id.isNullOrBlank()) return null
+        return Request(
+            habitId = id,
+            habitName = p.getString(KEY_MIN_HABIT_NAME, null).orEmpty(),
+            iconId = p.getString(KEY_MIN_ICON_ID, null),
+            mode = p.getString(KEY_MIN_MODE, null)?.let { name ->
+                runCatching {
+                    com.rork.mindsetframestracker.data.HabitTrackingMode.valueOf(name)
+                }.getOrNull()
+            },
+            isSport = p.getBoolean(KEY_MIN_IS_SPORT, false),
+            alarmMinutes = p.getInt(KEY_MIN_ALARM_MINUTES, NO_ALARM_MINUTES)
+                .takeIf { it != NO_ALARM_MINUTES },
+        )
+    }
+
+    /** True when a sheet is currently minimized and the chip should show it. */
+    fun hasMinimized(context: Context): Boolean = peekMinimized(context) != null
+
+    /** Clears the minimized sheet — it was restored, or dismissed. */
+    fun clearMinimized(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_MIN_HABIT_ID)
+            .remove(KEY_MIN_HABIT_NAME)
+            .remove(KEY_MIN_ICON_ID)
+            .remove(KEY_MIN_MODE)
+            .remove(KEY_MIN_IS_SPORT)
+            .remove(KEY_MIN_ALARM_MINUTES)
             .apply()
     }
 

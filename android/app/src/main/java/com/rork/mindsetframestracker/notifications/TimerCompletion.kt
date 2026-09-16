@@ -5,6 +5,7 @@ import android.util.Log
 import com.rork.mindsetframestracker.data.ActiveTimer
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.HabitLogEntry
+import com.rork.mindsetframestracker.data.pendingOccurrenceMinutes
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.TimerCompletionEvent
@@ -131,9 +132,24 @@ object TimerCompletion {
             // a completion is known to be genuine and once-only; the habit's
             // mode is read back so the entry is shaped by the habit, not by
             // whatever the timer happened to be.
+            //
+            // ## Attributed to the occurrence, not just the day
+            //
+            // A habit can ring several times a day, and a stopwatch started from
+            // the 07:00 sheet may not be stopped until much later. Recording it
+            // day-scoped would erase which ring it belonged to, so the record is
+            // keyed to the habit's outstanding alarm time via
+            // [Habit.pendingOccurrenceMinutes] and the write goes through
+            // [HabitAlarmRecords.recordOccurrence] — the same per-occurrence
+            // funnel the ring uses, so both paths honour the same uniqueness
+            // rule and neither can produce a duplicate for one occurrence.
+            //
+            // The measured duration is carried through in full. It used to be
+            // discarded here, which is why a finished walk showed a tick but no
+            // minutes.
             runCatching {
-                val habit = MindsetRepository(context).load().habits
-                    .firstOrNull { it.id == habitId }
+                val repo = MindsetRepository(context)
+                val habit = repo.load().habits.firstOrNull { it.id == habitId }
                 val mode = when {
                     habit == null -> if (event.kind == TimerKind.TIMER) {
                         HabitTrackingMode.TIMER
@@ -142,15 +158,18 @@ object TimerCompletion {
                     }
                     else -> habit.trackingModeOrDefault
                 }
-                MindsetRepository(context).saveHabitLog(
-                    HabitLogEntry(
-                        habitId = habitId,
-                        dayKey = Dates.todayKey(),
-                        mode = mode,
-                        durationSeconds = event.elapsedSeconds.takeIf { it > 0 },
-                        recordedAtEpochMs = System.currentTimeMillis(),
-                        note = null,
-                    ),
+                val nowMinutes = runCatching { Dates.nowMinutes() }.getOrNull()
+                HabitAlarmRecords.recordOccurrence(
+                    context = context,
+                    habitId = habitId,
+                    mode = mode,
+                    alarmMinutes = if (habit != null && nowMinutes != null) {
+                        habit.pendingOccurrenceMinutes(nowMinutes)
+                    } else {
+                        null
+                    },
+                    durationSeconds = event.elapsedSeconds.takeIf { it > 0 },
+                    unit = habit?.trackingUnit,
                 )
             }.onFailure { Log.w(TAG, "Failed to record the tracked duration for $habitId", it) }
 
