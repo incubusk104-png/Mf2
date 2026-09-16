@@ -82,6 +82,13 @@ data class SyncUiState(
     val busy: Boolean = false,
     val message: String? = null,
     val isError: Boolean = false,
+    /**
+     * True when the last backup landed but could not store everything — a table
+     * or column the live project does not have. Shown as a warning rather than
+     * an error (the data that could be saved was saved), but it must never look
+     * like a clean success.
+     */
+    val isPartial: Boolean = false,
     /** One-shot flag: sign-up hit "email already registered" — UI should
      * switch to the Sign In tab, then call [AppViewModel.consumeSuggestSignIn]. */
     val suggestSignIn: Boolean = false,
@@ -1597,10 +1604,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (isBatteryLow(getApplication())) return@launch
             _syncState.value = _syncState.value.copy(busy = true)
             val error = supabaseSync.pushSnapshot(_state.value)
-            if (error == null) {
+            // Same split as syncNow(): a partial push is not a failure, so it
+            // clears the pending flag (no point re-sending the same payload) but
+            // is surfaced as a warning rather than a red error.
+            val partial = error != null && supabaseSync.lastPushPartial
+            if (error == null || partial) {
                 supabaseSync.hasPendingPush = false
                 _syncState.value = _syncState.value.copy(
                     busy = false,
+                    message = error,
+                    isError = false,
+                    isPartial = partial,
                     lastSyncAtMs = supabaseSync.lastSyncAtMs,
                 )
             } else {
@@ -1608,6 +1622,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     busy = false,
                     message = error,
                     isError = true,
+                    isPartial = false,
                 )
             }
         }
@@ -1615,7 +1630,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retrySync() {
         lastSyncAttemptAt = 0L
-        _syncState.value = _syncState.value.copy(message = null, isError = false)
+        _syncState.value = _syncState.value.copy(message = null, isError = false, isPartial = false)
         syncNow()
     }
 
@@ -1641,10 +1656,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         lastSyncAttemptAt = now
-        _syncState.value = state.copy(busy = true, message = null, isError = false)
+        _syncState.value = state.copy(busy = true, message = null, isError = false, isPartial = false)
         viewModelScope.launch {
             val error = supabaseSync.pushSnapshot(_state.value)
-            if (error != null) {
+            // A partial push returns a message but must NOT be treated as a
+            // failure: the cooldown reset and hasPendingPush clear. Doing
+            // otherwise would retry forever against a schema change the user
+            // has to apply, and would hide the caveat behind a red banner.
+            val partial = error != null && supabaseSync.lastPushPartial
+            if (error != null && !partial) {
                 lastSyncAttemptAt = 0L
             } else {
                 supabaseSync.hasPendingPush = false
@@ -1652,7 +1672,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _syncState.value = _syncState.value.copy(
                 busy = false,
                 message = error ?: "Backed up just now",
-                isError = error != null,
+                isError = error != null && !partial,
+                isPartial = partial,
                 lastSyncAtMs = supabaseSync.lastSyncAtMs,
             )
         }

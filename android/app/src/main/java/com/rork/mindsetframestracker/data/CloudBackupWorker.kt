@@ -37,10 +37,19 @@ class CloudBackupWorker(
         val data = runCatching { MindsetRepository(applicationContext).load() }.getOrNull()
             ?: return Result.success()
         val error = runCatching { sync.pushSnapshot(data) }.getOrElse { it.message }
+        // A partial push (`lastPushPartial`) returns a message but is NOT a
+        // failure: the rows it could store did land. Retrying would re-send the
+        // identical payload against a schema the user has to change, so treat it
+        // as the success it is and clear the pending flag.
+        val partial = error != null && sync.lastPushPartial
         return when {
-            error == null -> {
+            error == null || partial -> {
                 sync.hasPendingPush = false
-                Log.i(TAG, "Daily cloud backup completed")
+                Log.i(
+                    TAG,
+                    if (partial) "Daily cloud backup completed with limited storage: $error"
+                    else "Daily cloud backup completed",
+                )
                 Result.success()
             }
             runAttemptCount < MAX_RETRIES -> {

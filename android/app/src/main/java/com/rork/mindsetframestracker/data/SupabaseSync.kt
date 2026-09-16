@@ -57,6 +57,34 @@ data class RemoteSnapshot(
 )
 
 /**
+ * What a single table upsert did, so the caller can report the true state of a
+ * backup instead of one opaque failure string.
+ *
+ * [Degraded] and [MissingTable] both mean data did NOT reach the server. They are
+ * kept apart because the remedy differs: a missing column leaves a field out of
+ * a row that otherwise landed, whereas a missing table is an entire payload the
+ * project cannot accept yet. [Failed] is everything else (a constraint, an RLS
+ * policy, a 5xx) and already carries a message safe to show the user.
+ */
+private sealed interface UpsertOutcome {
+    /** Nothing to send, or every row landed. */
+    object Ok : UpsertOutcome
+
+    /**
+     * Rows landed, but [missing] fields the live schema lacks were left out of
+     * them. Names are qualified (`habits.alarm_times`) because the summary
+     * collapses several tables into one sentence.
+     */
+    data class Degraded(val missing: List<String>) : UpsertOutcome
+
+    /** The live project has no such table at all. */
+    data class MissingTable(val table: String) : UpsertOutcome
+
+    /** Anything else, with a message safe to show the user. */
+    data class Failed(val message: String) : UpsertOutcome
+}
+
+/**
  * Cloud backup & sync against the user's own Supabase project.
  *
  * - Auth: Supabase GoTrue REST (email/password sign-up, sign-in, sign-out,
@@ -147,6 +175,19 @@ class SupabaseSync(context: Context) {
     private val sessionUserId: String? get() = prefs.getString(KEY_USER_ID, null)
     private val accessToken: String? get() =
         prefs.getString(KEY_ACCESS_TOKEN, null)?.let(TokenCipher::open)
+    /**
+     * True when the last push landed its rows but could not store everything —
+     * a table or column the live project does not have.
+     *
+     * Kept as state on the sync object rather than folded into [pushSnapshot]'s
+     * return value, because that value is a plain String used as an error by
+     * every caller (including the WorkManager job). A partial result must not
+     * make `pushSnapshot` look like a failure there, but the UI still needs to
+     * be able to tell the two apart. Reset at the start of every push.
+     */
+    var lastPushPartial: Boolean = false
+        private set
+
     private val refreshToken: String? get() =
         prefs.getString(KEY_REFRESH_TOKEN, null)?.let(TokenCipher::open)
 
@@ -990,6 +1031,9 @@ class SupabaseSync(context: Context) {
         if (!isConfigured) return "Supabase is not configured"
         val uid = sessionUserId ?: return "Sign in first to back up your data"
         if (accessToken == null) return "Sign in first to back up your data"
+        // Reset before every attempt so a previous partial result can never be
+        // reported against a later, fully-successful push.
+        lastPushPartial = false
         return try {
             val habits = data.habits.map {
                 HabitRow(
@@ -1117,29 +1161,62 @@ class SupabaseSync(context: Context) {
             // but a failure in an earlier table no longer blocks an independent
             // later one from landing.
             val failures = mutableListOf<String>()
-            upsert("habits", habits, onConflict = "id")?.let { failures += it }
-            upsert("checkins", checkins, onConflict = "user_id,habit_id,day")?.let { failures += it }
-            upsert("mood_log", moods, onConflict = "user_id,day")?.let { failures += it }
-            upsert("settings", settings, onConflict = "id")?.let { failures += it }
+            val missingTables = mutableListOf<String>()
+            val droppedFields = mutableListOf<String>()
+            upsert("habits", habits, onConflict = "id").collect(failures, missingTables, droppedFields)
+            upsert("checkins", checkins, onConflict = "user_id,habit_id,day")
+                .collect(failures, missingTables, droppedFields)
+            upsert("mood_log", moods, onConflict = "user_id,day")
+                .collect(failures, missingTables, droppedFields)
+            upsert("settings", settings, onConflict = "id")
+                .collect(failures, missingTables, droppedFields)
             // The tracking payloads. These two were the gap: habit logs were
             // device-local only (a journal note was lost on reinstall), and
             // device-captured Health Connect activity never reached the server,
             // so smart-alarms and consistency-report could not see it.
-            upsert("habit_logs", habitLogs, onConflict = "id")?.let { failures += it }
+            upsert("habit_logs", habitLogs, onConflict = "id")
+                .collect(failures, missingTables, droppedFields)
             upsert(
                 "activity_data",
                 activities,
                 onConflict = "user_id,provider,provider_activity_id",
-            )?.let { failures += it }
+            ).collect(failures, missingTables, droppedFields)
             // Report before the "backed up" timestamp is written: a push that
             // lost payloads must not be recorded as a clean sync, or the daily
             // backup would treat a partial failure as done for the whole day.
+            //
+            // Three distinct states, reported separately because the user's
+            // remedy differs for each. Everything that was not a hard failure
+            // used to fall through to `null`, i.e. "Backed up just now" — so a
+            // project with no `habit_logs` table showed a clean success while the
+            // journal payloads it had just tried to send were thrown away.
             if (failures.isNotEmpty()) {
-                return if (failures.size == 1) failures.first()
-                else "Sync partly failed \u2014 ${failures.size} tables rejected: " +
-                    failures.joinToString("; ")
+                val detail = if (missingTables.isEmpty()) ""
+                else " Missing table(s): ${missingTables.joinToString(", ")}."
+                val hint = if (missingTables.isEmpty()) "" else " $MIGRATION_HINT"
+                return if (failures.size == 1) failures.first() + detail + hint
+                else "Sync partly failed — ${failures.size} tables rejected: " +
+                    failures.joinToString("; ") + detail + hint
             }
             pendingDeleteError?.let { return it }
+            // Nothing failed, but something was not stored in full. A success
+            // with a caveat, and saying so is the whole point: the app must never
+            // claim a complete backup it did not achieve.
+            if (missingTables.isNotEmpty() || droppedFields.isNotEmpty()) {
+                val parts = mutableListOf<String>()
+                if (missingTables.isNotEmpty()) {
+                    parts += "your project has no ${missingTables.joinToString(", ")} table" +
+                        (if (missingTables.size > 1) "s" else "")
+                }
+                if (droppedFields.isNotEmpty()) {
+                    parts += "${droppedFields.size} field(s) have no column " +
+                        "(${droppedFields.joinToString(", ")})"
+                }
+                // Written after the full push, because these rows DID land.
+                prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
+                lastPushPartial = true
+                return "Saved with limited storage — ${parts.joinToString(" and ")}. $MIGRATION_HINT"
+            }
             prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
             null
         } catch (e: Exception) {
@@ -1322,8 +1399,12 @@ class SupabaseSync(context: Context) {
             header(HttpHeaders.Authorization, "Bearer ${accessToken ?: anonKey}")
         }
 
-    private suspend inline fun <reified T> upsert(table: String, rows: List<T>, onConflict: String): String? {
-        if (rows.isEmpty()) return null
+    private suspend inline fun <reified T> upsert(
+        table: String,
+        rows: List<T>,
+        onConflict: String,
+    ): UpsertOutcome {
+        if (rows.isEmpty()) return UpsertOutcome.Ok
         // Serialized once, and carried as raw JSON, so a retry after dropping an
         // unsupported field re-sends the very body the server just judged —
         // it cannot drift from it, and there is no second serialization pass.
@@ -1379,14 +1460,38 @@ class SupabaseSync(context: Context) {
             // generic, unhelpful "try again" message that repeats forever.
             val detail = extractPostgrestMessage(bodyText)
             val suffix = if (detail != null) ": $detail" else ""
-            return "Sync failed on '$table' (${response.status.value})$suffix"
+            // A table the live project has never had cannot be worked around by
+            // sending less data — there is no column to drop. Reported as its own
+            // case so the user is told to run the migration instead of being left
+            // with a raw PostgREST string.
+            if (isMissingTable(bodyText)) return UpsertOutcome.MissingTable(table)
+            return UpsertOutcome.Failed("Sync failed on '$table' (${response.status.value})$suffix")
         }
         if (rejected.isNotEmpty()) {
-            return "$table saved, but ${rejected.size} field(s) were not stored — this " +
-                "project's database has no ${rejected.joinToString(", ")}. " +
-                "Apply the pending migration to save them."
+            return UpsertOutcome.Degraded(rejected.map { "$table.$it" })
         }
-        return null
+        return UpsertOutcome.Ok
+    }
+
+    /**
+     * True when the live project has no such TABLE, as opposed to no such column.
+     *
+     * The distinction is load-bearing: a missing column can be worked around by
+     * dropping the field and keeping the rest of the row, whereas a missing table
+     * cannot — there is nothing to drop. `habit_logs` and `activity_data` were
+     * both in that state on a project whose migrations had not been applied, and
+     * a raw `PGRST205` string is not something a user can act on.
+     *
+     * The [COLUMN_DOES_NOT_EXIST] guard is required, not defensive: PostgREST's
+     * 42P01 text (`relation "x" does not exist`) is a SUBSTRING of the 42703
+     * column text (`column "c" of relation "x" does not exist`), so without it
+     * every missing column would be misreported as a missing table.
+     */
+    private fun isMissingTable(bodyText: String): Boolean {
+        val message = extractPostgrestMessage(bodyText) ?: return false
+        if (COULD_NOT_FIND_TABLE.containsMatchIn(message)) return true
+        return RELATION_DOES_NOT_EXIST.containsMatchIn(message) &&
+            !COLUMN_DOES_NOT_EXIST.containsMatchIn(message)
     }
 
     /**
@@ -1472,6 +1577,23 @@ class SupabaseSync(context: Context) {
             setBody(TextContent(payload.toString(), ContentType.Application.Json))
         }
 
+    /**
+     * Files one table's [UpsertOutcome] into the three accumulator lists the
+     * push summary is built from, so the call site stays a flat list of upserts.
+     */
+    private fun UpsertOutcome.collect(
+        failures: MutableList<String>,
+        missingTables: MutableList<String>,
+        droppedFields: MutableList<String>,
+    ) {
+        when (this) {
+            is UpsertOutcome.Ok -> Unit
+            is UpsertOutcome.Degraded -> droppedFields += missing
+            is UpsertOutcome.MissingTable -> missingTables += table
+            is UpsertOutcome.Failed -> failures += message
+        }
+    }
+
     companion object {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_ACCESS_TOKEN = "access_token"
@@ -1486,6 +1608,15 @@ class SupabaseSync(context: Context) {
         private const val TAG = "SupabaseSync"
 
         /**
+         * Appended to any partial result. Deliberately names the folder the
+         * migration files live in, because the cause is almost always that this
+         * repo's `backend/supabase/migrations/` has not been applied to the
+         * project the app is pointed at.
+         */
+        private const val MIGRATION_HINT =
+            "Apply the pending migration in backend/supabase/migrations, then sync again."
+
+        /**
          * Region bucket for anything unresolvable. 'ZZ' is ISO-3166's own
          * "unknown" value, so it is conventional rather than invented here.
          * Mirrors founding_member_region() in SQL and regionFor() in the edge
@@ -1498,9 +1629,26 @@ class SupabaseSync(context: Context) {
         private val COULD_NOT_FIND_COLUMN =
             Regex("""Could not find the '([A-Za-z0-9_]+)' column""")
 
-        /** Postgres 42703: "column \"x\" of relation \"y\" does not exist". */
+        /**
+         * Postgres 42703: `column "x" of relation "y" does not exist`.
+         *
+         * The trailing `does not exist` is REQUIRED. Without it this pattern also
+         * matches other errors that mention a column of a relation — most
+         * damagingly the NOT NULL violation (`null value in column "user_id" of
+         * relation "habits" violates not-null constraint`, SQLSTATE 23502), which
+         * would be read as "user_id is missing" and make the retry loop strip a
+         * REQUIRED ownership column from the payload.
+         */
         private val COLUMN_DOES_NOT_EXIST =
-            Regex("""column "([A-Za-z0-9_]+)" of relation""")
+            Regex("""column "([A-Za-z0-9_]+)" of relation "[^"]+" does not exist""")
+
+        /** PostgREST PGRST205: "Could not find the table 'public.x' in the schema cache". */
+        private val COULD_NOT_FIND_TABLE =
+            Regex("""Could not find the table '([A-Za-z0-9_.]+)'""")
+
+        /** Postgres 42P01: `relation "public.x" does not exist`. */
+        private val RELATION_DOES_NOT_EXIST =
+            Regex("""relation "([A-Za-z0-9_.]+)" does not exist""")
 
         /**
          * Bounds the missing-column retry loop. A schema this far behind is not

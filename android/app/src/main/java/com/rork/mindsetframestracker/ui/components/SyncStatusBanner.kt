@@ -59,8 +59,15 @@ fun SyncStatusBanner(
 ) {
     val showBusy = syncState.busy
     val showError = !showBusy && syncState.isError && syncState.message != null
-    val showInfo = !showBusy && !syncState.isError && syncState.message != null
-    val show = visible && (showBusy || showError || showInfo)
+    // Landed, but not everything was stored. Distinct from both a success and a
+    // failure, so it gets its own treatment: a warning tone, no auto-dismiss
+    // (the user has an action to take), and no "Retry" — retrying changes
+    // nothing until the migration is applied.
+    val showWarning = !showBusy && !syncState.isError && syncState.isPartial &&
+        syncState.message != null
+    val showInfo = !showBusy && !syncState.isError && !syncState.isPartial &&
+        syncState.message != null
+    val show = visible && (showBusy || showError || showWarning || showInfo)
 
     // Keep the last message around so the exit animation doesn't flash empty.
     var lastMessage by remember { mutableStateOf("") }
@@ -92,6 +99,7 @@ fun SyncStatusBanner(
             shape = RoundedCornerShape(16.dp),
             color = when {
                 showError -> MaterialTheme.colorScheme.errorContainer
+                showWarning -> MaterialTheme.colorScheme.tertiaryContainer
                 else -> MaterialTheme.colorScheme.secondaryContainer
             },
             tonalElevation = 3.dp,
@@ -146,6 +154,29 @@ fun SyncStatusBanner(
                             Text(
                                 text = "Dismiss",
                                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.75f),
+                            )
+                        }
+                    }
+                    showWarning -> {
+                        Icon(
+                            imageVector = Icons.Filled.CloudOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = lastMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 10.dp),
+                        )
+                        TextButton(onClick = onDismiss) {
+                            Text(
+                                text = "Got it",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
                             )
                         }
                     }
