@@ -36,3 +36,8 @@ local.properties
 .env
 rork-eslint.config.js
 app/src/main/java/**/Config.kt
+
+# Huawei AppGallery Connect config — contains client_secret / api_key.
+# NEVER commit the real file; inject it at build time (CI secret) or copy
+# agconnect-services.json.example and fill in your own project's values.
+agconnect-services.json
