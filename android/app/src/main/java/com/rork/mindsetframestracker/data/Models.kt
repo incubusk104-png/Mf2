@@ -97,6 +97,33 @@ data class Habit(
     val trackingTargetCount: Int? = null,
     /** What [trackingTargetCount] counts, for display ("glasses"). */
     val trackingUnit: String? = null,
+    /**
+     * The user's own motivational line for this habit's reminders — the one
+     * thing that makes the alarm an encouragement instead of an alert.
+     *
+     * Null or blank means "use the curated default":
+     * [MotivationalMessages.lineFor] falls back to the line pack that matches
+     * this habit's [iconId] (a water habit says "It's time to water up! 💧 …"),
+     * so a habit whose owner never wrote anything still gets a warm, specific
+     * reminder rather than the bare habit name.
+     *
+     * ## Always read it through the sanitizer
+     *
+     * The value is placed on a Notification by a BroadcastReceiver that runs
+     * with no user present, so it is normalised by
+     * [MotivationalMessages.sanitize] — trimmed, single-line, control characters
+     * stripped, and bounded to [MotivationalMessages.MAX_MESSAGE_LENGTH] — at
+     * both ends: on write in the editor, and again on read at ring time, because
+     * a restored cloud row or an older build can bypass the editor entirely.
+     *
+     * ## Why it is stored on the Habit and not in a settings map
+     *
+     * It belongs to the habit the same way its alarm times do: it is delivered
+     * by that habit's alarm, deleted with that habit, and restored with it. A
+     * side table keyed by habit id would need its own lifecycle, its own sync,
+     * and its own orphan cleanup — for one nullable string.
+     */
+    val alarmMessage: String? = null,
 )
 
 /** [Habit.repeatDaysMask] value meaning "every day". */
@@ -125,12 +152,13 @@ val Habit.isScreenTimeHabit: Boolean
  * sorted, deduped list rather than the raw field is what lets the scheduler
  * (and the UI) treat one-time and many-time habits through the same path
  * without a per-call-site special case.
+ *
+ * Delegates to [legacyAlarmTimes] — the ONE rule, shared with the sync layer
+ * and the reboot/ring-time reader, so a habit's real schedule cannot be
+ * interpreted three different ways depending on which reader looked at it.
  */
 val Habit.alarmMinutes: List<Int>
-    get() {
-        val times = if (alarmTimes.isNotEmpty()) alarmTimes else listOfNotNull(reminderMinutes)
-        return times.filter { it in 0..1439 }.distinct().sorted()
-    }
+    get() = legacyAlarmTimes(alarmTimes, reminderMinutes)
 
 /** True when this habit rings at more than one time of day. */
 val Habit.hasMultipleAlarms: Boolean
@@ -180,6 +208,20 @@ fun Habit.withAlarmTimes(times: List<Int>): Habit {
         reminderMinutes = clean.firstOrNull(),
     )
 }
+
+/**
+ * The habit with its motivational reminder line replaced by [message].
+ *
+ * The only supported way to change [Habit.alarmMessage], for the same reason
+ * [withAlarmTimes] exists: it routes the value through
+ * [MotivationalMessages.sanitize] and stores `null` rather than `""` for a blank
+ * or whitespace-only entry. Without that normalisation the two "no custom
+ * message" spellings would both be representable, and every reader would have to
+ * test for both — the kind of ambiguity that eventually ships as a habit whose
+ * reminder is an empty notification title.
+ */
+fun Habit.withAlarmMessage(message: String?): Habit =
+    copy(alarmMessage = MotivationalMessages.sanitize(message).takeIf { it.isNotEmpty() })
 
 /**
  * "07:00, 12:00, 18:00" — the alarm times as a readable list.
