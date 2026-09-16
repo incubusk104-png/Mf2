@@ -1191,31 +1191,36 @@ class SupabaseSync(context: Context) {
             // project with no `habit_logs` table showed a clean success while the
             // journal payloads it had just tried to send were thrown away.
             if (failures.isNotEmpty()) {
-                val detail = if (missingTables.isEmpty()) ""
-                else " Missing table(s): ${missingTables.joinToString(", ")}."
-                val hint = if (missingTables.isEmpty()) "" else " $MIGRATION_HINT"
-                return if (failures.size == 1) failures.first() + detail + hint
-                else "Sync partly failed — ${failures.size} tables rejected: " +
-                    failures.joinToString("; ") + detail + hint
+                // Plain language FIRST, technical detail last. The reported
+                // symptom was literally "I don't know" — a banner that leads with
+                // a table name and a raw PostgREST string tells the user nothing
+                // about the one thing they actually need to know: whether their
+                // records are safe. The parenthetical keeps the detail available
+                // for diagnosis without making it the headline.
+                val detail = if (failures.size == 1) failures.first()
+                else "${failures.size} items: " + failures.joinToString("; ")
+                return "Couldn't finish the cloud backup — your records are safe " +
+                    "on this phone, and it will retry on its own. ($detail)"
             }
             pendingDeleteError?.let { return it }
             // Nothing failed, but something was not stored in full. A success
             // with a caveat, and saying so is the whole point: the app must never
             // claim a complete backup it did not achieve.
             if (missingTables.isNotEmpty() || droppedFields.isNotEmpty()) {
+                // Names the affected fields compactly, then says the only thing
+                // that matters to the user. Note there is deliberately NO
+                // instruction to "apply a migration" any more: that was a
+                // developer's remedy written into a user-facing banner, and the
+                // user cannot perform it.
                 val parts = mutableListOf<String>()
-                if (missingTables.isNotEmpty()) {
-                    parts += "your project has no ${missingTables.joinToString(", ")} table" +
-                        (if (missingTables.size > 1) "s" else "")
-                }
-                if (droppedFields.isNotEmpty()) {
-                    parts += "${droppedFields.size} field(s) have no column " +
-                        "(${droppedFields.joinToString(", ")})"
-                }
+                if (missingTables.isNotEmpty()) parts += missingTables
+                if (droppedFields.isNotEmpty()) parts += droppedFields
                 // Written after the full push, because these rows DID land.
                 prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
                 lastPushPartial = true
-                return "Saved with limited storage — ${parts.joinToString(" and ")}. $MIGRATION_HINT"
+                return "Your data is saved on this phone. A few newer extras " +
+                    "(${parts.joinToString(", ")}) are still waiting to reach the " +
+                    "cloud — this retries automatically and needs nothing from you."
             }
             prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
             null
@@ -1453,19 +1458,15 @@ class SupabaseSync(context: Context) {
 
         if (!response.status.isSuccess()) {
             val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
+            // The full PostgREST text is still logged for diagnosis, but it no
+            // longer reaches the user: the banner now says what happened in
+            // plain words and carries only a short label for the affected area.
             Log.w(TAG, "Upsert $table failed: ${response.status} ${bodyText.take(500)}")
-            // Surface the actual PostgREST error (not just the status code) so
-            // the real cause — e.g. a missing column, a NOT NULL violation, or
-            // a row-level-security policy rejection — is visible instead of a
-            // generic, unhelpful "try again" message that repeats forever.
-            val detail = extractPostgrestMessage(bodyText)
-            val suffix = if (detail != null) ": $detail" else ""
             // A table the live project has never had cannot be worked around by
-            // sending less data — there is no column to drop. Reported as its own
-            // case so the user is told to run the migration instead of being left
-            // with a raw PostgREST string.
+            // sending less data — there is no column to drop, so it is reported
+            // as its own case rather than as a generic failure.
             if (isMissingTable(bodyText)) return UpsertOutcome.MissingTable(table)
-            return UpsertOutcome.Failed("Sync failed on '$table' (${response.status.value})$suffix")
+            return UpsertOutcome.Failed("cloud storage for $table")
         }
         if (rejected.isNotEmpty()) {
             return UpsertOutcome.Degraded(rejected.map { "$table.$it" })
@@ -1608,13 +1609,15 @@ class SupabaseSync(context: Context) {
         private const val TAG = "SupabaseSync"
 
         /**
-         * Appended to any partial result. Deliberately names the folder the
-         * migration files live in, because the cause is almost always that this
-         * repo's `backend/supabase/migrations/` has not been applied to the
-         * project the app is pointed at.
+         * The two user-facing strings above deliberately do NOT name a migration
+         * file or ask the user to run anything. The previous wording said "apply
+         * the pending migration in backend/supabase/migrations" — a developer's
+         * instruction shown to a person who cannot act on it, and the reported
+         * result was literally "I don't know". Who repairs the schema is a
+         * developer concern; what the user needs to know is that nothing was
+         * lost and no action is required. Kept English-only, like the rest of
+         * this file's user-facing strings.
          */
-        private const val MIGRATION_HINT =
-            "Apply the pending migration in backend/supabase/migrations, then sync again."
 
         /**
          * Region bucket for anything unresolvable. 'ZZ' is ISO-3166's own

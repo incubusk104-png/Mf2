@@ -2,6 +2,7 @@ package com.rork.mindsetframestracker.notifications
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 
 /**
  * The one-shot hand-off from a habit's **alarm** to that habit's own
@@ -34,6 +35,7 @@ import android.content.SharedPreferences
  */
 object HabitTimerRequests {
 
+    private const val TAG = "HabitTimerRequests"
     private const val PREFS = "mindset_habit_timer_requests"
     private const val KEY_HABIT_ID = "pending_habit_id"
     private const val KEY_HABIT_NAME = "pending_habit_name"
@@ -123,6 +125,33 @@ object HabitTimerRequests {
             .apply()
     }
 
+    /**
+     * Reads a stored Int that must never be allowed to take the process down.
+     *
+     * `SharedPreferences.getInt` throws `ClassCastException` when the stored
+     * value has a different type. Verified against this repo's history: these
+     * two keys have only ever been written with `putInt`, so a build of this
+     * app did not create the mismatch. The reachable ways to get one anyway are
+     * a restore of a backup written by different code, an OEM storage glitch,
+     * or any future edit that writes the key with another type. What makes that
+     * worth guarding here specifically is the consequence: these values are read
+     * on the launch path after a process kill, the bad value lives on disk, and
+     * every subsequent launch re-reads it — so a one-off bad write becomes an
+     * app that cannot be opened at all, with no in-app way out.
+     *
+     * Falling back to the "no alarm time" sentinel degrades that to "the sheet
+     * opens without a pre-selected time" — the same behaviour as a habit with
+     * no alarm configured. The bad key is dropped so the next `consume` /
+     * `minimize` writes a value of the correct type and it cannot recur.
+     */
+    private fun safeInt(p: SharedPreferences, key: String, fallback: Int): Int =
+        runCatching { p.getInt(key, fallback) }
+            .onFailure {
+                Log.w(TAG, "Stored '$key' was not an Int — resetting it", it)
+                p.edit().remove(key).apply()
+            }
+            .getOrDefault(fallback)
+
     /** The pending request, without clearing it. */
     fun peek(context: Context): Request? {
         val p = prefs(context)
@@ -138,7 +167,7 @@ object HabitTimerRequests {
                 }.getOrNull()
             },
             isSport = p.getBoolean(KEY_IS_SPORT, false),
-            alarmMinutes = p.getInt(KEY_ALARM_MINUTES, NO_ALARM_MINUTES)
+            alarmMinutes = safeInt(p, KEY_ALARM_MINUTES, NO_ALARM_MINUTES)
                 .takeIf { it != NO_ALARM_MINUTES },
         )
     }
@@ -195,7 +224,7 @@ object HabitTimerRequests {
                 }.getOrNull()
             },
             isSport = p.getBoolean(KEY_MIN_IS_SPORT, false),
-            alarmMinutes = p.getInt(KEY_MIN_ALARM_MINUTES, NO_ALARM_MINUTES)
+            alarmMinutes = safeInt(p, KEY_MIN_ALARM_MINUTES, NO_ALARM_MINUTES)
                 .takeIf { it != NO_ALARM_MINUTES },
         )
     }
