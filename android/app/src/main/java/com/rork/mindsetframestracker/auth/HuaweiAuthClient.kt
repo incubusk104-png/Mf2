@@ -194,6 +194,9 @@ object HuaweiAuthClient {
             HuaweiServicesConfig.logDiagnostic(activity, "startSignIn blocked: not configured ($reason)")
             return HuaweiServicesConfig.notConfiguredMessage(reason)
         }
+        // A config that IS present but belongs to a different package produces no
+        // error code at all — catch it here while we can still name the cause.
+        HuaweiServicesConfig.checkAgcConfigPackageMatches(activity)?.let { return it }
         if (!isHmsAvailable(activity)) {
             val code = hmsConnectionResult(activity)
             Log.w(TAG, "Huawei sign-in blocked — HMS availability check returned code $code")

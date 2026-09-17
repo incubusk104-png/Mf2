@@ -55,7 +55,7 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // that one `implementation` line), not globally via `configurations.all`.
 // ---------------------------------------------------------------------------
 
-// ── Huawei app identity for HMS Core ─────────────────────────────────────
+// ── Huawei app identity for HMS Core ─────────────────────────────────────────
 // HMS Core runs in its own process and identifies the calling app from THIS
 // APK's manifest meta-data (`com.huawei.hms.client.appid` — see
 // AndroidManifest.xml), not from the AGConnect instance created in-process in
@@ -79,7 +79,7 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // Huawei IAP error 60002. A blank value is the honest answer, and when it is
 // blank this build now says so loudly (see the warning below).
 //
-// ── How agconnect-services.json reaches the build ─────────────────────────────
+// ── How agconnect-services.json reaches the build ──────────────────────────
 // The real file carries live credentials (client_secret, api_key) and is
 // gitignored — see SECURITY.md and HUAWEI_SIGNIN_SETUP.md. It is resolved from
 // the first source that supplies one, in this order:
@@ -358,4 +358,36 @@ tasks.matching {
     it.name.matches(Regex("merge.*Assets")) || it.name.contains("Lint", ignoreCase = true)
 }.configureEach {
     dependsOn(copyAgconnectServices)
+}
+
+// ── Final sanity check on the resolved AGC config ──────────────────────────
+//
+// The config's `client.package_name` must equal this app's `applicationId`.
+// When it does not, everything still compiles and the APK still bundles the
+// config, but Account Kit rejects sign-in server-side — the picker opens and
+// closes itself, with no HMS status code, which is indistinguishable from the
+// "fingerprint not registered" case and sends you chasing the wrong problem
+// (see HuaweiServicesConfig.parseResult).
+//
+// Checked in afterEvaluate because `android.defaultConfig.applicationId` is only
+// resolved once the android {} block above has been evaluated. Warned rather
+// than failed: a mismatch is a console/file error the developer fixes by
+// re-downloading the config for the right AGC project — not something a build
+// should refuse to produce.
+afterEvaluate {
+    val configPackageName = Regex("\"package_name\"\\s*:\\s*\"([^\"]+)\"")
+        .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
+    val appId = android.defaultConfig.applicationId
+    if (configPackageName.isNotBlank() && appId != null && configPackageName != appId) {
+        logger.lifecycle(
+            "\n!!! HUAWEI AGC CONFIG PACKAGE NAME MISMATCH.\n" +
+                "    The resolved agconnect-services.json declares package_name=$configPackageName\n" +
+                "    but this app's applicationId is $appId.\n" +
+                "    The APK will build and bundle the config, but HUAWEI ID sign-in will be\n" +
+                "    rejected by Account Kit (the sign-in screen opens then closes itself) and\n" +
+                "    no HMS status code is reported.\n" +
+                "    FIX: download agconnect-services.json from the AppGallery Connect project\n" +
+                "    whose package name is $appId — see HUAWEI_SIGNIN_SETUP.md §6.\n",
+        )
+    }
 }

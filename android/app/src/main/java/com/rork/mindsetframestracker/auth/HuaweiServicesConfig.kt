@@ -65,6 +65,10 @@ object HuaweiServicesConfig {
     @Volatile
     private var configuredAppId: String? = null
 
+    /** `client.package_name` from the bundled config, or null when none was loaded. */
+    @Volatile
+    private var configuredPackageName: String? = null
+
     /** Human-readable reason the last [initialize] attempt failed, if any — surfaced in
      * the UI because R8 strips Log calls in release builds, making logcat useless here. */
     @Volatile
@@ -174,6 +178,7 @@ object HuaweiServicesConfig {
         }.onSuccess {
             initialized = true
             configuredAppId = appId
+            configuredPackageName = packageName
             lastError = null
             Log.i(TAG, "AGConnect initialized (app_id=$appId)")
         }.onFailure {
@@ -251,6 +256,52 @@ object HuaweiServicesConfig {
         }.onFailure {
             Log.w(TAG, "Could not read signing certificate: ${it.message}")
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Detects a `package_name` mismatch between the bundled AGC config and this
+     * app's real applicationId — the one config problem that produces NO error
+     * code and NO log, so it looks exactly like an unregistered signing
+     * certificate.
+     *
+     * Account Kit validates the config's `package_name` server-side. When the
+     * two disagree (typically: agconnect-services.json downloaded for a
+     * different AppGallery Connect app than the one this build targets) the
+     * sign-in screen opens and instantly closes itself with RESULT_CANCELED and
+     * no HMS status code, which [HuaweiAuthClient.parseResult] can only guess
+     * at. Checking here turns that guess into a named cause.
+     *
+     * @return a user-facing message when the two disagree, or null when they
+     *   match (or the config carries no package_name to compare against).
+     */
+    fun checkAgcConfigPackageMatches(context: Context): String? {
+        val declared = configuredPackageName?.takeIf { it.isNotBlank() } ?: return null
+        val actual = context.packageName
+        if (declared == actual) return null
+
+        logDiagnostic(
+            context,
+            "startSignIn blocked: AGC config package_name ($declared) != applicationId ($actual)",
+        )
+        val fingerprint = signingCertSha256(context)
+            .firstOrNull()
+            ?: "<could not read — check huawei_diagnostics.txt>"
+        return buildString {
+            append(
+                "Huawei sign-in can't work with this build's configuration: the bundled " +
+                    "agconnect-services.json is for a different app.\n\n",
+            )
+            append("agconnect-services.json declares package_name: $declared\n")
+            append("This build's applicationId:                 $actual\n\n")
+            append(
+                "Account Kit checks that package name and rejects the request before any " +
+                    "account picker appears, so this looks identical to a signing-certificate " +
+                    "problem. Download agconnect-services.json from the AppGallery Connect " +
+                    "project whose package name is $actual and rebuild — see " +
+                    "HUAWEI_SIGNIN_SETUP.md.\n\n",
+            )
+            append("This build's SHA-256 signing fingerprint (register it in AGC too):\n$fingerprint")
+        }
     }
 
     /**
