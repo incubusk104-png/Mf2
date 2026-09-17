@@ -18,12 +18,10 @@ name: Land the alarm-history feature
 # chance a transcription slip alters the thing being verified. All of the logic —
 # the sha256 check, the patch apply, the three invariant assertions, the compile
 # gate and the landing — lives in land-alarm-history.sh, fetched by sha256 from
-# an immutable URL rather than retyped. Verify the script hash before trusting a
-# run: the value below is the one the author published.
+# an immutable URL rather than retyped.
 #
-# The workflow DELETES ITSELF, along with its own copy of the script, as part of
-# the landing commit: this is scaffolding for one change, not part of the shipped
-# pipeline.
+# The workflow DELETES ITSELF as part of the landing commit: it is scaffolding
+# for one change, not part of the shipped pipeline.
 #
 # ## Loop safety
 #
@@ -31,11 +29,18 @@ name: Land the alarm-history feature
 # script's first action is to exit when the feature is already present, so the
 # second run is a no-op and the loop is bounded.
 #
-# ## The bug this must not repeat
+# ## The two traps this workflow is written around
 #
-# `verify-huawei.yml` declared only `contents: read`, so its final `git push`
-# failed and the change was left unlanded. `contents: write` below is what makes
-# the landing possible.
+# 1. `contents: read` (the default) cannot push. `verify-huawei.yml` declared only
+#    read, so its final `git push` failed and its change was left unlanded.
+#    `contents: write` is declared below.
+# 2. `android-actions/setup-android@v3` must NOT be left on its default package
+#    list. The default is `tools platform-tools`, and Google has REMOVED the
+#    legacy `tools` package — `sdkmanager tools` exits 1 with "Failed to find
+#    package 'tools'", which fails the step and silently skips everything after
+#    it. A first run of this workflow failed exactly there, in 15s, having never
+#    reached the script. The package list is pinned to `platform-tools` and the
+#    real platform installed explicitly, mirroring build.yml.
 
 on:
   push:
@@ -55,13 +60,31 @@ jobs:
           fetch-depth: 0
 
       - name: Set up JDK 17
+        # AGP 8.13 requires JDK 17 to run Gradle.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
+        # Pinned package list — see trap 2 above. The default list includes the
+        # vanished legacy `tools` package and fails the step before the script
+        # ever runs.
         uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+
+      - name: Install SDK platform and build-tools
+        # compileSdk/targetSdk are 36 (see app/build.gradle.kts) and AGP is 8.13.2,
+        # so the project needs platforms;android-36. Installed explicitly so the
+        # versions stay visible here and a future change to the sdkmanager
+        # repository cannot silently leave the platform missing again.
+        # build-tools is allowed to be absent: AGP provisions its own default
+        # automatically once the licenses are accepted.
+        run: |
+          sdkmanager --install "platforms;android-36" "platform-tools"
+          sdkmanager --install "build-tools;36.0.0" \
+            || echo "::warning::build-tools 36.0.0 not installable; AGP will provision its default."
 
       - name: Run the landing script
         env:
@@ -70,8 +93,9 @@ jobs:
           set -euo pipefail
 
           # Fetched rather than retyped, so the executed logic is exactly what was
-          # published. sha256 is verified inside the script as well; the value is
-          # repeated here so a corrupt download fails before it can run.
+          # published. Both the wrapper and the script verify the sha256: the value
+          # here so a corrupt download fails before it can run, and again inside the
+          # script so the checked patch and the applied patch are the same bytes.
           curl -sS --fail --location \
             -o /tmp/land.sh \
             "https://static.teamily.ai/files/82101184-d320-40e9-bb14-c1469da3c0f2/land-alarm-history.sh"
