@@ -27,6 +27,36 @@ Android code. The chain of causes:
 3. The app then correctly reported that no config was bundled and disabled
    Huawei sign-in.
 
+### Exactly when it broke, and why your local build broke too
+
+Commit **`c6b3544`** ("security: untrack the Huawei AGC config…", 2026-09-17
+03:15:51 +0800 = **17:15 AEST**) deleted
+`android/app/agconnect-services.json` from the working tree as well as the
+index — a plain `git rm`, not `git rm --cached`. That distinction is the whole
+story of why Huawei login stopped working **even on your own machine**:
+
+- With `git rm --cached` the file would have stayed on disk, gitignored, and a
+  local `./gradlew assembleRelease` would still have bundled it. Only CI builds
+  would have been affected.
+- With a plain `git rm` the file disappears from disk too. Git does not
+  resurrect a deleted file just because it was later gitignored. So from that
+  commit onward **every** build — locally and on CI — resolved no config, and
+  the APK shipped without one.
+
+There was no `agconnect-services.json` anywhere in the working tree when the
+Huawei failure was investigated, and `git ls-files` does not track one. So the
+answer to "it was working before, what changed?" is that one commit: the file
+was deleted from both git and disk at 17:15 AEST on 2026-09-17, with no build
+time source to replace it.
+
+> **Recovering the file.** The original content is still in git history and
+> `git show c6b3544^:android/app/agconnect-services.json` prints it (the values
+> are "leaked" precisely because they are still in history). Prefer **downloading
+> a fresh copy** from AppGallery Connect — the committed copy uses the same
+> `app_id`/`cp_id` the Gradle manifest placeholders expect, but those
+> credentials now need rotating regardless (see `SECURITY.md`), so a fresh
+> download is both cleaner and more current.
+
 So the fix has two halves: give the build a way to receive the file (done in
 code — see §3), and actually supply it (a manual step — see §4).
 
