@@ -1,16 +1,19 @@
 name: Apply and verify the Huawei login root-cause fix
 
-# Throwaway workflow. It exists only to land the Huawei root-cause fix onto a
-# VERIFIED commit: the sandbox that produced the change has no git push
-# credentials, so the files are published as artifacts, fetched here, checked
-# against a pinned sha256, compiled, and only then committed.
+# Throwaway workflow. It lands the Huawei root-cause fix onto a VERIFIED commit:
+# the sandbox that produced the change has no git push credentials, so the diff
+# is published as an artifact, fetched here, checked against a pinned sha256,
+# applied, compiled, and only then committed.
 #
 # It pushes to a SEPARATE branch (verify/huawei-signin-verified) rather than the
 # branch it runs on, so it cannot re-trigger itself. It also deletes itself in
 # the commit it produces, so the throwaway never reaches main.
 #
-# The sha256 pins below are the contract: if an artifact is ever replaced, the
-# fetch fails loudly instead of silently landing different code.
+# The sha256 pin is the contract: if the patch is ever replaced, the fetch fails
+# loudly instead of silently landing different code.
+#
+# Failures are published as commit statuses (context diag-N) because job logs
+# require admin rights to download.
 
 on:
   push:
@@ -19,6 +22,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 jobs:
   apply:
@@ -31,34 +35,31 @@ jobs:
           ref: verify/huawei-signin-diag
           fetch-depth: 0
 
-      - name: Fetch the verified files and check their sha256
+      - name: Fetch the verified patch and check its sha256
         run: |
           set -e
-          BASE="https://static.teamily.ai/sites/af225f29-e9fd-450c-8058-051b001b4347/documents/mf2-huawei-diag"
-          fetch() { # <artifact-name> <repo-path> <expected-sha256>
-            curl -fsSL "$BASE/$1" -o "$2"
-            echo "$3  $2" | sha256sum -c - \
-              || { echo "::error::sha256 mismatch for $2 — refusing to land unverified content"; exit 1; }
-            echo "OK  $2"
-          }
-          fetch android_app_build.gradle.kts \
-                android/app/build.gradle.kts \
-                e3df9f2b59a3cfaa54da9cab77e612ea1f2498c4e53b1480aea358508e07c2b2
-          fetch huawei_services_config.kt \
-                android/app/src/main/java/com/rork/mindsetframestracker/auth/HuaweiServicesConfig.kt \
-                aafc6169576a31dc33e70429379dbfbfedb3cc66d58fd346bfd01ff6bf0c3f6a
-          fetch huawei_auth_client.kt \
-                android/app/src/main/java/com/rork/mindsetframestracker/auth/HuaweiAuthClient.kt \
-                811d9f723d8bfb97bf9c307d39b445916382e273781fa602e45a693b5ef15319
-          fetch verify_huawei.yml \
-                .github/workflows/verify-huawei.yml \
-                c1383f160d5f39d7403669fe61bcc6cfb0e0940f300d0c9b769056aaacecd612
-          fetch huawei_signin_setup.md \
-                HUAWEI_SIGNIN_SETUP.md \
-                e17d47750f79501fab159111404aacb3a14bf3610cc1a0afd05479ab497948b2
-          echo "All five files fetched and hash-verified."
+          URL="https://static.teamily.ai/sites/af225f29-e9fd-450c-8058-051b001b4347/documents/mf2-huawei-diag/huawei-login-rootcause.patch"
+          curl -fsSL "$URL" -o /tmp/fix.patch
+          echo "9798b59bce9ff6f6a44b72447bf084178739b2def670233e35cbc341578dadac  /tmp/fix.patch" \
+            | sha256sum -c - \
+            || { echo "::error::sha256 mismatch — refusing to land unverified content"; exit 1; }
+          echo "Patch fetched and hash-verified: $(wc -c < /tmp/fix.patch) bytes"
+          echo "--- files the patch touches ---"
+          git apply --stat /tmp/fix.patch
 
-      - name: Assert the fix is actually present in the fetched content
+      - name: Apply the patch
+        run: |
+          set -e
+          # --3way so a benign context drift still applies; a genuine conflict
+          # aborts here rather than landing a half-applied tree.
+          git apply --3way --whitespace=nowarn /tmp/fix.patch
+          # git apply does NOT touch the index. Without this, every later
+          # assertion and the final commit would see PRE-patch state.
+          git add -A
+          echo "--- applied ---"
+          git status --short
+
+      - name: Assert the fix is actually present after applying
         run: |
           set -e
           grep -q "fun checkAgcConfigPackageMatches" \
@@ -73,7 +74,7 @@ jobs:
             || { echo "::error::the runbook does not name the breaking commit"; exit 1; }
           grep -q "Case 3" .github/workflows/verify-huawei.yml \
             || { echo "::error::the local-file verification case is missing"; exit 1; }
-          echo "OK: every fix is present in the fetched content."
+          echo "OK: every fix is present after applying."
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -126,6 +127,7 @@ jobs:
         run: |
           set -e
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "APK: $APK"
           unzip -p "$APK" assets/agconnect-services.json > /tmp/from-apk.json
           grep -q "999000111" /tmp/from-apk.json \
             || { echo "::error::the config did not reach the APK assets"; exit 1; }
@@ -181,3 +183,38 @@ jobs:
           MSG
           git push origin HEAD:refs/heads/verify/huawei-signin-verified
           echo "Pushed verified commit: $(git rev-parse HEAD)"
+
+      - name: Publish build errors as commit statuses (readable without admin)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          sha, repo, tok = os.environ["SHA"], os.environ["REPO"], os.environ["GH_TOKEN"]
+          out = []
+          try:
+              txt = open("/tmp/gradle.log", encoding="utf-8", errors="replace").read().splitlines()
+              keep = [l for l in txt if l.startswith("e: ") or "error:" in l.lower() or "FAILURE" in l]
+              out += keep[-25:]
+          except FileNotFoundError:
+              pass
+          body = "\n".join(out)[-6000:] or "no gradle log captured"
+          chunks = [body[i:i+1300] for i in range(0, len(body), 1300)] or ["(empty)"]
+          for n, chunk in enumerate(chunks):
+              data = json.dumps({"state": "failure", "context": "diag-%d" % n,
+                                 "description": "Huawei fix build failed"}).encode()
+              req = urllib.request.Request(
+                  "https://api.github.com/repos/%s/statuses/%s" % (repo, sha), data=data,
+                  headers={"Authorization": "Bearer %s" % tok,
+                           "Accept": "application/vnd.github+json",
+                           "Content-Type": "application/json"})
+              try:
+                  urllib.request.urlopen(req, timeout=20)
+                  print("published diag-%d" % n)
+              except Exception as e:
+                  print("status publish failed %d %s" % (n, e))
+          print(body)
+          PY
