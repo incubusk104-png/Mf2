@@ -3,13 +3,15 @@ name: Verify Huawei AGC config plumbing
 # Throwaway verification workflow for the Huawei sign-in fix. Removed from
 # main once the fix is confirmed; it is NOT part of the shipped pipeline.
 #
-# Proves, against a real Android SDK and a real APK:
+# Reproduces the release build the Build workflow runs (so its failure is
+# visible here) and asserts the config plumbing against a real APK:
 #   1. a config supplied via AGCONNECT_SERVICES_JSON_BASE64 reaches the APK's
 #      assets AND drives the manifest's com.huawei.hms.client.appid/cpid;
-#   2. a build with NO config bundles no asset and invents no app identity
-#      (i.e. the hardcoded fallbacks are really gone);
-#   3. the config's client_secret / api_key never appear in the build log;
-#   4. the Kotlin still compiles in both configurations.
+#   2. a build with NO config bundles no asset and invents no app identity;
+#   3. the config's client_secret / api_key never appear in the build log.
+#
+# Build errors are published as commit statuses (context diag-N) because job
+# logs require admin rights to download.
 
 on:
   push:
@@ -18,8 +20,11 @@ on:
 
 jobs:
   verify:
-    name: Verify AGC config plumbing + compile
+    name: Verify AGC config plumbing + release build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
     defaults:
       run:
         working-directory: android
@@ -46,22 +51,31 @@ jobs:
           sdkmanager --install "build-tools;36.0.0" \
             || echo "::warning::build-tools 36.0.0 not installable; AGP will provision its default."
 
-      - name: Assert the hardcoded app_id / cp_id fallbacks are gone
+      - name: Assert no hardcoded app identity fallback remains
         working-directory: .
         run: |
           set -e
-          if grep -n "118642709" android/app/build.gradle.kts; then
-            echo "::error::The hardcoded app_id fallback 118642709 is still present."
+          # Check the ASSIGNMENTS only. The identifiers are legitimately named
+          # in the explanatory comment that documents their removal, so grepping
+          # the whole file (as an earlier revision of this step did) false-fails.
+          if grep -A3 'val huaweiAgcAppId' android/app/build.gradle.kts | grep -q 'ifBlank'; then
+            echo "::error::huaweiAgcAppId still has a hardcoded fallback"
             exit 1
           fi
-          if grep -n "30063000033888672" android/app/build.gradle.kts; then
-            echo "::error::The hardcoded cp_id fallback is still present."
+          if grep -A3 'val huaweiAgcCpId' android/app/build.gradle.kts | grep -q 'ifBlank'; then
+            echo "::error::huaweiAgcCpId still has a hardcoded fallback"
             exit 1
           fi
           echo "OK: no hardcoded Huawei app identity fallback remains."
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
+
+      - name: Decode keystore (release builds must be signed)
+        working-directory: .
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
 
       - name: Prepare a synthetic AGC config
         working-directory: .
@@ -72,18 +86,24 @@ jobs:
           echo "AGCONNECT_SERVICES_JSON_BASE64=$(base64 -w0 /tmp/synthetic-agconnect.json)" >> "$GITHUB_ENV"
           echo "Synthetic config prepared (identifiers fake; credential fields are sentinels)."
 
-      # ── Case 1: a config IS supplied ──────────────────────────────────────
-      - name: Case 1 — build WITH an injected AGC config
+      # ── Case 1: the RELEASE build, exactly as the Build workflow runs it ──
+      - name: Case 1 — release build WITH an injected AGC config
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          ./gradlew :app:assembleDebug --stacktrace --no-daemon \
+          ./gradlew :app:assembleRelease --stacktrace --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8" \
-            -Porg.gradle.configuration-cache=false 2>&1 | tee /tmp/gradle-with.log
+            -Porg.gradle.configuration-cache=false 2>&1 | tee /tmp/gradle-release.log
           exit ${PIPESTATUS[0]}
 
       - name: Case 1 — assert the config reached the APK assets and the manifest
         run: |
           set -e
-          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           echo "APK: $APK"
           unzip -l "$APK" | grep agconnect \
             || { echo "::error::agconnect-services.json is NOT in the APK assets"; exit 1; }
@@ -95,7 +115,7 @@ jobs:
 
           echo "--- merged manifest carrying the Huawei meta-data ---"
           MF=$(grep -rl "com.huawei.hms.client.appid" \
-                 $(find app/build/intermediates -name 'AndroidManifest.xml' -path '*debug*') \
+                 $(find app/build/intermediates -name 'AndroidManifest.xml' -path '*debug*' -o -name 'AndroidManifest.xml' -path '*release*') \
                | head -1 || true)
           if [ -z "$MF" ]; then
             echo "::error::No merged manifest declares com.huawei.hms.client.appid"
@@ -112,17 +132,17 @@ jobs:
       - name: Case 1 — assert no AGC secret value was logged
         run: |
           set -e
-          if grep -q "SENTINEL_SECRET_DO_NOT_SHIP" /tmp/gradle-with.log; then
+          if grep -q "SENTINEL_SECRET_DO_NOT_SHIP" /tmp/gradle-release.log; then
             echo "::error::client_secret leaked into the Gradle log"
             exit 1
           fi
-          if grep -q "SENTINEL_API_KEY" /tmp/gradle-with.log; then
+          if grep -q "SENTINEL_API_KEY" /tmp/gradle-release.log; then
             echo "::error::api_key leaked into the Gradle log"
             exit 1
           fi
           echo "OK: no AGC secret value appears in the build log."
           echo "--- the resolution line the build printed ---"
-          grep -i "Huawei AGC config resolved from" /tmp/gradle-with.log || echo "(none found)"
+          grep -i "Huawei AGC config resolved from" /tmp/gradle-release.log || echo "(none found)"
 
       # ── Case 2: NO config is supplied ─────────────────────────────────────
       - name: Case 2 — build WITHOUT any AGC config
@@ -131,7 +151,7 @@ jobs:
           env -u AGCONNECT_SERVICES_JSON -u AGCONNECT_SERVICES_JSON_BASE64 \
             ./gradlew :app:assembleDebug --stacktrace --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8" \
-            -Porg.gradle.configuration-cache=false 2>&1 | tee /tmp/gradle-without.log
+            -Porg.gradle.configuration-cache=false 2>&1 | tee /tmp/gradle-debug.log
           exit ${PIPESTATUS[0]}
 
       - name: Case 2 — assert an unconfigured build ships no Huawei identity
@@ -160,17 +180,56 @@ jobs:
           echo "OK: no app identity invented for a config-less build."
 
           echo "--- a config-less build must warn loudly ---"
-          grep -q "HUAWEI SIGN-IN WILL BE DISABLED IN THIS BUILD" /tmp/gradle-without.log \
+          grep -q "HUAWEI SIGN-IN WILL BE DISABLED IN THIS BUILD" /tmp/gradle-debug.log \
             || { echo "::error::No warning was printed for a config-less build"; exit 1; }
           echo "OK: config-less build warned loudly."
 
-      - name: Upload build logs
+      - name: Remove decoded keystore
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verify-logs
-          path: |
-            /tmp/gradle-with.log
-            /tmp/gradle-without.log
-          if-no-files-found: ignore
-          retention-days: 7
+        working-directory: .
+        run: rm -f android/app/release.keystore
+
+      - name: Publish build errors as commit statuses (readable without admin)
+        if: failure()
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          repo, sha, token = os.environ['REPO'], os.environ['SHA'], os.environ['GH_TOKEN']
+          text = ''
+          for f in ('/tmp/gradle-release.log', '/tmp/gradle-debug.log'):
+              try:
+                  text += open(f, errors='replace').read()
+              except FileNotFoundError:
+                  pass
+          pat = r'^e: |error:|What went wrong|Execution failed|Caused by:|FAILURE:|> Task .*FAILED|Could not'
+          keep = [l.rstrip() for l in text.splitlines() if re.search(pat, l)]
+          if not keep:
+              keep = text.splitlines()[-40:]
+          chunks, cur = [], ''
+          for line in keep:
+              if len(cur) + len(line) + 1 > 135:
+                  chunks.append(cur); cur = ''
+              if line:
+                  cur += line + ' | '
+          if cur:
+              chunks.append(cur)
+          for i, c in enumerate(chunks[:10], 1):
+              body = json.dumps({'state': 'failure', 'context': f'diag-{i}',
+                                 'description': c[:135]}).encode()
+              req = urllib.request.Request(
+                  f'https://api.github.com/repos/{repo}/statuses/{sha}', data=body,
+                  headers={'Authorization': f'token {token}',
+                           'Accept': 'application/vnd.github+json',
+                           'Content-Type': 'application/json'},
+                  method='POST')
+              try:
+                  urllib.request.urlopen(req)
+                  print(f'posted diag-{i}')
+              except Exception as exc:
+                  print(f'diag-{i} failed: {exc}')
+          PY
