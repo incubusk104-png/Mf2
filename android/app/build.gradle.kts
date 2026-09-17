@@ -1,4 +1,12 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+// NOTE: these must be explicit imports. In a Gradle Kotlin DSL script the bare
+// identifier `java` resolves to the JavaPluginExtension on the project, NOT to
+// the `java` package — so fully-qualified references like `java.io.File`,
+// `java.util.Base64` and `java.security.MessageDigest` fail to compile with
+// "Unresolved reference: io/util/security".
+import java.io.File
+import java.security.MessageDigest
+import java.util.Base64
 
 plugins {
     alias(libs.plugins.android.application)
@@ -85,17 +93,16 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // logged — never a secret value.
 val agconnectSource: Pair<String, String> = run {
     val fromFile = runCatching {
-        // Built as a java.io.File from the project dir directly (rather than
-        // going through a decorated Gradle file accessor) so the receiver type
-        // is unambiguous regardless of Gradle's accessor decorations.
-        java.io.File(layout.projectDirectory.asFile, "agconnect-services.json")
+        // Read through a plain java.io.File resolved from the project dir, so
+        // this is independent of how Gradle decorates its own file accessors.
+        File(layout.projectDirectory.asFile, "agconnect-services.json")
             .takeIf { it.isFile }?.readText()
     }.getOrNull()
     val fromEnvRaw = System.getenv("AGCONNECT_SERVICES_JSON")
     val fromEnvBase64 = System.getenv("AGCONNECT_SERVICES_JSON_BASE64")
         ?.let { encoded ->
             runCatching {
-                String(java.util.Base64.getMimeDecoder().decode(encoded.trim()))
+                String(Base64.getMimeDecoder().decode(encoded.trim()))
             }.getOrNull()
         }
     val fromProperty = providers.gradleProperty("agconnect.servicesJson").orNull
@@ -144,7 +151,7 @@ if (huaweiAgcAppId.isBlank()) {
  * and must never be logged or fingerprinted reversibly.
  */
 fun agconnectFingerprint(json: String): String =
-    java.security.MessageDigest.getInstance("SHA-256")
+    MessageDigest.getInstance("SHA-256")
         .digest(json.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
 
@@ -170,7 +177,7 @@ val copyAgconnectServices = tasks.register("copyAgconnectServices") {
     doLast {
         val dir = outDir.get().asFile
         dir.mkdirs()
-        val target = java.io.File(dir, "agconnect-services.json")
+        val target = File(dir, "agconnect-services.json")
         if (json.isNotBlank()) {
             target.writeText(json)
         } else if (target.exists()) {
