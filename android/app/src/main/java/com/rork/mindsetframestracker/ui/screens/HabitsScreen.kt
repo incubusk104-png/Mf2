@@ -1,6 +1,7 @@
 package com.rork.mindsetframestracker.ui.screens
 
 import android.app.Activity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,10 +12,12 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -53,11 +56,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rork.mindsetframestracker.ui.appStrings
+import com.rork.mindsetframestracker.data.AlarmDaySlot
+import com.rork.mindsetframestracker.data.AlarmSlotState
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.alarmMinutes
+import com.rork.mindsetframestracker.data.alarmTimeOfDayLabel
 import com.rork.mindsetframestracker.data.formatAlarmTimes
 import com.rork.mindsetframestracker.data.withAlarmTimes
 import com.rork.mindsetframestracker.data.withAlarmMessage
@@ -77,6 +85,7 @@ import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.notifications.HabitAlarmScheduler
 import com.rork.mindsetframestracker.notifications.HabitTimerRequests
+import com.rork.mindsetframestracker.ui.AppStrings
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
@@ -337,6 +346,14 @@ fun HabitsScreen(
             // reminders actually say instead of an empty field the user would
             // read as "no message set".
             initialMessage = existingForIcon?.alarmMessage.orEmpty(),
+            // ── Today's alarm history ────────────────────────────────────
+            // Derived from the persisted events, one slot per scheduled time, so
+            // a habit ringing at 07:00, 12:00 and 18:00 shows all three rather
+            // than one collapsed entry. Empty for a habit that does not exist yet
+            // (first tap on an icon) — there is no occurrence to have happened.
+            todayAlarmSlots = existingForIcon
+                ?.let { habit -> HabitAlarmHistory.daySlots(data, habit.id) }
+                .orEmpty(),
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
@@ -721,6 +738,16 @@ private fun AlarmPickerDialog(
     initialRepeatMask: Int = REPEAT_DAILY,
     /** The motivational line already saved for this habit, if any. */
     initialMessage: String = "",
+    /**
+     * Every one of this habit's alarms for today, in chronological order — one
+     * entry per scheduled time, from [HabitAlarmHistory.daySlots].
+     *
+     * Passed in rather than read here so the dialog stays a pure function of its
+     * inputs (the same reason `initialTimes` is a parameter): it renders what the
+     * caller resolved, and the caller is the one that holds the loaded
+     * [com.rork.mindsetframestracker.data.AppData].
+     */
+    todayAlarmSlots: List<AlarmDaySlot> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (times: List<Int>, repeatMask: Int, alarmMessage: String) -> Unit,
 ) {
@@ -735,6 +762,14 @@ private fun AlarmPickerDialog(
     // value here ("use the app's own encouraging line for this habit"), so an
     // empty initial string is not a missing value to be filled in.
     var alarmMessage by remember { mutableStateOf(initialMessage) }
+    /**
+     * Which occurrence's detail sheet is open, if any.
+     *
+     * Held on the dialog rather than inside [AlarmHistorySection] so the sheet
+     * survives the section recomposing — a nested holder would drop the
+     * selection on the next keystroke in the message field.
+     */
+    var detailSlot by remember { mutableStateOf<AlarmDaySlot?>(null) }
     // The user's own words when they wrote some, otherwise the curated line for
     // this habit — so the live preview below always shows exactly what the
     // alarm will say, including when the user has overridden it.
@@ -760,7 +795,15 @@ private fun AlarmPickerDialog(
         text = {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // The schedule, the message editor, the new history section and
+                    // the time picker together exceed a short screen, and the
+                    // dialog has no scroll of its own — without this the time
+                    // picker and the Save button become unreachable on a small
+                    // device, which is a functional loss, not a cosmetic one.
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
                 Text(
                     text = "Add as many times as you like — you can always change them later.",
@@ -840,6 +883,15 @@ private fun AlarmPickerDialog(
                     previewLine = previewLine,
                     suggestions = messageSuggestions,
                 )
+                Spacer(Modifier.height(12.dp))
+                // ── Today's alarms ──────────────────────────────────────────
+                // Rendered for the habit's own schedule, so every time it has
+                // ever been set to is represented — the fired ones, the answered
+                // ones, and the ones still to come.
+                AlarmHistorySection(
+                    slots = todayAlarmSlots,
+                    onSelect = { detailSlot = it },
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = if (times.isEmpty()) {
@@ -874,6 +926,242 @@ private fun AlarmPickerDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+
+    // ── One alarm's detail ──────────────────────────────────────────────
+    // A second dialog layered over this one rather than a navigation route: the
+    // editor stays exactly as the user left it (their unsaved schedule and
+    // message included), which is what "tapping an entry shows the alarm detail"
+    // should feel like. Dismissing returns them to the editor they came from.
+    detailSlot?.let { slot ->
+        AlarmDetailDialog(slot = slot, onDismiss = { detailSlot = null })
+    }
+}
+
+/**
+ * The day's alarms for this habit, as a chronological timeline.
+ *
+ * ## What it shows, and why every time appears
+ *
+ * One row per **scheduled time** — not one per habit, and not only the alarms
+ * that left a trace. A habit set for 07:00/12:00/18:00 always renders three rows,
+ * so the dialog answers the question the feature exists for: *which* of today's
+ * alarms went off, which were answered, and which never happened. Deriving the
+ * rows from the schedule (rather than from the recorded events) is what makes a
+ * silent 12:00 visible as [AlarmSlotState.MISSED] instead of simply absent.
+ *
+ * [HabitAlarmHistory.daySlots] also includes any time that fired but is no longer
+ * in the schedule, so re-editing a habit does not erase an alarm that really rang
+ * this morning.
+ *
+ * ## Dumb by design
+ *
+ * All ordering and state derivation happens in [HabitAlarmHistory.daySlots]; this
+ * only labels what it is given. That keeps the "07:00 done, 12:00 missed" logic
+ * testable without Compose, and means the timeline cannot disagree with the
+ * notification subtitle about what an occurrence was.
+ */
+@Composable
+private fun AlarmHistorySection(
+    slots: List<AlarmDaySlot>,
+    onSelect: (AlarmDaySlot) -> Unit,
+) {
+    val s = appStrings()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = s.habitsAlarmHistoryTitle,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        val answered = slots.count { it.isAnswered }
+        if (slots.isNotEmpty()) {
+            Text(
+                text = s.habitsAlarmHistorySummary.format(answered, slots.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        when {
+            // Nothing configured at all — distinct from "configured but silent",
+            // which is the informative case below.
+            slots.isEmpty() -> Text(
+                text = s.habitsAlarmHistoryEmpty,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // Configured, but not one of them has rung yet today (every time is
+            // still ahead of the clock). Saying "nothing yet" is more useful than
+            // a list of identical "Later today" rows.
+            slots.none { it.state != AlarmSlotState.PENDING } -> Text(
+                text = s.habitsAlarmHistoryNoneYet,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                slots.forEach { slot ->
+                    AlarmHistoryRow(slot = slot, onClick = { onSelect(slot) })
+                }
+            }
+        }
+        if (slots.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = s.habitsAlarmDetailHint,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * One time in the timeline: the clock, its state, and the line it delivered.
+ *
+ * `clickable` carries a `contentDescription`-equivalent for screen readers via the
+ * state label, because a row whose only text is "07:00" tells a TalkBack user
+ * nothing about whether that alarm was answered.
+ */
+@Composable
+private fun AlarmHistoryRow(
+    slot: AlarmDaySlot,
+    onClick: () -> Unit,
+) {
+    val s = appStrings()
+    val stateLabel = alarmStateLabel(s, slot.state)
+    // Answered occurrences get the muted treatment; an outstanding or missed one
+    // keeps the accent so it is what the eye lands on in the list.
+    val stateColor = when (slot.state) {
+        AlarmSlotState.ACKNOWLEDGED -> MaterialTheme.colorScheme.primary
+        AlarmSlotState.MISSED -> MaterialTheme.colorScheme.error
+        AlarmSlotState.FIRED, AlarmSlotState.PENDING -> MaterialTheme.colorScheme.onSurfaceVariant
+        AlarmSlotState.DISMISSED, AlarmSlotState.SNOOZED -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+    ) {
+        Text(
+            text = slot.clockLabel,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stateLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = stateColor,
+            )
+            // The line the alarm actually said. Omitted entirely when none was
+            // recorded rather than showing a placeholder, so the row stays one
+            // line for a missed alarm that never delivered anything.
+            slot.message?.takeIf { it.isNotBlank() }?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        // A snooze is worth flagging inline: it reads as "not dealt with yet",
+        // which the plain state column alone would understate.
+        if (slot.state == AlarmSlotState.SNOOZED) {
+            Text(
+                text = s.habitsAlarmStateSnoozed,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * The detail of one occurrence: what it was scheduled for, what it actually did,
+ * what it said, and when the user answered it.
+ *
+ * A read-only view of what was recorded — the alarm cannot be re-armed from here,
+ * because the schedule row above is the one place that owns alarm times and a
+ * second editing surface would be a second source of truth for them.
+ */
+@Composable
+private fun AlarmDetailDialog(
+    slot: AlarmDaySlot,
+    onDismiss: () -> Unit,
+) {
+    val s = appStrings()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("${s.habitsAlarmDetailTitle} · ${slot.clockLabel}")
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DetailRow(label = s.habitsAlarmDetailTime, value = slot.clockLabel)
+                DetailRow(label = s.habitsAlarmDetailState, value = alarmStateLabel(s, slot.state))
+                DetailRow(
+                    label = s.habitsAlarmDetailMessage,
+                    value = slot.message?.takeIf { it.isNotBlank() }
+                        ?: s.habitsAlarmDetailNoMessage,
+                )
+                // Ring and answer times are separate rows because they answer
+                // different questions, and an alarm that was never answered has no
+                // answer time at all — which is exactly what "Not recorded" says.
+                val firedAt = slot.events.mapNotNull { it.firedAtEpochMs.takeIf { ms -> ms > 0L } }
+                    .minOrNull()
+                val answeredAt = slot.latest?.respondedAtEpochMs
+                DetailRow(
+                    label = s.habitsAlarmDetailFiredAt,
+                    value = alarmTimeOfDayLabel(firedAt ?: 0L)
+                        .ifBlank { s.habitsAlarmDetailNotRecorded },
+                )
+                if (slot.isAnswered) {
+                    DetailRow(
+                        label = s.habitsAlarmDetailAnsweredAt,
+                        value = alarmTimeOfDayLabel(answeredAt ?: 0L)
+                            .ifBlank { s.habitsAlarmDetailNotRecorded },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(s.habitsDone) }
+        },
+    )
+}
+
+/** A label/value pair in the detail dialog. */
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column(modifier = Modifier.padding(bottom = 10.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text = value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/**
+ * The display label for an occurrence's state.
+ *
+ * One mapping for the whole file, so the timeline row and the detail dialog can
+ * never describe the same state with two different words — and so a new state
+ * added to the data layer fails to compile here rather than rendering blank.
+ */
+private fun alarmStateLabel(s: AppStrings, state: AlarmSlotState): String = when (state) {
+    AlarmSlotState.PENDING -> s.habitsAlarmStatePending
+    AlarmSlotState.FIRED -> s.habitsAlarmStateFired
+    AlarmSlotState.ACKNOWLEDGED -> s.habitsAlarmStateDone
+    AlarmSlotState.DISMISSED -> s.habitsAlarmStateDismissed
+    AlarmSlotState.SNOOZED -> s.habitsAlarmStateSnoozed
+    AlarmSlotState.MISSED -> s.habitsAlarmStateMissed
 }
 
 /**

@@ -640,6 +640,45 @@ class AppStrings(private val table: Map<String, String>) {
     val notifHabitFallbackBody: String get() = s("notifHabitFallbackBody")
     /** Formatted as (clock, position, total), e.g. "07:00 · 2 of 3 today". */
     val notifHabitOccurrence: String get() = s("notifHabitOccurrence")
+
+    // ── Today's alarm history (habit dialog) ──────────────────────────────
+    /// Header of the dialog's per-occurrence history, e.g. "Today's alarms".
+    val habitsAlarmHistoryTitle: String get() = s("habitsAlarmHistoryTitle")
+    /// Formatted with the answered/total counts, e.g. "2 of 3 answered".
+    val habitsAlarmHistorySummary: String get() = s("habitsAlarmHistorySummary")
+    /// Shown for a habit that has no alarms configured at all.
+    val habitsAlarmHistoryEmpty: String get() = s("habitsAlarmHistoryEmpty")
+    /// Shown when today's alarms exist but nothing has rung yet.
+    val habitsAlarmHistoryNoneYet: String get() = s("habitsAlarmHistoryNoneYet")
+    /// Per-row state labels. One label per occurrence state, so the history
+    /// reads as a timeline rather than a list of times.
+    val habitsAlarmStatePending: String get() = s("habitsAlarmStatePending")
+    val habitsAlarmStateFired: String get() = s("habitsAlarmStateFired")
+    val habitsAlarmStateDone: String get() = s("habitsAlarmStateDone")
+    val habitsAlarmStateDismissed: String get() = s("habitsAlarmStateDismissed")
+    val habitsAlarmStateSnoozed: String get() = s("habitsAlarmStateSnoozed")
+    val habitsAlarmStateMissed: String get() = s("habitsAlarmStateMissed")
+    /// Title of the per-occurrence detail sheet.
+    val habitsAlarmDetailTitle: String get() = s("habitsAlarmDetailTitle")
+    /// Row label for the scheduled time in the detail sheet.
+    val habitsAlarmDetailTime: String get() = s("habitsAlarmDetailTime")
+    /// Row label for the state in the detail sheet.
+    val habitsAlarmDetailState: String get() = s("habitsAlarmDetailState")
+    /// Row label for the delivered motivational line in the detail sheet.
+    val habitsAlarmDetailMessage: String get() = s("habitsAlarmDetailMessage")
+    /// Row label for when the alarm actually rang.
+    val habitsAlarmDetailFiredAt: String get() = s("habitsAlarmDetailFiredAt")
+    /// Row label for when the user answered it.
+    val habitsAlarmDetailAnsweredAt: String get() = s("habitsAlarmDetailAnsweredAt")
+    /// Placeholder for the message row when no line was recorded.
+    val habitsAlarmDetailNoMessage: String get() = s("habitsAlarmDetailNoMessage")
+    /// Value shown for a field that has no recorded value at all.
+    val habitsAlarmDetailNotRecorded: String get() = s("habitsAlarmDetailNotRecorded")
+    /// Hint under the history telling the user the rows are tappable.
+    val habitsAlarmDetailHint: String get() = s("habitsAlarmDetailHint")
+    /// Formatted as (position, total), e.g. "2 of 3 today" — the page total on
+    /// the right of the history header.
+    val habitsAlarmOccurrenceOf: String get() = s("habitsAlarmOccurrenceOf")
 }
 
 // ── JSON-based loading ──────────────────────────────────────

@@ -2,10 +2,10 @@ package com.rork.mindsetframestracker.notifications
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.HabitStore
 import com.rork.mindsetframestracker.data.MotivationalMessages
+import com.rork.mindsetframestracker.data.alarmClockLabel
 import com.rork.mindsetframestracker.data.alarmMinutes
 
 /**
@@ -170,8 +170,7 @@ object HabitReminderText {
     }
 
     /** Always 24-hour: an alarm time is an appointment, not a locale timestamp. */
-    fun formatTime(minutes: Int): String =
-        String.format(java.util.Locale.US, "%02d:%02d", minutes / 60, minutes % 60)
+    fun formatTime(minutes: Int): String = alarmClockLabel(minutes)
 
     private fun formatTimes(times: List<Int>): String =
         if (times.isEmpty()) "" else times.joinToString(", ") { formatTime(it) }

@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import com.rork.mindsetframestracker.data.AlarmEventOutcome
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.MindsetRepository
 
 /**
@@ -76,6 +78,47 @@ class AlarmStopReceiver : BroadcastReceiver() {
         val habitId = intent.getStringExtra(EXTRA_HABIT_ID)
         val habitName = intent.getStringExtra(EXTRA_HABIT_NAME)
         val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
+        /**
+         * The occurrence being stopped, when the intent carries one.
+         *
+         * Resolved once here rather than only inside the cancel block below,
+         * because the alarm-history write needs the same value — and deriving it
+         * twice is how the cancel and the record could end up disagreeing about
+         * which time was stopped.
+         */
+        val stoppedAlarmMinutes = intent
+            .getIntExtra(
+                HabitReminderReceiver.EXTRA_ALARM_MINUTES,
+                HabitReminderReceiver.NO_ALARM_MINUTES,
+            )
+            .takeIf { it != HabitReminderReceiver.NO_ALARM_MINUTES }
+
+        // ── 0. Record that the user answered this occurrence ────────────────
+        // This is the ONLY place a habit alarm is acknowledged or dismissed —
+        // both the notification's "Stop alarm" button and the ringing screen's
+        // Stop button route here (see [AlarmRingingActivity.stopRinging]) — so
+        // recording it here covers every way a user can answer an alarm.
+        //
+        // DISMISSED rather than ACKNOWLEDGED on purpose: stopping an alarm says
+        // "I have seen this and it is no longer ringing", not "I did the habit".
+        // Whether the habit was actually done is owned by the tracking sheet and
+        // the timer, which write their own
+        // [com.rork.mindsetframestracker.data.HabitLogEntry]. Inferring a
+        // completion from a stop is exactly the invented record that
+        // [com.rork.mindsetframestracker.notifications.HabitAlarmRecords] refuses
+        // to write.
+        //
+        // Timers are skipped: they have no habit, and therefore no alarm history.
+        if (!habitId.isNullOrBlank()) {
+            runCatching {
+                HabitAlarmHistory.markOutcome(
+                    context = context,
+                    habitId = habitId,
+                    scheduledMinutes = stoppedAlarmMinutes,
+                    outcome = AlarmEventOutcome.DISMISSED,
+                )
+            }.onFailure { Log.w(TAG, "Could not record the stop for habit $habitId", it) }
+        }
 
         // ── 1. Cancel the schedule itself ──────────────────────────────────
         // Without this, stopping a *snoozed* or re-armed alarm only silences
@@ -93,10 +136,9 @@ class AlarmStopReceiver : BroadcastReceiver() {
                 // several: stopping the 07:00 ring would also silently cancel
                 // the user's 12:00 and 18:00 alarms. The alarm time travels on
                 // the same intent, so the precise one is available here.
-                val alarmMinutes = intent.getIntExtra(
-                    HabitReminderReceiver.EXTRA_ALARM_MINUTES,
-                    HabitReminderReceiver.NO_ALARM_MINUTES,
-                )
+                // Reuses the value already resolved above, so the cancel and the
+                // history write cannot disagree about which occurrence this is.
+                val alarmMinutes = stoppedAlarmMinutes ?: HabitReminderReceiver.NO_ALARM_MINUTES
                 val habitName = intent.getStringExtra(EXTRA_HABIT_NAME)
                 if (alarmMinutes != HabitReminderReceiver.NO_ALARM_MINUTES) {
                     HabitAlarmScheduler.cancelAt(context, habitId, habitName.orEmpty(), alarmMinutes)
@@ -239,5 +281,54 @@ class AlarmStopReceiver : BroadcastReceiver() {
                 )
             }.onFailure { Log.w(TAG, "Could not build the Stop alarm intent", it) }
                 .getOrNull()
+
+        /**
+         * Returns a fresh stop intent with the habit/occurrence identity
+         * explicitly set.
+         *
+         * ## The bug this exists to close
+         *
+         * `PendingIntent.FLAG_UPDATE_CURRENT` does not always *create* — it
+         * returns an **existing** PendingIntent when its `(requestCode, Intent)`
+         * match one the system already holds, and when that happens the existing
+         * Intent's extras are kept and the new ones are discarded.
+         *
+         * The ringing screen built its stop intent with the plain [Intent]
+         * constructor (no action, no data), so it filtered equal to the
+         * **content/tap** intent that
+         * [com.rork.mindsetframestracker.notifications.HabitCheckInNotifier] had
+         * already registered under the same `habitId.hashCode()` request code.
+         * The stop therefore resolved to THAT PendingIntent and reached
+         * [AlarmStopReceiver] carrying **no `alarmMinutes` extra at all**.
+         *
+         * The visible symptom is exactly the fallback branch in step 1 above:
+         * pressing Stop on the ringing screen could not cancel the one time that
+         * was ringing, so it fell through to "cancel every alarm this habit has"
+         * — answering the 07:00 alarm silently deleted the user's 12:00 and 18:00
+         * ones. It also left the day's history entry unattributable to a time.
+         *
+         * `Intent.filterEquals` compares action, data, type, identity and
+         * categories, so giving the stop intent the stop action **and** its habit
+         * and occurrence extras makes it a different Intent from the tap intent
+         * and the resolution can no longer be hijacked. Belt and braces: the
+         * extras are written onto the Intent that is returned, so even a reused
+         * entry is corrected rather than inherited.
+         */
+        fun makeExplicit(
+            intent: Intent,
+            habitId: String?,
+            habitName: String?,
+            alarmMinutes: Int? = null,
+            eventId: String? = null,
+        ): Intent = intent.apply {
+            action = ACTION_STOP_ALARM
+            putExtra(EXTRA_HABIT_ID, habitId)
+            putExtra(EXTRA_HABIT_NAME, habitName)
+            putExtra(EXTRA_EVENT_ID, eventId)
+            putExtra(
+                HabitReminderReceiver.EXTRA_ALARM_MINUTES,
+                alarmMinutes ?: HabitReminderReceiver.NO_ALARM_MINUTES,
+            )
+        }
     }
 }

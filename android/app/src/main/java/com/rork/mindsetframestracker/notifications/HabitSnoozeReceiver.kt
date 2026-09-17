@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.rork.mindsetframestracker.data.AlarmEventOutcome
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import java.util.concurrent.TimeUnit
 
 /**
@@ -76,6 +78,23 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(HabitCheckInNotifier.notificationId(habitId))
+
+        // ── Record the snooze against THIS occurrence ─────────────────────────
+        // A snooze REFINES the occurrence that already fired rather than adding a
+        // new event, because the user's model is "the 07:00 alarm" — not "the
+        // 07:00 alarm, twice". HabitAlarmHistory upserts on (habit, day, time), so
+        // the re-fire that follows updates this same entry instead of creating a
+        // second one, and the day's history stays one row per scheduled time.
+        runCatching {
+            HabitAlarmHistory.markOutcome(
+                context = context,
+                habitId = habitId,
+                scheduledMinutes = alarmMinutes.takeIf {
+                    it != HabitReminderReceiver.NO_ALARM_MINUTES
+                },
+                outcome = AlarmEventOutcome.SNOOZED,
+            )
+        }.onFailure { Log.w(TAG, "Could not record the snooze for $habitId", it) }
 
         val reminderIntent = Intent(context, HabitReminderReceiver::class.java).apply {
             action = HabitAlarmScheduler.ACTION_HABIT_REMINDER

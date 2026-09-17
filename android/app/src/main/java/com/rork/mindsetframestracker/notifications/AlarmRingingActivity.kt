@@ -342,12 +342,18 @@ class AlarmRingingActivity : ComponentActivity() {
         // cancel the right scheduled alarm and the right notification instead
         // of only muting the audio.
         runCatching {
-            val stopIntent = Intent(this, AlarmStopReceiver::class.java).apply {
-                action = AlarmStopReceiver.ACTION_STOP_ALARM
-                putExtra(AlarmStopReceiver.EXTRA_HABIT_ID, habitId.takeIf { it.isNotEmpty() })
-                putExtra(AlarmStopReceiver.EXTRA_HABIT_NAME, habitName)
-                putExtra(AlarmStopReceiver.EXTRA_EVENT_ID, ringingEvent?.eventId)
-            }
+            // makeExplicit() rather than a plain Intent: FLAG_UPDATE_CURRENT can
+            // return an EXISTING PendingIntent, and an Intent with no action
+            // filtered equal to the notification's content/tap intent under the
+            // same request code — so the stop arrived with no alarm time and fell
+            // back to cancelling EVERY alarm the habit has (see that helper).
+            val stopIntent = AlarmStopReceiver.makeExplicit(
+                intent = Intent(this, AlarmStopReceiver::class.java),
+                habitId = habitId.takeIf { it.isNotEmpty() },
+                habitName = habitName,
+                alarmMinutes = ringingAlarmMinutes,
+                eventId = ringingEvent?.eventId,
+            )
             sendBroadcast(stopIntent)
         }.onFailure {
             // Falling back to the direct service stop keeps a broadcast hiccup
@@ -381,9 +387,16 @@ class AlarmRingingActivity : ComponentActivity() {
             return
         }
         stopRinging()
+        // The occurrence travels on the snooze, for the same reason it travels on
+        // the stop: without it the receiver re-arms "the habit" rather than the
+        // time that was actually snoozed, and the day's history entry lands
+        // against the wrong alarm.
         val snoozeIntent = Intent(this, HabitSnoozeReceiver::class.java).apply {
             putExtra("habitId", habitId)
             putExtra("habitName", habitName)
+            ringingAlarmMinutes?.let {
+                putExtra(HabitReminderReceiver.EXTRA_ALARM_MINUTES, it)
+            }
         }
         sendBroadcast(snoozeIntent)
         finish()

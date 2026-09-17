@@ -16,6 +16,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.rork.mindsetframestracker.MainActivity
 import com.rork.mindsetframestracker.R
+import com.rork.mindsetframestracker.data.AlarmEventOutcome
+import com.rork.mindsetframestracker.data.Dates
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.ui.AppStrings
 
@@ -182,6 +185,38 @@ object HabitCheckInNotifier {
             )
             val occurrenceLabel = HabitReminderText.subtitleFor(context, habitId, alarmMinutes)
 
+            // ── Past the point of no return: this ring IS happening ────────
+            // The alarm has cleared every gate above — permission held, channel
+            // enabled, notification postable — so it is about to reach the user.
+            // THAT is the moment to write it into the alarm history.
+            //
+            // Deliberately here and not in HabitReminderReceiver: a ring that was
+            // suppressed by a missing permission or a muted channel never reached
+            // the user, and recording it would put an alarm in the day's history
+            // that never actually rang.
+            //
+            // Keyed by (habit, day, scheduled time). A habit ringing at 07:00,
+            // 12:00 and 18:00 therefore leaves THREE events — nothing on this
+            // path may collapse them to one per habit, which is precisely the
+            // collapse this history exists to prevent.
+            val effectiveAlarmMinutes = alarmMinutes
+                ?: HabitReminderText.alarmTimesFor(context, habitId).firstOrNull()
+            if (habitId != DIAGNOSTIC_HABIT_ID && effectiveAlarmMinutes != null) {
+                runCatching {
+                    HabitAlarmHistory.record(
+                        context = context,
+                        habitId = habitId,
+                        dayKey = Dates.todayKey(),
+                        scheduledMinutes = effectiveAlarmMinutes,
+                        outcome = AlarmEventOutcome.FIRED,
+                        // The line this occurrence actually delivered, so the
+                        // history shows what the alarm said even after the user
+                        // later edits or clears their message.
+                        message = reminderLine,
+                    )
+                }.onFailure { Log.w(TAG, "Failed to record the ring for '$habitName'", it) }
+            }
+
             val tapIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
@@ -190,12 +225,27 @@ object HabitCheckInNotifier {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
+            // The occurrence travels with the snooze, so the receiver knows WHICH
+            // of the habit's alarms the user tapped. Without it a snooze of the
+            // 07:00 reminder re-armed "the habit", making the 12:00 and 18:00
+            // alarms indistinguishable from it — and its history entry would
+            // have been written against the wrong time.
             val snoozeIntent = Intent(context, HabitSnoozeReceiver::class.java).apply {
                 putExtra("habitId", habitId)
                 putExtra("habitName", habitName)
+                alarmMinutes?.let { putExtra(HabitReminderReceiver.EXTRA_ALARM_MINUTES, it) }
             }
+            // Request code derived from (habit, time) rather than the habit alone:
+            // one code per habit with FLAG_UPDATE_CURRENT made snoozing one time
+            // silently REPLACE another time's button, so a habit with three alarms
+            // ended up with one shared snooze that always hit the last one armed.
             val snoozePendingIntent = PendingIntent.getBroadcast(
-                context, habitId.hashCode(), snoozeIntent,
+                context,
+                HabitAlarmScheduler.requestCodeFor(
+                    habitId,
+                    alarmMinutes ?: HabitReminderReceiver.NO_ALARM_MINUTES,
+                ),
+                snoozeIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 

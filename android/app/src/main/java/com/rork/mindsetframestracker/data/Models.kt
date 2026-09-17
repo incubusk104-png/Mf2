@@ -229,9 +229,21 @@ fun Habit.withAlarmMessage(message: String?): Habit =
  * same schedule is how a user ends up misreading their own alarms.
  */
 fun formatAlarmTimes(times: List<Int>): String =
-    times.sorted().joinToString(", ") { minutes ->
-        String.format(java.util.Locale.US, "%02d:%02d", minutes / 60, minutes % 60)
-    }
+    times.sorted().joinToString(", ") { minutes -> alarmClockLabel(minutes) }
+
+/**
+ * "07:00" for a time-of-day in minutes from midnight — the single clock label
+ * every alarm surface uses.
+ *
+ * Extracted so the habit dialog, the notification subtitle
+ * ([com.rork.mindsetframestracker.notifications.HabitReminderText]) and the new
+ * alarm-history view cannot drift apart: three private implementations of the
+ * same `String.format` is how one screen ends up showing "7:00" next to another
+ * showing "07:00". Always 24-hour and always zero-padded, for the reason above —
+ * an alarm time is an appointment, not a locale-formatted timestamp.
+ */
+fun alarmClockLabel(minutes: Int): String =
+    String.format(java.util.Locale.US, "%02d:%02d", minutes / 60, minutes % 60)
 
 /**
  * One app's screen-time limit as chosen in the limits manager.
@@ -452,6 +464,35 @@ data class AppData(
      * SharedPreferences blob forward- and backward-compatible).
      */
     val habitLogs: List<HabitLogEntry> = emptyList(),
+    /**
+     * Every habit alarm occurrence the app has seen, newest state per event —
+     * see [HabitAlarmEvent] and [HabitAlarmHistory].
+     *
+     * ## Why this is a separate list from [habitLogs]
+     *
+     * They record different things. [habitLogs] is what the *user* supplied (a
+     * duration, a count, a journal entry) and is only written when there is real
+     * content. This is what the *alarm* did: it fired at a scheduled time, and the
+     * user either answered it or did not. A 07:00/12:00/18:00 habit produces three
+     * entries here a day regardless of whether any of them was completed, which is
+     * what makes a whole-day alarm history possible at all — and it is the
+     * evidence a MISSED alarm leaves, which no [HabitLogEntry] can represent.
+     *
+     * ## Identity, not just ownership
+     *
+     * Each event is keyed by `(habitId, dayKey, scheduledMinutes)`. Nothing in
+     * this list may be collapsed to one row per habit per day: that is precisely
+     * the shape that makes a habit's three daily alarms indistinguishable from
+     * one, and it is the bug this list was added to fix.
+     *
+     * ## Bounded and compat-safe
+     *
+     * Append-mostly, newest-last, capped at [MAX_ALARM_EVENTS] by
+     * [HabitAlarmHistory.record] so the single SharedPreferences blob cannot grow
+     * without limit. Defaults to empty, so every existing install decodes
+     * unchanged.
+     */
+    val alarmEvents: List<HabitAlarmEvent> = emptyList(),
     val settings: AppSettings = AppSettings(),
 )
 
