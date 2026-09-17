@@ -1,0 +1,206 @@
+name: Verify day-by-day alarms, tracker connections and unit tests
+
+# One-shot verification workflow. Applies the reviewed patch to main, runs the
+# REAL `./gradlew :app:testDebugUnitTest` on a runner with a full Android SDK,
+# and publishes the outcome. Deleted from main once the landing is done.
+#
+# Why a runner at all: the dev sandbox has a hard 2 GiB cgroup memory limit while
+# this project's gradle.properties requests -Xmx3g for Gradle PLUS -Xmx2g for the
+# Kotlin daemon, so the build daemon is OOM-killed during :app:compileDebugKotlin.
+# Measured, not assumed.
+#
+# The patch is fetched from our content store and its sha256 is asserted before
+# anything is applied, so a run is a statement about the exact bytes that were
+# reviewed rather than about whatever is at that URL at the time.
+
+on:
+  push:
+    branches: ["verify/alarm-days-tests"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  statuses: write
+
+env:
+  PATCH_URL: "https://static.teamily.ai/sites/af225f29-e9fd-450c-8058-051b001b4347/documents/mf2-review_v6/alarm-days-trackers-tests.patch"
+  PATCH_SHA256: "625da8e22119dfcd9a389dcc442c59022ab7d665637576ddd2bf9c586d00f339"
+
+jobs:
+  verify:
+    name: Apply the patch, run the unit tests, publish the result
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Fetch the patch and verify its sha256
+        run: |
+          set -euo pipefail
+          curl -fsSL "$PATCH_URL" -o /tmp/fix.patch
+          echo "${PATCH_SHA256}  /tmp/fix.patch" | sha256sum -c -
+          echo "patch bytes: $(wc -c < /tmp/fix.patch)"
+
+      - name: Apply the patch
+        run: |
+          set -euo pipefail
+          git apply --whitespace=nowarn /tmp/fix.patch \
+            || git apply --3way --whitespace=nowarn /tmp/fix.patch
+          # `git apply` does not touch the index, so without this every later
+          # `git status` assertion silently reports the pre-patch tree.
+          git add -A
+          git status --porcelain | tee /tmp/applied.txt
+          echo "--- modified (tracked) files ---"
+          git diff --cached --diff-filter=M --name-only | tee /tmp/mods.txt
+          # A previous revision of this workflow published diagnostics BEFORE
+          # committing, and the orphan-branch checkout silently discarded the
+          # applied patch — the commit then contained only the NEW files and none
+          # of the MODIFIED ones. This assertion is what catches that.
+          if ! grep -q "HabitsScreen.kt" /tmp/mods.txt; then
+            echo "::error::the applied patch left no modified tracked files — the worktree was reset"
+            exit 1
+          fi
+          find android/app/src/test -name '*.kt' | sort | tee /tmp/testfiles.txt
+
+      - name: Assert the pre-existing features were not collateral damage
+        run: |
+          set -euo pipefail
+          # Earlier revisions of this patch (a) replaced the Activity Source
+          # Picker block and dropped three imports, and (b) put a test file in the
+          # wrong package. Both broke the build. These assertions exist so a
+          # re-cut cannot repeat either mistake.
+          for sym in ActivitySourcePickerSheet StravaAuthClient PolarClient ScreenTimeMonitor; do
+            grep -q "$sym" android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/HabitsScreen.kt \
+              || { echo "::error::$sym disappeared from HabitsScreen.kt"; exit 1; }
+          done
+          for fn in "fun scheduleNext" "fun cancelAt" "fun requestCodeFor" "fun nextTriggerFor"; do
+            grep -q "$fn" android/app/src/main/java/com/rork/mindsetframestracker/notifications/HabitAlarmScheduler.kt \
+              || { echo "::error::$fn missing from HabitAlarmScheduler.kt"; exit 1; }
+          done
+          bad=0
+          for f in $(find android/app/src/test -name '*.kt'); do
+            pkg=$(head -1 "$f" | sed 's/^package //')
+            dir=$(dirname "$f" | sed 's|android/app/src/test/java/||; s|/|.|g')
+            if [ "$pkg" != "$dir" ]; then echo "::error::$f declares '$pkg' but lives in '$dir'"; bad=1; fi
+          done
+          [ "$bad" -eq 0 ] || exit 1
+          # Kotlin has no \0 escape. An earlier revision used one and the test
+          # source failed to compile; catch it statically instead of on a runner.
+          if grep -rnE '\"[^\"\n]*\\\\0' android/app/src/test; then
+            echo "::error::invalid Kotlin escape sequence found"; exit 1
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+
+      - name: Install SDK platform and build-tools
+        run: |
+          sdkmanager --install "platforms;android-36" "platform-tools"
+          sdkmanager --install "build-tools;36.0.0" \
+            || echo "::warning::build-tools 36.0.0 not installable."
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-unit-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*') }}
+          restore-keys: gradle-unit-${{ runner.os }}-
+
+      - name: Run the unit tests
+        id: tests
+        working-directory: android
+        continue-on-error: true
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon > /tmp/test.log 2>&1
+          echo "gradle_exit=$?" | tee /tmp/exit.txt
+          exit 0
+
+      - name: Summarise the test results
+        if: always()
+        run: |
+          python3 - <<'SUMMARISE_EOF' 2>&1 | tee /tmp/summary.txt
+          import glob, xml.etree.ElementTree as ET
+          files = glob.glob('android/app/build/test-results/**/*.xml', recursive=True)
+          if not files:
+              print("NO TEST XML PRODUCED - the test task did not run to completion.")
+          tot = fail = err = skip = 0
+          for f in files:
+              r = ET.parse(f).getroot()
+              tot  += int(r.get('tests', 0)); fail += int(r.get('failures', 0))
+              err  += int(r.get('errors', 0)); skip += int(r.get('skipped', 0))
+              for case in r.iter('testcase'):
+                  for bad in list(case.iter('failure')) + list(case.iter('error')):
+                      print(f"FAILED {case.get('classname')}.{case.get('name')}")
+                      print((bad.text or '')[:2500])
+          print(f"TOTALS tests={tot} failures={fail} errors={err} skipped={skip}")
+          SUMMARISE_EOF
+
+      # Must come BEFORE the diagnostics step: that step switches to an orphan
+      # branch, which replaces the worktree and discards the applied patch.
+      - name: Commit the verified tree and push it to this branch
+        if: steps.tests.outcome == 'success'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(habits): day-by-day alarms, tracker connections and the missing unit tests" \
+            -m "Landed only after :app:testDebugUnitTest passed on this exact tree."
+          echo "VERIFIED_SHA=$(git rev-parse HEAD)"
+          echo "VERIFIED_TREE=$(git rev-parse HEAD^{tree})"
+          git push --force origin HEAD:refs/heads/verify/alarm-days-tests
+
+      - name: Write the diagnostics bundle
+        if: always()
+        run: |
+          set +e
+          {
+            echo "=== exit code ==="
+            cat /tmp/exit.txt 2>/dev/null
+            echo
+            echo "=== test summary ==="
+            cat /tmp/summary.txt 2>/dev/null
+            echo
+            echo "=== first compiler/test errors ==="
+            grep -nE "^e: |error:|FAILED|expected:|AssertionError|Execution failed" /tmp/test.log 2>/dev/null | head -60
+            echo
+            echo "=== last 40 lines ==="
+            tail -40 /tmp/test.log 2>/dev/null
+          } > diagnostics.txt 2>&1
+          cp /tmp/summary.txt results-summary.txt 2>/dev/null
+
+      - name: Publish diagnostics to a readable branch
+        if: always()
+        run: |
+          set +e
+          git checkout -q --orphan diag-tmp
+          git rm -rq --cached . 2>/dev/null
+          git add -f diagnostics.txt
+          git add -f results-summary.txt 2>/dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qm "diagnostics: unit test run" || echo "nothing to commit"
+          git push --force origin HEAD:refs/heads/verify/alarm-days-diagnostics
+
+      - name: Fail the job if the tests failed
+        if: always()
+        run: |
+          if [ "${{ steps.tests.outcome }}" != "success" ]; then
+            echo "::error::unit tests failed - see the verify/alarm-days-diagnostics branch"
+            exit 1
+          fi
