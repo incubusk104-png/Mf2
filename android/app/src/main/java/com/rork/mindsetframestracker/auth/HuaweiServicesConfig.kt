@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import com.huawei.agconnect.AGConnectInstance
 import com.huawei.agconnect.AGConnectOptionsBuilder
+import com.rork.mindsetframestracker.BuildConfig
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.serialization.json.Json
@@ -117,8 +118,30 @@ object HuaweiServicesConfig {
             appContext.assets.open(CONFIG_ASSET).bufferedReader().use { it.readText() }
         }.getOrNull()
         if (raw.isNullOrBlank()) {
-            lastError = "No $CONFIG_ASSET bundled in the APK"
-            Log.i(TAG, "No $CONFIG_ASSET bundled — Huawei sign-in stays disabled until it's added")
+            // Distinguish the two very different causes of "no config": this APK
+            // was BUILT without one (a packaging/setup problem — fix it in the
+            // build, see HUAWEI_SIGNIN_SETUP.md) versus one was supposed to be
+            // bundled and didn't reach the APK assets (a packaging bug).
+            // BuildConfig.HUAWEI_AGC_CONFIG_BUNDLED is set by build.gradle.kts
+            // from the same resolution step that produces the bundled asset, so
+            // the two can never disagree at runtime.
+            val bundledAtBuildTime = BuildConfig.HUAWEI_AGC_CONFIG_BUNDLED
+            lastError = if (bundledAtBuildTime) {
+                "$CONFIG_ASSET was bundled for this build but is missing from the APK assets"
+            } else {
+                "this build was compiled without a Huawei AGC config ($CONFIG_ASSET)"
+            }
+            Log.i(
+                TAG,
+                "No $CONFIG_ASSET bundled — Huawei sign-in stays disabled until one is " +
+                    "provided to the build (lastError=$lastError)",
+            )
+            logDiagnostic(
+                appContext,
+                "initialize(): no AGC config bundled. " +
+                    "HUAWEI_AGC_CONFIG_BUNDLED=$bundledAtBuildTime, " +
+                    "build source=${BuildConfig.HUAWEI_AGC_CONFIG_SOURCE}",
+            )
             return
         }
 
@@ -228,6 +251,37 @@ object HuaweiServicesConfig {
         }.onFailure {
             Log.w(TAG, "Could not read signing certificate: ${it.message}")
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * The user-facing explanation shown when Huawei sign-in can't even start
+     * because no usable AGC config is present.
+     *
+     * Kept here rather than inline in [HuaweiAuthClient] so the on-device
+     * diagnostics file, the log, and the UI all describe the same cause in the
+     * same words — and so the message can name the actual next step instead of
+     * restating the symptom.
+     *
+     * @param reason [lastError], or null when [initialize] never ran.
+     */
+    fun notConfiguredMessage(reason: String?): String {
+        val cause = if (BuildConfig.HUAWEI_AGC_CONFIG_BUNDLED) {
+            "the Huawei config bundled with this build couldn't be loaded"
+        } else {
+            "this app build was compiled without a Huawei config (agconnect-services.json)"
+        }
+        return buildString {
+            append("Huawei sign-in isn't available — $cause.")
+            if (!reason.isNullOrBlank()) append("\n\nDetails: $reason")
+            append(
+                "\n\nThis is a build/setup step, not a device problem. To enable it, provide " +
+                    "agconnect-services.json at build time (a local android/app/ file, or the " +
+                    "AGCONNECT_SERVICES_JSON_BASE64 repository secret) and rebuild — see " +
+                    "HUAWEI_SIGNIN_SETUP.md. Then register this build's SHA-256 fingerprint in " +
+                    "AppGallery Connect.\n\nEmail sign-in backs up exactly the same data — " +
+                    "use it meanwhile.",
+            )
+        }
     }
 
     /**
