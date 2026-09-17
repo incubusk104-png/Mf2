@@ -189,14 +189,10 @@ object HuaweiAuthClient {
      */
     fun startSignIn(activity: Activity): String? {
         if (!HuaweiServicesConfig.isConfigured) {
-            Log.w(TAG, "Huawei sign-in blocked — agconnect-services.json not configured")
+            Log.w(TAG, "Huawei sign-in blocked — AGC config not available")
             val reason = HuaweiServicesConfig.lastError
             HuaweiServicesConfig.logDiagnostic(activity, "startSignIn blocked: not configured ($reason)")
-            return if (reason != null) {
-                "Huawei sign-in isn't set up yet ($reason). Use email sign-in instead."
-            } else {
-                "Huawei sign-in isn't set up on this build yet. Use email sign-in instead."
-            }
+            return HuaweiServicesConfig.notConfiguredMessage(reason)
         }
         if (!isHmsAvailable(activity)) {
             val code = hmsConnectionResult(activity)

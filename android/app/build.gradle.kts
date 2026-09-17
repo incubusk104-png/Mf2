@@ -57,22 +57,128 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // with ORDER_STATE_IAP_NOT_ACTIVATED (60002) even though
 // agconnect-services.json is valid and Huawei sign-in works.
 //
-// The values are read out of agconnect-services.json so the manifest can never
-// drift from client.app_id / client.cp_id (the first occurrence of each key is
-// the "client" block). The literals are a last-resort fallback so a build can
-// never inject an empty appid.
-val agconnectConfigText = runCatching { file("agconnect-services.json").readText() }.getOrDefault("")
+// The values are read out of whatever AGC config this build resolves (see the
+// resolution block below), so the manifest can never drift from
+// client.app_id / client.cp_id (the first occurrence of each key is the
+// "client" block).
+//
+// NOTE: there is deliberately NO hardcoded app_id / cp_id fallback any more.
+// A previous revision fell back to the literals "118642709" /
+// "30063000033888672", which meant a build with NO config still declared a real
+// Huawei app identity in its manifest: HMS Core accepted the app id, the app
+// looked configured, and the true failure (no agconnect-services.json in the
+// APK assets) surfaced only later as a vague "sign-in isn't set up yet" — or as
+// Huawei IAP error 60002. A blank value is the honest answer, and when it is
+// blank this build now says so loudly (see the warning below).
+//
+// ── How agconnect-services.json reaches the build ─────────────────────────────
+// The real file carries live credentials (client_secret, api_key) and is
+// gitignored — see SECURITY.md and HUAWEI_SIGNIN_SETUP.md. It is resolved from
+// the first source that supplies one, in this order:
+//
+//   1. android/app/agconnect-services.json        (local working tree)
+//   2. AGCONNECT_SERVICES_JSON          env var, raw JSON    (CI / scripts)
+//   3. AGCONNECT_SERVICES_JSON_BASE64   env var, base64      (CI secrets)
+//   4. -Pagconnect.servicesJson=<json>  Gradle property
+//
+// Only presence and the non-secret identifiers (app_id / cp_id) are ever
+// logged — never a secret value.
+val agconnectSource: Pair<String, String> = run {
+    val fromFile = runCatching {
+        // Built as a java.io.File from the project dir directly (rather than
+        // going through a decorated Gradle file accessor) so the receiver type
+        // is unambiguous regardless of Gradle's accessor decorations.
+        java.io.File(layout.projectDirectory.asFile, "agconnect-services.json")
+            .takeIf { it.isFile }?.readText()
+    }.getOrNull()
+    val fromEnvRaw = System.getenv("AGCONNECT_SERVICES_JSON")
+    val fromEnvBase64 = System.getenv("AGCONNECT_SERVICES_JSON_BASE64")
+        ?.let { encoded ->
+            runCatching {
+                String(java.util.Base64.getMimeDecoder().decode(encoded.trim()))
+            }.getOrNull()
+        }
+    val fromProperty = providers.gradleProperty("agconnect.servicesJson").orNull
+
+    val candidates = listOf(
+        "local android/app/agconnect-services.json" to fromFile,
+        "AGCONNECT_SERVICES_JSON env" to fromEnvRaw,
+        "AGCONNECT_SERVICES_JSON_BASE64 env" to fromEnvBase64,
+        "agconnect.servicesJson property" to fromProperty,
+    )
+    val hit = candidates.firstOrNull { !it.second.isNullOrBlank() }
+    (hit?.first ?: "none") to hit?.second?.trim().orEmpty()
+}
+val agconnectConfigSource = agconnectSource.first
+val agconnectConfigResolved = agconnectSource.second
+
+val agconnectConfigText = agconnectConfigResolved
 val huaweiAgcAppId = Regex("\"app_id\"\\s*:\\s*\"([^\"]+)\"")
     .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
-    .ifBlank { "118642709" }
 val huaweiAgcCpId = Regex("\"cp_id\"\\s*:\\s*\"([^\"]+)\"")
     .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
-    .ifBlank { "30063000033888672" }
+
+if (huaweiAgcAppId.isBlank()) {
+    logger.lifecycle(
+        "\n!!! HUAWEI SIGN-IN WILL BE DISABLED IN THIS BUILD.\n" +
+            "    No agconnect-services.json could be resolved — looked at a local file, " +
+            "AGCONNECT_SERVICES_JSON, AGCONNECT_SERVICES_JSON_BASE64 and the " +
+            "agconnect.servicesJson property.\n" +
+            "    The APK still compiles and runs, but 'Sign in with HUAWEI ID' will say the " +
+            "build has no Huawei config, and every Huawei IAP call will fail.\n" +
+            "    FIX: put the real file at android/app/agconnect-services.json, or set the " +
+            "AGCONNECT_SERVICES_JSON_BASE64 repository secret — see HUAWEI_SIGNIN_SETUP.md.\n",
+    )
+} else {
+    logger.lifecycle(
+        "Huawei AGC config resolved from $agconnectConfigSource " +
+            "(app_id=$huaweiAgcAppId, cp_id=$huaweiAgcCpId)",
+    )
+}
+
+/**
+ * Irreversible SHA-256 of the resolved AGC config, used only as a Gradle
+ * up-to-date input so the asset task re-runs when the config changes. A real
+ * digest rather than [String.hashCode] because this value can end up in Gradle
+ * logs and build scans — the config itself carries `client_secret` / `api_key`
+ * and must never be logged or fingerprinted reversibly.
+ */
+fun agconnectFingerprint(json: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(json.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 
 val agconnectGeneratedAssets = layout.buildDirectory.dir("generated/agconnect/assets")
-val copyAgconnectServices = tasks.register<Copy>("copyAgconnectServices") {
-    from(layout.projectDirectory.file("agconnect-services.json"))
-    into(agconnectGeneratedAssets)
+
+// Materialises the resolved config into the assets dir that sourceSets.main
+// pulls in. Written from the RESOLVED text rather than copied from a file
+// path, so every source above lands in the APK identically. The previous
+// implementation copied only android/app/agconnect-services.json, which is
+// precisely why a CI build that had the config injected as a secret still
+// shipped an APK containing no Huawei config at all.
+val copyAgconnectServices = tasks.register("copyAgconnectServices") {
+    val json = agconnectConfigResolved
+    val outDir = agconnectGeneratedAssets
+    inputs.property("agconnectConfigPresent", json.isNotBlank())
+    // A SHA-256 (not String.hashCode) so this change-detection fingerprint is
+    // safe to appear in Gradle logs and build scans: it is irreversible, and
+    // the raw config — which carries client_secret / api_key — never is.
+    if (json.isNotBlank()) {
+        inputs.property("agconnectConfigFingerprint", agconnectFingerprint(json))
+    }
+    outputs.dir(outDir)
+    doLast {
+        val dir = outDir.get().asFile
+        dir.mkdirs()
+        val target = java.io.File(dir, "agconnect-services.json")
+        if (json.isNotBlank()) {
+            target.writeText(json)
+        } else if (target.exists()) {
+            // Never leave a stale copy from an earlier build behind: a leftover
+            // file would make the APK claim to be configured when it is not.
+            target.delete()
+        }
+    }
 }
 
 android {
@@ -113,6 +219,14 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
         buildConfigField("String", "STRAVA_CLIENT_ID", "\"$stravaClientId\"")
         buildConfigField("String", "POLAR_CLIENT_ID", "\"$polarClientId\"")
+        // Whether THIS build actually bundled a Huawei AGC config, and where it
+        // came from. Lets the app tell "this APK was compiled without
+        // agconnect-services.json" (a build/setup problem) apart from "a config
+        // was bundled but AGConnect couldn't initialise on this device" — the
+        // two used to collapse into one vague message, which is exactly what
+        // made a packaging gap look like an app bug.
+        buildConfigField("boolean", "HUAWEI_AGC_CONFIG_BUNDLED", agconnectConfigResolved.isNotBlank().toString())
+        buildConfigField("String", "HUAWEI_AGC_CONFIG_SOURCE", "\"$agconnectConfigSource\"")
         // NOTE: there is deliberately NO POLAR_CLIENT_SECRET BuildConfig field.
         // All Polar token exchange goes through the polar-token-exchange Edge
         // Function, which holds the secret server-side. A buildConfigField here

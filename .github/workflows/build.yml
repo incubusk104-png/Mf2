@@ -59,17 +59,23 @@ name: Build
 # STRAVA_CLIENT_ID / POLAR_CLIENT_ID aren't set either.
 # ─────────────────────────────────────────────────────────────────────────
 #
-# HUAWEI SIGN-IN ("opens then instantly closes" with no error): this almost
-# always means the SHA-256 certificate fingerprint of the APK THIS workflow
-# just signed isn't registered against the app in AppGallery Connect
-# (Console -> your project -> your app -> App information -> SHA-256
-# certificate fingerprint). The "Print release signing SHA-256" step below
-# prints the exact fingerprint of the keystore this run used, straight into
-# the Actions log — copy it from there and paste it into AppGallery Connect.
-# Also double-check Account Kit is turned ON for this app under
-# AppGallery Connect -> Build -> Account Kit; without that toggle, sign-in
-# is rejected server-side the same "instant close" way even with a
-# correctly registered fingerprint.
+# HUAWEI SIGN-IN. Two separate failure modes, two separate fixes — see
+# HUAWEI_SIGNIN_SETUP.md for the full runbook:
+#
+#  1. "...isn't available — this app build was compiled without a Huawei
+#     config": the AGC config never reached the build. Huawei sign-in AND
+#     Huawei IAP are both dead in that APK. The "Check Huawei AGC config is
+#     present" step below warns when the AGCONNECT_SERVICES_JSON_BASE64
+#     secret is missing. Add it (base64 -w0 of agconnect-services.json).
+#
+#  2. Sign-in opens then INSTANTLY closes, no error: a config IS bundled, so
+#     this is a console-side problem — either the SHA-256 certificate
+#     fingerprint of the APK THIS workflow signed isn't registered against
+#     the app in AppGallery Connect (Console -> your project -> your app ->
+#     App information -> SHA-256 certificate fingerprint), or Account Kit is
+#     not enabled under AppGallery Connect -> Build -> Account Kit. The
+#     "Print release signing SHA-256" step prints the exact fingerprint this
+#     run used — copy it from the Actions log into AppGallery Connect.
 # ─────────────────────────────────────────────────────────────────────────
 
 on:
@@ -177,6 +183,25 @@ jobs:
             echo "Backend secrets present."
           fi
 
+      - name: Check Huawei AGC config is present
+        # Huawei sign-in and Huawei IAP both need agconnect-services.json bundled
+        # in the APK. It carries live credentials, so it is NOT in git — it must
+        # be supplied here. Without it the APK builds and installs fine, but
+        # "Sign in with HUAWEI ID" reports that the build has no Huawei config
+        # and every IAP call fails — both of which look like app bugs rather
+        # than a missing build input, which is why this warns loudly.
+        env:
+          AGCONNECT_SERVICES_JSON_BASE64: ${{ secrets.AGCONNECT_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -z "$AGCONNECT_SERVICES_JSON_BASE64" ]; then
+            echo "::warning::Missing AGCONNECT_SERVICES_JSON_BASE64 — this build's APK will have NO Huawei config: 'Sign in with HUAWEI ID' will be unavailable and Huawei IAP calls will fail (error 60002). Email sign-in still works."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            echo "Value: base64 -w0 of your android/app/agconnect-services.json (AppGallery Connect -> Project settings -> General information -> App information -> download the config file)."
+            echo "See HUAWEI_SIGNIN_SETUP.md."
+          else
+            echo "Huawei AGC config secret present."
+          fi
+
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -230,6 +255,13 @@ jobs:
           # values as the Supabase Edge Function secrets of the same name.
           STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
           POLAR_CLIENT_ID: ${{ secrets.POLAR_CLIENT_ID }}
+          # Huawei AGC config — read by build.gradle.kts (see the "How
+          # agconnect-services.json reaches the build" block) and bundled into
+          # the APK assets, which is what lets HUAWEI ID sign-in and Huawei IAP
+          # work in the APK this workflow produces. Passed as base64 because
+          # the JSON is multi-line. Absent, the build still succeeds but logs a
+          # loud warning and ships an APK with Huawei sign-in disabled.
+          AGCONNECT_SERVICES_JSON_BASE64: ${{ secrets.AGCONNECT_SERVICES_JSON_BASE64 }}
         # CI-only overrides (GitHub runners have ~7 GB): cap the Gradle JVM and
         # turn off the configuration cache to avoid flaky CI failures. This does
         # NOT change any committed files.
