@@ -22,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,9 +78,12 @@ import com.rork.mindsetframestracker.data.REPEAT_DAILY
 import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import com.rork.mindsetframestracker.data.REPEAT_WEEKDAYS
 import com.rork.mindsetframestracker.data.REPEAT_WEEKENDS
+import com.rork.mindsetframestracker.data.HabitRepeat
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.subscriptionTier
+import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.TrackerProvider
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
@@ -90,6 +94,7 @@ import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
 import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
+import com.rork.mindsetframestracker.ui.components.TrackerConnectSheet
 import com.rork.mindsetframestracker.ui.components.HabitPickerGrid
 import com.rork.mindsetframestracker.ui.components.IntegrationConsent
 import com.rork.mindsetframestracker.ui.components.IntegrationConsentDialog
@@ -140,6 +145,17 @@ fun HabitsScreen(
 
     var showTodoDialog by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
+
+    // ── Tracker connect pop-up ────────────────────────────────────────────────
+    // "add a pop-up that lets the user connect external fitness trackers —
+    // Strava, Google Health (Health Connect) and Polar". One sheet, all three,
+    // with each provider's real state, reachable from the Habits header — where
+    // a user who wants their walking tracked is already looking.
+    var showTrackerSheet by remember { mutableStateOf(false) }
+    // The provider currently mid-connect, so its row can show progress instead of
+    // looking like the tap was ignored (the OAuth path resolves a client id over
+    // the network before it can open the browser).
+    var trackerBusyProvider by remember { mutableStateOf<TrackerProvider?>(null) }
 
     // Screen-time habit flow: privacy consent → app + limit picker → add.
     var showScreenTimeConsent by remember { mutableStateOf(false) }
@@ -280,6 +296,20 @@ fun HabitsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
+                    // A plain entry point to the pop-up, so connecting a tracker
+                    // does not require knowing it lives under Settings.
+                    TextButton(
+                        onClick = { showTrackerSheet = true },
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FavoriteBorder,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Connect fitness trackers")
+                    }
                 }
             },
             onIconTapped = { icon ->
@@ -560,6 +590,77 @@ fun HabitsScreen(
         )
     }
 
+    // ── Tracker connect pop-up ───────────────────────────────────────────────
+    if (showTrackerSheet) {
+        val trackerStatuses = TrackerConnections.statuses(context, data.settings, currentTier)
+        val connectedWithAuto = trackerStatuses.filter { it.isConnected }
+        // One switch for the whole set: on means every connected provider sweeps
+        // into the activity habits on app open. Presented as a single decision
+        // because that is how the user thinks about it — they connected a tracker
+        // *so that* the habit keeps itself up to date.
+        val autoTrackOn = connectedWithAuto.isNotEmpty() && connectedWithAuto.all { it.autoSync }
+        val trackerMessage by viewModel.stravaMessage.collectAsStateWithLifecycle()
+
+        // Clears the in-flight spinner on whichever happens first: a provider's
+        // connected state actually changing, or a status message arriving. Either
+        // means the attempt has resolved, so the row can never spin forever.
+        LaunchedEffect(
+            data.settings.healthConnectConnected,
+            data.settings.polarAccessToken,
+            data.settings.stravaRefreshToken,
+            trackerMessage,
+        ) {
+            trackerBusyProvider = null
+        }
+
+        TrackerConnectSheet(
+            statuses = trackerStatuses,
+            autoTrack = autoTrackOn,
+            busyProvider = trackerBusyProvider,
+            message = trackerMessage,
+            onAutoTrackChange = { enabled ->
+                // Applies to every CONNECTED provider: turning this off must
+                // actually stop the syncing, and a provider that isn't connected
+                // has nothing to switch.
+                connectedWithAuto.forEach { status ->
+                    when (status.provider) {
+                        TrackerProvider.HEALTH_CONNECT -> viewModel.setHealthConnectAutoSync(enabled)
+                        TrackerProvider.POLAR -> viewModel.setPolarAutoSync(enabled)
+                        TrackerProvider.STRAVA -> viewModel.setStravaAutoSync(enabled)
+                    }
+                }
+            },
+            onConnect = { provider ->
+                trackerBusyProvider = provider
+                when (provider) {
+                    // Privacy consent first — before the OAuth page or the system
+                    // permission dialog opens. Required by AppGallery review and
+                    // GDPR Art. 13, and it is also just the honest order.
+                    TrackerProvider.HEALTH_CONNECT -> {
+                        pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
+                        pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
+                    }
+                    TrackerProvider.POLAR -> {
+                        pendingSourceConsent = IntegrationConsent.POLAR
+                        pendingSourceAction = { viewModel.connectPolar() }
+                    }
+                    TrackerProvider.STRAVA -> {
+                        pendingSourceConsent = IntegrationConsent.STRAVA
+                        pendingSourceAction = { viewModel.connectStrava() }
+                    }
+                }
+            },
+            onDisconnect = { provider ->
+                when (provider) {
+                    TrackerProvider.HEALTH_CONNECT -> viewModel.disconnectHealthConnect()
+                    TrackerProvider.POLAR -> viewModel.disconnectPolar()
+                    TrackerProvider.STRAVA -> viewModel.disconnectStrava()
+                }
+            },
+            onDismiss = { showTrackerSheet = false },
+        )
+    }
+
     // ── Privacy consent gate for activity-source connects ──
     if (pendingSourceConsent != null) {
         IntegrationConsentDialog(
@@ -699,12 +800,20 @@ private fun formatLimitLabel(minutes: Int): String = when {
 }
 
 /** Human summary of a repeat mask for snackbars. */
-private fun formatRepeat(mask: Int): String = when (mask) {
-    REPEAT_ONCE -> "once"
-    REPEAT_DAILY -> "daily"
-    REPEAT_WEEKDAYS -> "on weekdays"
-    REPEAT_WEEKENDS -> "on weekends"
-    else -> "on custom days"
+private fun formatRepeat(mask: Int): String = HabitRepeat.describe(mask)
+
+/**
+ * "Mon 07:00" — when a schedule next rings, for the alarm dialog's summary.
+ *
+ * Null renders as an explicit "not scheduled" rather than a blank, because the
+ * case it represents is important: a one-shot alarm whose time has already gone
+ * by will never fire again, and silently showing nothing there is how the user
+ * ends up believing an alarm is set when it is not.
+ */
+private fun formatNextRing(next: java.time.LocalDateTime?): String {
+    if (next == null) return "not scheduled"
+    val day = next.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+    return "$day ${String.format(java.util.Locale.US, "%02d:%02d", next.hour, next.minute)}"
 }
 
 /** Converts minutes-from-midnight to "7:00 AM" / "9:30 PM" format. */
@@ -893,11 +1002,21 @@ private fun AlarmPickerDialog(
                     onSelect = { detailSlot = it },
                 )
                 Spacer(Modifier.height(8.dp))
+                val nextRingAt = HabitRepeat.nextOfAll(
+                    times = times,
+                    repeatDaysMask = repeatMask,
+                    now = java.time.LocalDateTime.now(),
+                    zone = java.time.ZoneId.systemDefault(),
+                )
                 Text(
-                    text = if (times.isEmpty()) {
-                        "No alarm"
-                    } else {
-                        "Alarm ${formatAlarmTimes(times)} · ${formatRepeat(repeatMask)}"
+                    text = when {
+                        times.isEmpty() -> "No alarm"
+                        nextRingAt == null ->
+                            "Alarm ${formatAlarmTimes(times)} \u00b7 ${formatRepeat(repeatMask)} \u2014 " +
+                                "its time has already passed, so it won't ring"
+                        else ->
+                            "Alarm ${formatAlarmTimes(times)} \u00b7 ${formatRepeat(repeatMask)} " +
+                                "\u00b7 next ${formatNextRing(nextRingAt)}"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
@@ -1261,10 +1380,33 @@ private fun MotivationalMessageEditor(
 
 /**
  * Repeat schedule selector — mirrors the system Clock app's "Repeat" row:
- * Once / Daily / Weekdays / Weekends presets plus per-day custom chips.
+ * Once / Every day / Weekdays / Weekends presets plus per-day chips.
+ *
+ * ## Why the day chips can no longer silently disable the alarm
+ *
+ * These chips used to be bare toggles over the mask bits, so deselecting every
+ * day produced mask `0` — which is [REPEAT_ONCE], "fire once, then disarm". The
+ * user was never told that, and two things then went wrong invisibly: the
+ * scheduler took its `REPEAT_ONCE || REPEAT_DAILY` shortcut and armed a *daily*
+ * alarm anyway, so the day selection appeared to do nothing at all; and had that
+ * shortcut not existed, the habit would quietly have become a single-use alarm.
+ *
+ * Fixed on both sides. [HabitRepeat] now owns the maths and special-cases no
+ * mask, and this row refuses to *produce* mask 0 by accident — tapping the last
+ * remaining day is declined with a hint, because "no day at all" is what the
+ * explicit **Once** chip means, and it says so.
+ *
+ * The labels are three letters — `Mon`, never `M` — because single letters are
+ * ambiguous: `T` and `S` each name two days, so the old row could not even be
+ * read back to check what had been selected.
  */
 @Composable
 private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
+    // Set when the user tries to clear the final selected day. The refusal
+    // itself is the behaviour; this only explains it.
+    var lastDayRefused by remember { mutableStateOf(false) }
+    val selectedDayCount = HabitRepeat.daysOf(mask).size
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Repeat",
@@ -1279,11 +1421,16 @@ private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
         ) {
             listOf(
                 "Once" to REPEAT_ONCE,
-                "Daily" to REPEAT_DAILY,
+                "Every day" to HabitRepeat.EVERY_DAY,
                 "Weekdays" to REPEAT_WEEKDAYS,
                 "Weekends" to REPEAT_WEEKENDS,
             ).forEach { (label, preset) ->
                 FilterChip(
+                    // Exact-match only, deliberately. The old `mask == preset`
+                    // comparison was already exact, but the row sat next to a
+                    // summary that described ANY 5-day mask as "weekdays" —
+                    // which is how a custom Mon/Tue/Wed selection came to be
+                    // reported as something it was not.
                     selected = mask == preset,
                     onClick = { onMaskChange(preset) },
                     label = { Text(label) },
@@ -1291,22 +1438,53 @@ private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
             }
         }
         Spacer(Modifier.height(6.dp))
-        // Per-day custom chips (Mon..Sun → bits 0..6).
+        // Per-day chips (Mon..Sun → bits 0..6).
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
-            dayLabels.forEachIndexed { index, label ->
+            HabitRepeat.DEFAULT_DAY_NAMES.forEachIndexed { index, label ->
                 val bit = 1 shl index
                 val selected = mask and bit != 0
                 FilterChip(
                     selected = selected,
-                    onClick = { onMaskChange(mask xor bit) },
+                    onClick = {
+                        if (selected && selectedDayCount == 1) {
+                            // Refused: clearing the last day would produce mask
+                            // 0, which is REPEAT_ONCE. Turning a repeating alarm
+                            // into a one-shot as a side effect of deselecting a
+                            // day is never what the user meant.
+                            lastDayRefused = true
+                        } else {
+                            lastDayRefused = false
+                            onMaskChange(mask xor bit)
+                        }
+                    },
                     label = { Text(label) },
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            // One place decides how a mask reads, so this summary and the
+            // snackbar shown after saving can never describe the same schedule
+            // differently.
+            text = if (mask == REPEAT_ONCE) {
+                "Fires once, then stops. Pick the days above to repeat."
+            } else {
+                "Rings ${HabitRepeat.describe(mask)}."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (lastDayRefused) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Keep at least one day selected \u2014 use \u201cOnce\u201d for a single alarm.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
     }
 }

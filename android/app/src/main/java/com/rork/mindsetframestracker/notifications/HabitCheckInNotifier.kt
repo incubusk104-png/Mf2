@@ -19,6 +19,7 @@ import com.rork.mindsetframestracker.R
 import com.rork.mindsetframestracker.data.AlarmEventOutcome
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
+import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.ui.AppStrings
 
@@ -135,7 +136,13 @@ object HabitCheckInNotifier {
             val granted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) return NotifyResult.PermissionMissing
+            if (!granted) {
+                // Re-arm BEFORE reporting: this occurrence will not reach the
+                // user, but the next one must still be armed or the habit goes
+                // permanently silent. See [rearmAfterUndeliveredRing].
+                rearmAfterUndeliveredRing(context, habitId, habitName, alarmMinutes)
+                return NotifyResult.PermissionMissing
+            }
         }
 
         // The user's chosen language, resolved from a bare Context because this
@@ -160,6 +167,7 @@ object HabitCheckInNotifier {
         // way to catch this instead of wrongly reporting success.
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            rearmAfterUndeliveredRing(context, habitId, habitName, alarmMinutes)
             return NotifyResult.Blocked
         }
 
@@ -168,6 +176,7 @@ object HabitCheckInNotifier {
 
             val channel = manager.getNotificationChannel(CHANNEL_ID)
             if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                rearmAfterUndeliveredRing(context, habitId, habitName, alarmMinutes)
                 return NotifyResult.Blocked
             }
 
@@ -455,6 +464,56 @@ object HabitCheckInNotifier {
                 NotifyResult.Failed("${error.javaClass.simpleName}: ${error.message}")
             },
         )
+    }
+
+    /**
+     * Re-arms the NEXT occurrence after a ring that could not be delivered.
+     *
+     * ## The bug this closes
+     *
+     * The re-arm used to sit at the very END of the successful path only, after
+     * every gate (POST_NOTIFICATIONS granted, notifications enabled, channel
+     * unmuted). Every early return — `PermissionMissing`, and `Blocked` (both
+     * the notifications-disabled case and the muted-channel case) — therefore
+     * skipped it. Since each habit alarm is a one-shot `AlarmManager` entry that
+     * only re-arms itself *after* it fires, a skipped re-arm meant the habit
+     * **never rang again**: not tomorrow, not ever, until the app was reinstalled
+     * or every alarm was rescheduled by hand. For a habit tracker that is the
+     * worst possible failure, and it is silent — the only thing that would have
+     * told the user was the alarm that no longer exists.
+     *
+     * A user fixing their notification settings an hour later would find nothing
+     * to fix: the alarm that should have prompted them was already gone.
+     *
+     * ## Why this is safe
+     *
+     * [HabitAlarmScheduler.scheduleNext] is idempotent per `(habit, time)` — it
+     * arms the next occurrence under the same request code with
+     * `FLAG_UPDATE_CURRENT`, so a later successful ring re-arming the same
+     * occurrence replaces that entry instead of adding a duplicate. The user can
+     * therefore never end up with two alarms for one reminder.
+     */
+    private fun rearmAfterUndeliveredRing(
+        context: Context,
+        habitId: String,
+        habitName: String,
+        alarmMinutes: Int?,
+    ) {
+        // The diagnostic test button is not a real habit — never arm for it.
+        if (habitId == DIAGNOSTIC_HABIT_ID) return
+        runCatching {
+            val habit = MindsetRepository(context).load().habits.firstOrNull { it.id == habitId }
+                ?: return
+            // The occurrence that failed to post, or the habit's first time for a
+            // re-fire whose intent predates multi-time alarms.
+            val minutes = alarmMinutes ?: habit.alarmMinutes.firstOrNull() ?: return
+            HabitAlarmScheduler.scheduleNext(context, habitId, habitName, minutes)
+            Log.w(
+                TAG,
+                "Reminder for '$habitName' could not be posted, but its next occurrence was " +
+                    "still armed — the habit keeps ringing",
+            )
+        }.onFailure { Log.w(TAG, "Could not re-arm the undelivered reminder for '$habitName'", it) }
     }
 
     /**

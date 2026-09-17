@@ -90,7 +90,28 @@ object HabitReminderText {
         dayKey = Dates.todayKey(),
         customMessage = messageFor(context, habitId),
         alarmMinutes = alarmMinutes,
+        // Which of the habit's alarms this is, so a 07:00/12:00/18:00 habit says
+        // three different things across the day instead of the same sentence
+        // three times. See MotivationalMessages.lineFor for why the position, and
+        // not the clock time, has to drive the choice.
+        alarmIndex = alarmIndexFor(context, habitId, alarmMinutes),
     )
+
+    /**
+     * Where [alarmMinutes] sits in the habit's own schedule: 0 for the first time
+     * of the day, 1 for the second, and so on.
+     *
+     * Degrades to 0 whenever anything cannot be resolved — a habit deleted since
+     * the alarm was armed, or an intent written by a build that predates
+     * multi-time alarms. That falls back to the un-rotated line rather than to no
+     * line at all, which is the safe direction: the reminder still says something
+     * warm and specific.
+     */
+    fun alarmIndexFor(context: Context, habitId: String, alarmMinutes: Int?): Int {
+        if (habitId.isBlank() || alarmMinutes == null) return 0
+        val schedule = HabitStore.find(context, habitId)?.alarmMinutes ?: return 0
+        return MotivationalMessages.alarmIndexFor(alarmMinutes, schedule)
+    }
 
     /**
      * The line to display for an alarm [intent] — the form every receiver and

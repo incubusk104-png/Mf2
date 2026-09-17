@@ -18,6 +18,7 @@ import com.rork.mindsetframestracker.billing.SubscriptionResult
 import com.rork.mindsetframestracker.billing.SubscriptionTier
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.integrations.StravaTokens
+import com.rork.mindsetframestracker.integrations.TrackerConnections
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.CloudBackupWorker
 import com.rork.mindsetframestracker.data.Dates
@@ -944,27 +945,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun runAutoSync() {
         val s = _state.value.settings
-        val habits = _state.value.habits
-        val firstFitnessHabit = habits.firstOrNull { habit ->
-            habit.iconId != null && com.rork.mindsetframestracker.integrations.PolarClient
-                .isActivitySupported(habit.iconId!!)
-        }
-        // Auto-sync Polar — only when OAuth token is present AND auto-sync enabled
-        if (isPolarConnected() && s.polarAutoSync && firstFitnessHabit != null) {
-            syncPolarToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
-        }
-        // Auto-sync Health Connect — only when permissions are verified AND auto-sync enabled
-        if (s.healthConnectConnected && s.healthConnectAutoSync && firstFitnessHabit != null) {
-            viewModelScope.launch {
-                // Re-verify permissions haven't been revoked since last session
-                if (verifyHealthConnectPermissions()) {
-                    syncHealthConnectToHabit(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "walking")
-                }
+        // EVERY trackable habit, not just the first one. This used to be
+        // `habits.firstOrNull { ... }`, so a user with Walk, Run and Gym had exactly
+        // one of them ever refreshed from their tracker — the others sat
+        // permanently empty with nothing to explain why. "Track my walking habit
+        // from Health Connect" is not satisfied by syncing whichever fitness
+        // habit happens to be first in the list.
+        val trackable = TrackerConnections.trackableHabits(_state.value.habits)
+        if (trackable.isEmpty()) return
+
+        var syncedAny = false
+        trackable.forEach { habit ->
+            val iconId = habit.iconId ?: return@forEach
+            // Polar — only with a real OAuth token AND auto-sync enabled
+            if (isPolarConnected() && s.polarAutoSync) {
+                syncPolarToHabit(habit.id, iconId)
+                syncedAny = true
+            }
+            // Health Connect — permissions re-verified inside the sync call,
+            // because they can be revoked from the Health Connect app at any time
+            if (s.healthConnectConnected && s.healthConnectAutoSync) {
+                syncHealthConnectToHabit(habit.id, iconId)
+                syncedAny = true
+            }
+            // Strava — only with a refresh token AND auto-sync enabled
+            if (!s.stravaRefreshToken.isNullOrBlank() && s.stravaAutoSync) {
+                syncStravaActivities(habit.id, iconId)
+                syncedAny = true
             }
         }
-        // Auto-sync Strava — only when OAuth refresh token is present AND auto-sync enabled
-        if (!s.stravaRefreshToken.isNullOrBlank() && s.stravaAutoSync && firstFitnessHabit != null) {
-            syncStravaActivities(firstFitnessHabit.id, firstFitnessHabit.iconId ?: "running")
+        // One summary for the whole sweep, replacing the last per-habit message.
+        // Without this the user is told "Imported 4 Strava activities." about
+        // whichever habit happened to sync last, which reads as though only that
+        // one habit was updated.
+        if (syncedAny) {
+            _stravaMessage.value =
+                "Checked ${trackable.size} activity habit(s) against your connected trackers."
         }
     }
 

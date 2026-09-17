@@ -231,6 +231,29 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      # JVM unit tests for the pure scheduling and message logic, run BEFORE the
+      # (much slower) release build so a broken rule fails in ~1 minute instead
+      # of after a full assemble. These need no signing secrets, no keystore and
+      # no Huawei config: they exercise `HabitRepeat`, `legacyAlarmTimes`,
+      # `Habit`'s serialized field names and `MotivationalMessages`, none of
+      # which touch an Android class. They were the missing P1-3 coverage — a
+      # bug in the day-of-week maths or the per-alarm message rotation is now
+      # caught here rather than on a user's phone at 07:00.
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
+
+      - name: Upload unit test reports
+        # Runs even when the tests fail, so the failure is diagnosable from the
+        # JUnit XML rather than from the console log alone.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          retention-days: 14
+
       - name: Build release APK
         env:
           # The app's signingConfig reads these three from the environment.

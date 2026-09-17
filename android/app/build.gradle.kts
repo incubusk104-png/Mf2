@@ -352,6 +352,14 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.pdfbox.android)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    // ── JVM unit tests ────────────────────────────────────────────────────────
+    // JUnit 4 is the runner AGP's built-in `testDebugUnitTest` task expects; no
+    // extra test runner dependency or `testOptions` block is needed for plain,
+    // Android-free logic tests. The pure scheduling rules under test deliberately
+    // touch no Android class, so they run on the JVM in milliseconds — which is
+    // what makes them worth having in CI on every push.
+    testImplementation(libs.junit)
 }
 
 tasks.matching {

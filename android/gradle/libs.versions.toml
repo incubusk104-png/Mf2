@@ -19,6 +19,7 @@ workManager = "2.11.2"
 pdfboxAndroid = "2.0.27.0"
 huaweiUpdate = "6.14.0.300" # Added Huawei App Update SDK version (uses appservice artifact)
 healthConnect = "1.1.0-alpha12"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -50,6 +51,7 @@ huawei-update = { group = "com.huawei.hms", name = "appservice", version.ref = "
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

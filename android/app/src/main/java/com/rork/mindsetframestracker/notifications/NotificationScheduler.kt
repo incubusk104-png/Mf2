@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.rork.mindsetframestracker.notifications.CheckInReceiver.Companion.EXTRA_REMINDER_MINUTES
-import java.util.Calendar
 import java.util.Date
 
 /**
@@ -83,7 +82,7 @@ class NotificationScheduler(private val context: Context) {
      */
     fun scheduleWeeklyRecap() {
         cancelWeeklyRecap()
-        val triggerAtMillis = nextWeeklyTriggerTime(Calendar.SUNDAY, WEEKLY_RECAP_MINUTES)
+        val triggerAtMillis = nextWeeklyTriggerTime(java.time.DayOfWeek.SUNDAY, WEEKLY_RECAP_MINUTES)
         runCatching {
             alarmManager.setWindow(
                 AlarmManager.RTC_WAKEUP,
@@ -234,33 +233,50 @@ class NotificationScheduler(private val context: Context) {
     }
 
     private fun nextTriggerTime(minutes: Int): Long {
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, minutes / 60)
-            set(Calendar.MINUTE, minutes % 60)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            // If the target time has already passed today, roll to tomorrow.
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
-        }
-        return calendar.timeInMillis
+        val clamped = minutes.coerceIn(0, 24 * 60 - 1)
+        val zone = java.time.ZoneId.systemDefault()
+        val now = java.time.LocalDateTime.now(zone)
+        val time = java.time.LocalTime.of(clamped / 60, clamped % 60)
+        var candidate = now.toLocalDate().atTime(time)
+        // Strictly ahead: a time equal to `now` to the minute is already due, and
+        // arming it would fire immediately.
+        if (!candidate.isAfter(now)) candidate = candidate.plusDays(1)
+        return candidate.atZone(zone).toInstant().toEpochMilli()
     }
 
-    /** Next occurrence of [dayOfWeek] (a [Calendar] constant) at [minutes] past midnight. */
-    private fun nextWeeklyTriggerTime(dayOfWeek: Int, minutes: Int): Long {
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_WEEK, dayOfWeek)
-            set(Calendar.HOUR_OF_DAY, minutes / 60)
-            set(Calendar.MINUTE, minutes % 60)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            // If that day/time already passed this week, roll to next week.
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.WEEK_OF_YEAR, 1)
-            }
+    /**
+     * Next occurrence of [dayOfWeek] at [minutes] past midnight — the
+     * weekly-recap equivalent of [nextTriggerTime].
+     *
+     * ## Why both of these are `java.time` and not `Calendar`
+     *
+     * The `Calendar` versions moved *the current instant* forward rather than
+     * asking for the next local wall-clock time. On an ordinary day those agree,
+     * but they diverge across a daylight-saving transition and after a timezone
+     * change: the alarm drifts by the offset delta and can land an hour early or
+     * late — or, in the spring-forward gap, at a wall-clock time that does not
+     * exist on that date. Resolving a local time through the zone is exactly what
+     * `java.time` is for: a non-existent local time is shifted forward by the gap
+     * and an ambiguous one resolves to the earlier offset, which is what the OS
+     * clock does. The app's reminders and the system's own alarms therefore agree.
+     */
+    private fun nextWeeklyTriggerTime(dayOfWeek: java.time.DayOfWeek, minutes: Int): Long {
+        val clamped = minutes.coerceIn(0, 24 * 60 - 1)
+        val zone = java.time.ZoneId.systemDefault()
+        val now = java.time.LocalDateTime.now(zone)
+        val time = java.time.LocalTime.of(clamped / 60, clamped % 60)
+        // Walk forward to the first matching day that is still ahead of `now`.
+        // A full week guarantees a hit; the loop returns as soon as it finds one.
+        for (offset in 0..7) {
+            val day = now.toLocalDate().plusDays(offset.toLong())
+            if (day.dayOfWeek != dayOfWeek) continue
+            val candidate = day.atTime(time)
+            if (!candidate.isAfter(now)) continue
+            return candidate.atZone(zone).toInstant().toEpochMilli()
         }
-        return calendar.timeInMillis
+        // Unreachable: 8 consecutive days contain two of every weekday.
+        return now.plusDays(7).toLocalDate().atTime(time)
+            .atZone(zone).toInstant().toEpochMilli()
     }
 
     private fun formatTime(minutes: Int): String {

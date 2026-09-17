@@ -324,6 +324,14 @@ object MotivationalMessages {
         dayKey: String,
         customMessage: String? = null,
         alarmMinutes: Int? = null,
+        /**
+         * This alarm's **position** in the habit's own schedule (0 for the first
+         * time of the day, 1 for the second, …).
+         *
+         * It is what guarantees a habit's alarms read as a sequence rather than a
+         * repeated nag — see the note on [lineFor].
+         */
+        alarmIndex: Int = 0,
     ): String {
         val custom = sanitize(customMessage)
         if (custom.isNotEmpty()) return custom
@@ -331,12 +339,31 @@ object MotivationalMessages {
         val lines = packFor(iconId).lines
         if (lines.isEmpty()) return GENERAL.lines.first()
 
-        // Stable per (habit, day, alarm time): a habit that rings three times a
-        // day still tells one consistent story, while its three alarms each get
-        // a different line so the day doesn't read as a single repeated nag.
-        val seed = habitId.hashCode().toLong() * 31L + dayKey.hashCode().toLong() * 17L +
-            (alarmMinutes?.toLong() ?: 0L)
-        val index = ((seed % lines.size) + lines.size) % lines.size
+        // ## Why the line is `base + alarmIndex`, and not seeded from the minutes
+        //
+        // The original seed mixed `alarmMinutes` into the hash:
+        //
+        //     seed = habitId*31 + dayKey*17 + alarmMinutes
+        //
+        // and then took it modulo the pack size. That looks like it varies per
+        // alarm, but it does not, because the packs are small (5–8 lines) and the
+        // alarm times are far apart and correlated: 07:00, 12:00 and 18:00 differ
+        // by 300 and 360 minutes, and 300 ≡ 0 (mod 5) and ≡ 0 (mod 4) while
+        // 360 ≡ 0 (mod 5) and (mod 8). So for **12 of the 13 packs** all three
+        // alarms landed on the *same* index and the user saw the identical
+        // sentence three times a day — the exact opposite of the intent.
+        //
+        // Rotating by the alarm's position instead is exact rather than
+        // probabilistic: `(base + 0..n-1) % n` enumerates distinct lines for up
+        // to `n` alarms. A habit with more alarms than its pack has lines wraps,
+        // and that is the honest limit — you cannot show more distinct lines than
+        // there are lines.
+        //
+        // `base` deliberately depends only on (habit, day), so the rotation is
+        // stable across re-reads and the whole day shifts together tomorrow.
+        val seed = habitId.hashCode().toLong() * 31L + dayKey.hashCode().toLong() * 17L
+        val base = ((seed % lines.size) + lines.size) % lines.size
+        val index = ((base + alarmIndex) % lines.size + lines.size) % lines.size
         return lines[index.toInt()]
     }
 
@@ -347,14 +374,35 @@ object MotivationalMessages {
      * id/icon form above exists for the pure-JVM callers (tests, previews) that
      * should not have to construct one.
      */
-    fun lineFor(habit: Habit, dayKey: String, alarmMinutes: Int? = null): String =
+    fun lineFor(
+        habit: Habit,
+        dayKey: String,
+        alarmMinutes: Int? = null,
+        alarmIndex: Int = 0,
+    ): String =
         lineFor(
             habitId = habit.id,
             iconId = habit.iconId,
             dayKey = dayKey,
             customMessage = habit.alarmMessage,
             alarmMinutes = alarmMinutes,
+            alarmIndex = alarmIndex,
         )
+
+    /**
+     * This alarm's position in the habit's own schedule, so the caller rendering
+     * a row per alarm time can rotate the lines the same way the notification
+     * does and the two never disagree about what a given occurrence said.
+     *
+     *   - 0 when [alarmMinutes] is null or not in the schedule (an intent from an
+     *     older build, or a time the user has since edited away);
+     *   - otherwise the index, clamped into `0..size-1`.
+     */
+    fun alarmIndexFor(alarmMinutes: Int?, schedule: List<Int>): Int {
+        if (alarmMinutes == null || schedule.isEmpty()) return 0
+        val found = schedule.indexOf(alarmMinutes)
+        return if (found < 0) 0 else found
+    }
 
     /**
      * Trims and bounds a user-supplied message, returning `""` for anything that
@@ -379,7 +427,24 @@ object MotivationalMessages {
     fun sanitize(raw: String?): String {
         if (raw.isNullOrEmpty()) return ""
         val flattened = raw
-            .filter { ch -> !ch.isISOControl() }
+            // ## Every control character becomes a space, then runs collapse
+            //
+            // One rule, deliberately. The two tempting alternatives are both
+            // worse:
+            //
+            //  - Filtering control characters **first** (what this used to do)
+            //    means a line break *joins* the words around it, so a pasted
+            //    two-line message became "Go for awalk" — a mangled word in a
+            //    notification title.
+            //  - Dropping non-whitespace controls outright fixes "Wa\0ter" but
+            //    still mangles "walk\0please".
+            //
+            // Replacing with a space can leave one cosmetic extra space in rare
+            // corrupt data, but it can never fuse two words into a non-word, and
+            // the collapse below removes the extra space anyway. That is the
+            // safer direction for text a user reads on a lock screen.
+            .map { ch -> if (ch.isISOControl()) ' ' else ch }
+            .joinToString("")
             .replace(Regex("\\s+"), " ")
             .trim()
         return flattened.take(MAX_MESSAGE_LENGTH)

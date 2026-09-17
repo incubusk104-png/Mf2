@@ -6,11 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitRepeat
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.REPEAT_DAILY
-import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import com.rork.mindsetframestracker.data.alarmMinutes
-import java.util.Calendar
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 /**
  * Schedules, cancels, and reschedules per-habit reminders through the shared
@@ -53,10 +54,17 @@ import java.util.Calendar
  * clearing the old would leave **two** live entries for the same time — the user
  * would get each reminder twice.
  *
- * Day-of-week still comes from the single `Habit.repeatDaysMask`, shared by
- * every time in the list: "this habit rings at these times on these days" is the
- * user's mental model, and a per-time mask would mean the repeat row silently
- * applied only to whichever time happened to be selected.
+ * ## Day-of-week now lives in [HabitRepeat], not here
+ *
+ * This object used to compute the next trigger itself and took a shortcut for
+ * `REPEAT_ONCE || REPEAT_DAILY` that returned "the next occurrence of this
+ * time". Because `REPEAT_ONCE` is mask **0** — the value the day chips produced
+ * when the user deselected every day — that shortcut swallowed the per-day
+ * selection entirely and turned a custom schedule into a plain daily alarm. See
+ * [HabitRepeat] for the full analysis. The scheduling maths is now in that one
+ * pure, testable place, and **no mask is special-cased here**: this object asks
+ * for the next trigger and honours the answer, including the honest `null` that
+ * means "this one-shot's time has already gone by — do not arm".
  */
 object HabitAlarmScheduler {
 
@@ -178,8 +186,20 @@ object HabitAlarmScheduler {
      * later ones a day forward and the user would silently lose their afternoon
      * and evening reminders.
      *
-     * A repeat mask of [REPEAT_ONCE] means it was a one-shot reminder — it is NOT
-     * re-armed (mirrors the system Clock's "Repeat: Once" behaviour).
+     * **A one-shot is the one case that is NOT re-armed** — but that decision
+     * comes from [HabitRepeat.isRepeating] rather than a bare `== REPEAT_ONCE`
+     * test here, so the "does this repeat?" rule has exactly one definition and
+     * the scheduler and the picker cannot drift apart. Mask 0 means "fire once,
+     * then disarm" (mirrors the system Clock's "Repeat: Once").
+     *
+     * ## Idempotent
+     *
+     * The next occurrence is armed under the **same** request code with
+     * `FLAG_UPDATE_CURRENT`, so calling this twice for the same occurrence
+     * replaces the entry instead of adding a second one. That is what makes it
+     * safe for the notifier to call this both when a ring succeeds *and* when it
+     * could not be delivered (see [HabitCheckInNotifier]) — the user can never
+     * end up with two identical alarms.
      */
     fun scheduleNext(context: Context, habitId: String, habitName: String, firedAlarmMinutes: Int) {
         val repo = MindsetRepository(context)
@@ -188,7 +208,7 @@ object HabitAlarmScheduler {
         // there is nothing to re-arm, and re-arming the *new* times is the
         // editor's job (it calls schedule()).
         if (habit.alarmMinutes.none { it == firedAlarmMinutes }) return
-        if (habit.repeatDaysMask == REPEAT_ONCE) {
+        if (!HabitRepeat.isRepeating(habit.repeatDaysMask)) {
             Log.d(TAG, "'${habit.name}' repeats Once — not re-arming")
             return
         }
@@ -202,7 +222,28 @@ object HabitAlarmScheduler {
         minutes: Int,
         repeatDaysMask: Int = REPEAT_DAILY,
     ) {
-        val triggerAtMillis = nextTriggerMillis(minutes, repeatDaysMask)
+        // The next trigger — and whether there is one at all — is
+        // [HabitRepeat]'s decision, so the day-of-week rule has a single
+        // definition. A **null** is a deliberate "do not arm": it is returned
+        // only for a one-shot whose time has already passed today, and arming it
+        // would fire it tomorrow, which is the opposite of "once". Logged rather
+        // than thrown, because it is a correct outcome of a valid schedule, not
+        // an error.
+        val triggerAtMillis = HabitRepeat.nextTriggerMillis(
+            minutesFromMidnight = minutes,
+            repeatDaysMask = repeatDaysMask,
+            now = LocalDateTime.now(),
+            zone = ZoneId.systemDefault(),
+        )
+        if (triggerAtMillis == null) {
+            Log.d(
+                TAG,
+                "Not arming '$habitName' at ${minutes / 60}:${minutes % 60} — its one-shot time " +
+                    "has already passed today",
+            )
+            return
+        }
+
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             requestCode(habitId, minutes),
@@ -221,7 +262,8 @@ object HabitAlarmScheduler {
         )
         Log.d(
             TAG,
-            "Reminder for '$habitName' at ${minutes / 60}:${minutes % 60} scheduled (exact=$canUseExact) at $triggerAtMillis",
+            "Reminder for '$habitName' at ${minutes / 60}:${minutes % 60} scheduled " +
+                "(exact=$canUseExact, repeat=${HabitRepeat.describe(repeatDaysMask)}) at $triggerAtMillis",
         )
     }
 
@@ -243,39 +285,18 @@ object HabitAlarmScheduler {
         }
 
     /**
-     * Next trigger time honouring the repeat day mask (bit 0 = Monday …
-     * bit 6 = Sunday). [REPEAT_ONCE] (mask 0) behaves like "next occurrence
-     * of this time" — today if still ahead, otherwise tomorrow — and the
-     * alarm simply isn't re-armed after it fires.
+     * When this habit will next ring, for display — or null when it will not.
+     *
+     * Exposed so the habit UI can answer "when will this remind me?" from the
+     * same maths the scheduler armed with, instead of re-deriving it and
+     * potentially disagreeing. Null means the honest case: a one-shot whose time
+     * has gone, or a habit with no alarms.
      */
-    private fun nextTriggerMillis(minutesFromMidnight: Int, repeatDaysMask: Int = REPEAT_DAILY): Long {
-        val cal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, minutesFromMidnight / 60)
-            set(Calendar.MINUTE, minutesFromMidnight % 60)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        if (cal.timeInMillis <= System.currentTimeMillis()) {
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-        }
-        if (repeatDaysMask == REPEAT_ONCE || repeatDaysMask == REPEAT_DAILY) {
-            return cal.timeInMillis
-        }
-        // Step forward (max 7 days) to the next enabled day-of-week.
-        repeat(7) {
-            // Calendar: SUNDAY=1..SATURDAY=7 → our mask bit: Monday=0..Sunday=6
-            val bit = when (cal.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 0
-                Calendar.TUESDAY -> 1
-                Calendar.WEDNESDAY -> 2
-                Calendar.THURSDAY -> 3
-                Calendar.FRIDAY -> 4
-                Calendar.SATURDAY -> 5
-                else -> 6 // SUNDAY
-            }
-            if (repeatDaysMask and (1 shl bit) != 0) return cal.timeInMillis
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-        }
-        return cal.timeInMillis // unreachable for any non-zero mask
-    }
+    fun nextTriggerFor(habit: Habit, now: LocalDateTime = LocalDateTime.now()): Long? =
+        HabitRepeat.nextOfAll(
+            times = habit.alarmMinutes,
+            repeatDaysMask = habit.repeatDaysMask,
+            now = now,
+            zone = ZoneId.systemDefault(),
+        )?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
 }
