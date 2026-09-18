@@ -158,6 +158,7 @@ import java.time.YearMonth
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import com.rork.mindsetframestracker.util.HabitShare
 
 /** Single support/contact address used in the policy, About, and store listing. */
 private const val CONTACT_EMAIL = "mindsetframes2026@gmail.com"
@@ -245,6 +246,8 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var showGrounding by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
     var showActivityReport by remember { mutableStateOf(false) }
+    var showDataExport by remember { mutableStateOf(false) }
+    var showShareHabits by remember { mutableStateOf(false) }
     var showAlarmPermissionCheck by remember { mutableStateOf(false) }
 
     // Privacy consent gate: every integration Connect shows this dialog
@@ -767,6 +770,83 @@ fun SettingsScreen(viewModel: AppViewModel) {
             }
         }
 
+        SettingsCard(title = "Data & sharing") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.CloudUpload,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                ) {
+                    Text("Export all your data", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = "Every habit, check-in, detailed log entry, alarm record, activity " +
+                            "record and reflection \u2014 with a count of each, so you can see at a " +
+                            "glance that nothing was left out.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = { showDataExport = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .defaultMinSize(minHeight = 48.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CloudUpload,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text("Export everything", modifier = Modifier.padding(start = 8.dp))
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.IosShare,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                ) {
+                    Text("Share your habits", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = "Send your habits \u2014 and as much of their history as you choose \u2014 " +
+                            "as a code or a file, or paste a code someone sent you.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = { showShareHabits = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .defaultMinSize(minHeight = 48.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.IosShare,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text("Share or import habits", modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+
         SettingsCard(title = "Appearance") {
             Text(
                 text = "Theme",
@@ -1213,6 +1293,37 @@ fun SettingsScreen(viewModel: AppViewModel) {
         com.rork.mindsetframestracker.ui.components.ActivityReportSheet(
             records = data.activityRecords,
             onDismiss = { showActivityReport = false },
+        )
+    }
+
+    if (showDataExport) {
+        com.rork.mindsetframestracker.ui.components.DataExportSheet(
+            data = data,
+            appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            onExport = { format ->
+                activity?.let { act ->
+                    HabitShare.shareExport(
+                        context = act,
+                        data = data,
+                        format = format,
+                        appVersionName = BuildConfig.VERSION_NAME,
+                        appVersionCode = BuildConfig.VERSION_CODE,
+                    )
+                }
+                showDataExport = false
+            },
+            onDismiss = { showDataExport = false },
+        )
+    }
+
+    if (showShareHabits) {
+        com.rork.mindsetframestracker.ui.components.ShareHabitsSheet(
+            data = data,
+            appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            onImport = { merged -> viewModel.importSharedData(merged) },
+            onDismiss = { showShareHabits = false },
         )
     }
 

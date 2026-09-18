@@ -1956,6 +1956,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    /**
+     * Replaces the local data with [merged] after an import of shared habits.
+     *
+     * Takes the already-merged [AppData] rather than the incoming payload,
+     * because the merge itself (id collision resolution, dedupe) lives in
+     * [com.rork.mindsetframestracker.data.HabitShareCodec], which is pure and
+     * unit-tested. This function's whole job is to persist the result and push
+     * it to the cloud - nothing here decides what the merge should contain.
+     *
+     * Deliberately does **not** go through [canAddHabit]: importing habits the
+     * user was sent is not the same act as authoring new ones, and silently
+     * refusing an import because the free-tier cap was hit would look like a
+     * broken code rather than a paywall.
+     */
+    fun importSharedData(merged: AppData) {
+        update { merged }
+        queueSync()
+    }
+
     data class BulkAddResult(
         val added: List<String>,
         /** Names that couldn't be added because the free-tier cap was hit. */
