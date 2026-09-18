@@ -65,6 +65,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.data.Dates
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
+import com.rork.mindsetframestracker.data.HabitAlarmSetup
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.habitLogsFor
 import com.rork.mindsetframestracker.data.trackingModeOrDefault
@@ -293,6 +295,13 @@ private fun HabitTimerOptionsHost(
         targetCount = habit?.trackingTargetCount ?: 0,
         unit = habit?.trackingUnit.orEmpty(),
         recentLogs = appData.habitLogsFor(pending.habitId).take(3),
+        // The ring path's view of the same day. Resolved from `appData` — the
+        // already-loaded in-memory state — rather than from the repository, so
+        // this adds no I/O to the ring path. Null setup when the habit could not
+        // be resolved, which leaves the timeline alone rather than inventing a
+        // configuration to describe.
+        alarmSlots = HabitAlarmHistory.daySlots(appData, pending.habitId),
+        alarmSetup = habit?.let { HabitAlarmSetup.of(it) },
         onRecord = { title, note, durationSeconds, count ->
             // Recorded through the single tracking entry point, so the ring
             // writes the same payload (and the same [HabitLogEntry]) the

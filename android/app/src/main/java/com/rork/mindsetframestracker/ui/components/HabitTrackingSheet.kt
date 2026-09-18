@@ -49,12 +49,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.rork.mindsetframestracker.data.AlarmDaySlot
+import com.rork.mindsetframestracker.data.HabitAlarmSetup
 import com.rork.mindsetframestracker.data.HabitIconCatalog
 import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.TIMER_PRESET_MINUTES
 import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.data.formatTimerDuration
+import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.ui.appStrings
 
 /**
  * The activity-completion dialog, **driven by the habit's own tracking mode**.
@@ -129,8 +133,31 @@ fun HabitTrackingSheet(
      * arrive while the user is mid-something-else.
      */
     onMinimize: (() -> Unit)? = null,
+    /**
+     * Every one of this habit's alarms for today, one entry per scheduled time.
+     *
+     * Supplied by the caller (which holds the loaded
+     * [com.rork.mindsetframestracker.data.AppData]) rather than read here, so
+     * this sheet stays a pure function of its inputs and — more importantly —
+     * so the habit-today view and the alarm picker render the *same* list from
+     * the *same* source. A second read site is how the two surfaces would come
+     * to disagree about whether the 12:00 alarm was answered.
+     */
+    alarmSlots: List<AlarmDaySlot> = emptyList(),
+    /**
+     * What is set up inside the habit: schedule, repeat rule, and the line its
+     * alarm will deliver.
+     *
+     * Null when the caller cannot resolve the habit (e.g. the habit was deleted
+     * out from under an open sheet), in which case only the timeline is shown —
+     * there is no setup left to describe.
+     */
+    alarmSetup: HabitAlarmSetup? = null,
 ) {
+    val s = appStrings()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    /** Which occurrence's detail dialog is open, if any. */
+    var detailSlot by remember { mutableStateOf<AlarmDaySlot?>(null) }
     val iconRes = remember(habitIconId) {
         habitIconId?.let { HabitIconCatalog.byId(it)?.drawableRes }
     }
@@ -216,6 +243,35 @@ fun HabitTrackingSheet(
                     unit = unit,
                     onSave = { amount -> onRecord(null, null, null, amount) },
                 )
+            }
+
+            // ── What this habit's alarms are doing today ────────────────
+            // The same section the alarm picker renders (see
+            // [HabitAlarmOverviewSection]), so a habit cannot be described one
+            // way here and another way in the schedule editor. It answers the
+            // question the ring interrupted: which of today's alarms fired,
+            // which did I answer, which slipped past — and what is set up
+            // inside this habit. Rendered even with no alarms configured, when
+            // [alarmSetup] is non-null, because "this habit has no alarm" is
+            // something the user should be able to see plainly.
+            if (alarmSlots.isNotEmpty() || alarmSetup != null) {
+                Spacer(Modifier.height(18.dp))
+                HabitAlarmOverviewSection(
+                    title = s.habitSetupTitle,
+                    slots = alarmSlots,
+                    plan = alarmSetup,
+                    // The providers that can actually supply this habit's icon,
+                    // so the sheet never advertises an integration that cannot
+                    // apply to what is on screen.
+                    trackerProviders = TrackerConnections.sourcesFor(habitIconId),
+                    onSelect = { detailSlot = it },
+                )
+                // Layered over the sheet rather than replacing it: the user is
+                // mid-way through completing the habit, and closing their form to
+                // show a read-only detail would discard what they had typed.
+                detailSlot?.let { slot ->
+                    AlarmOccurrenceDetailDialog(slot = slot, onDismiss = { detailSlot = null })
+                }
             }
 
             if (recentLogs.isNotEmpty()) {

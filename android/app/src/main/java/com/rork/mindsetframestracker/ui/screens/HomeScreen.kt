@@ -113,6 +113,8 @@ import kotlinx.coroutines.launch
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.ContentPack
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
+import com.rork.mindsetframestracker.data.HabitAlarmSetup
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.data.habitLogsFor
@@ -226,6 +228,12 @@ fun HomeScreen(
             targetCount = trackingHabit.trackingTargetCountOrDefault,
             unit = trackingHabit.trackingUnitOrDefault,
             recentLogs = data.habitLogsFor(trackingHabit.id).take(3),
+            // The habit's own day, resolved from the SAME AppData the rest of the
+            // sheet reads: one row per scheduled time, so a habit ringing at
+            // 07:00/12:00/18:00 shows all three rather than a single collapsed
+            // entry. `of` returns null only if the habit vanished mid-frame.
+            alarmSlots = HabitAlarmHistory.daySlots(data, trackingHabit.id),
+            alarmSetup = HabitAlarmSetup.of(trackingHabit),
             onRecord = { title, note, durationSeconds, count ->
                 // One write path for every mode: the record's shape is decided
                 // by the habit's mode inside the ViewModel, and the check-in is

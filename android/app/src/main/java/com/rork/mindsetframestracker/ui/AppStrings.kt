@@ -679,6 +679,22 @@ class AppStrings(private val table: Map<String, String>) {
     /// Formatted as (position, total), e.g. "2 of 3 today" — the page total on
     /// the right of the history header.
     val habitsAlarmOccurrenceOf: String get() = s("habitsAlarmOccurrenceOf")
+
+    // ── Habit-today overview: what is set up inside the habit ─────────────
+    /// Header of the setup block in the habit-today / picker overview.
+    val habitSetupTitle: String get() = s("habitSetupTitle")
+    /// Label for the habit's alarm times.
+    val habitSetupSchedule: String get() = s("habitSetupSchedule")
+    /// Value shown when the habit has no alarm at all.
+    val habitSetupNoAlarm: String get() = s("habitSetupNoAlarm")
+    /// Label for the repeat rule.
+    val habitSetupRepeat: String get() = s("habitSetupRepeat")
+    /// Label for the line the alarm will deliver.
+    val habitSetupMessage: String get() = s("habitSetupMessage")
+    /// Note under the message when the user wrote their own line.
+    val habitSetupMessageCustom: String get() = s("habitSetupMessageCustom")
+    /// Label for the tracker sources able to supply this habit.
+    val habitSetupTracker: String get() = s("habitSetupTracker")
 }
 
 // ── JSON-based loading ──────────────────────────────────────

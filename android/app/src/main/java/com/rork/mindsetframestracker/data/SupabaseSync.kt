@@ -1281,7 +1281,7 @@ class SupabaseSync(context: Context) {
                         // the push path serialises with, so the round trip is
                         // symmetric and neither direction can reinterpret the
                         // other's rows.
-                        alarmTimes = legacyAlarmTimes(it.alarm_times, it.reminder_minutes),
+                        alarmTimes = restoredAlarmTimes(it.alarm_times, it.reminder_minutes),
                         isPinned = it.is_pinned,
                         durationSeconds = it.duration_seconds,
                         repeatDaysMask = it.repeat_days_mask,

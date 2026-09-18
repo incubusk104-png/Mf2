@@ -582,5 +582,12 @@
   "habitsAlarmDetailNoMessage": "No message was recorded for this alarm.",
   "habitsAlarmDetailNotRecorded": "Not recorded",
   "habitsAlarmDetailHint": "Tap an alarm to see what it said and when you answered it.",
-  "habitsAlarmOccurrenceOf": "%1$d of %2$d today"
+  "habitsAlarmOccurrenceOf": "%1$d of %2$d today",
+  "habitSetupTitle": "What's set up inside this habit",
+  "habitSetupSchedule": "Alarm times",
+  "habitSetupNoAlarm": "No alarm set for this habit",
+  "habitSetupRepeat": "Repeats",
+  "habitSetupMessage": "Your alarm will say",
+  "habitSetupMessageCustom": "Your own words — not the app's default.",
+  "habitSetupTracker": "Can be tracked by"
 }

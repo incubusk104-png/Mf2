@@ -64,7 +64,9 @@ import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.data.AlarmDaySlot
 import com.rork.mindsetframestracker.data.AlarmSlotState
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitAlarmDraft
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
+import com.rork.mindsetframestracker.data.HabitAlarmSetup
 import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.data.alarmTimeOfDayLabel
 import com.rork.mindsetframestracker.data.formatAlarmTimes
@@ -95,6 +97,8 @@ import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
 import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
 import com.rork.mindsetframestracker.ui.components.TrackerConnectSheet
+import com.rork.mindsetframestracker.ui.components.AlarmOccurrenceDetailDialog
+import com.rork.mindsetframestracker.ui.components.HabitAlarmOverviewSection
 import com.rork.mindsetframestracker.ui.components.HabitPickerGrid
 import com.rork.mindsetframestracker.ui.components.IntegrationConsent
 import com.rork.mindsetframestracker.ui.components.IntegrationConsentDialog
@@ -368,14 +372,12 @@ fun HabitsScreen(
             habitName = icon.label,
             habitIconId = icon.id,
             defaultMinutes = icon.defaultReminderMinutes,
-            // Every time already configured, so re-editing shows the whole
-            // schedule rather than silently replacing it with the first time.
-            initialTimes = existingForIcon?.alarmMinutes ?: emptyList(),
-            initialRepeatMask = existingForIcon?.repeatDaysMask ?: REPEAT_DAILY,
-            // The line this habit currently carries, so re-editing shows what its
-            // reminders actually say instead of an empty field the user would
-            // read as "no message set".
-            initialMessage = existingForIcon?.alarmMessage.orEmpty(),
+            // The habit being re-edited, or null for a first tap on a fresh
+            // icon. Passed whole rather than pre-split into times/mask/message
+            // because the seed rule turns on the distinction between "no habit
+            // yet" and "a habit that currently has no alarm" — states those
+            // three split values collapse into the same defaults.
+            existingHabit = existingForIcon,
             // ── Today's alarm history ────────────────────────────────────
             // Derived from the persisted events, one slot per scheduled time, so
             // a habit ringing at 07:00, 12:00 and 18:00 shows all three rather
@@ -842,11 +844,16 @@ private fun AlarmPickerDialog(
     defaultMinutes: Int,
     /** The habit's catalog icon id, which selects its curated message pack. */
     habitIconId: String? = null,
-    /** Times already set, so re-editing starts from the real schedule. */
-    initialTimes: List<Int> = emptyList(),
-    initialRepeatMask: Int = REPEAT_DAILY,
-    /** The motivational line already saved for this habit, if any. */
-    initialMessage: String = "",
+    /**
+     * The habit being re-edited, or null when this is a first tap on a fresh
+     * icon.
+     *
+     * Passed as the whole habit rather than as pre-split `initialTimes` /
+     * `initialRepeatMask` / `initialMessage` values because the seed rule turns
+     * on the *distinction* between "no habit yet" and "a habit that currently
+     * has no alarm" — two states those three defaults collapse into one value.
+     */
+    existingHabit: Habit? = null,
     /**
      * Every one of this habit's alarms for today, in chronological order — one
      * entry per scheduled time, from [HabitAlarmHistory.daySlots].
@@ -860,17 +867,68 @@ private fun AlarmPickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (times: List<Int>, repeatMask: Int, alarmMessage: String) -> Unit,
 ) {
+    val s = appStrings()
     val timeState = rememberTimePickerState(
         initialHour = defaultMinutes / 60,
         initialMinute = defaultMinutes % 60,
         is24Hour = false,
     )
-    var repeatMask by remember { mutableStateOf(initialRepeatMask) }
+    /**
+     * The whole editable state — schedule, repeat mask and message — as ONE
+     * value, seeded exactly once from [existingHabit] and never re-seeded.
+     *
+     * ## The bug this replaces
+     *
+     * This used to be three separate `remember` slots, with the schedule seeded
+     * as `initialTimes.ifEmpty { listOf(defaultMinutes) }`. Because
+     * `initialTimes` came from the habit's *saved* list, that `ifEmpty` could not
+     * tell two different situations apart:
+     *
+     *  * a habit with no alarm yet, where the icon's default time is a helpful
+     *    starting point; and
+     *  * a habit whose alarm the user just removed — whose saved list is *also*
+     *    empty, so the default went straight back in.
+     *
+     * And `remember` was keyed on nothing, inside a dialog constructed by an `if`
+     * in a screen that recomposes on every tick of the app's data (`data.habits`
+     * is read above for the picker's own pre-fill), so any recomposition that
+     * discarded and recreated the slot re-ran the seed. That is exactly the
+     * reported "every time I remove it, the actual time defaults back in there".
+     *
+     * [HabitAlarmDraft] makes that distinction explicit and keeps it: an existing
+     * habit's draft is `decided`, so no default can ever be injected into a
+     * schedule the user has emptied, however many times this recomposes.
+     */
+    var draft by remember {
+        mutableStateOf(
+            existingHabit
+                ?.let { habit ->
+                    HabitAlarmDraft.forExistingHabit(
+                        savedTimes = habit.alarmMinutes,
+                        repeatDaysMask = habit.repeatDaysMask,
+                        message = habit.alarmMessage.orEmpty(),
+                    )
+                }
+                ?: HabitAlarmDraft.forNewHabit(),
+        )
+    }
+    /**
+     * The draft with the icon's default applied if — and only if — the user has
+     * not decided the schedule yet.
+     *
+     * Every view below reads from this rather than from [draft] directly, so the
+     * default is applied in exactly one place and the confirm button can never
+     * disagree with the schedule the user is looking at. Idempotent by design
+     * (applying it does not mark the draft decided), which is what makes it safe
+     * to call on every frame.
+     */
+    val effectiveDraft = draft.withDefaultIfUntouched(defaultMinutes)
+    val times = effectiveDraft.times
+    val repeatMask = effectiveDraft.repeatDaysMask
+    val alarmMessage = effectiveDraft.message
     // ── The habit's motivational reminder line ──────────────────────────────
-    // Seeded from what the habit already has. Blank is a valid, meaningful
-    // value here ("use the app's own encouraging line for this habit"), so an
-    // empty initial string is not a missing value to be filled in.
-    var alarmMessage by remember { mutableStateOf(initialMessage) }
+    // The habit's motivational reminder line lives on `draft` above, so that a
+    // message edit and a schedule edit cannot be saved from different states.
     /**
      * Which occurrence's detail sheet is open, if any.
      *
@@ -889,12 +947,9 @@ private fun AlarmPickerDialog(
         customMessage = alarmMessage,
     )
     val messageSuggestions = remember(habitIconId) { MotivationalMessages.itemsFor(habitIconId) }
-    // Seeded from the habit's real schedule. A brand-new habit arrives with the
-    // icon's default time already in the list, so "add with alarm" keeps working
-    // exactly as before for the common one-alarm case.
-    var times by remember {
-        mutableStateOf(initialTimes.ifEmpty { listOf(defaultMinutes) }.distinct().sorted())
-    }
+    // The schedule comes from `draft` above — deliberately NOT seeded here. See
+    // the note on the draft declaration for why an `ifEmpty { default }` at this
+    // spot is what made a removed time come back.
     val pendingMinutes = timeState.hour * 60 + timeState.minute
     val alreadyAdded = pendingMinutes in times
 
@@ -935,7 +990,10 @@ private fun AlarmPickerDialog(
                         times.forEach { minutes ->
                             InputChip(
                                 selected = false,
-                                onClick = { times = times - minutes },
+                                // Removal edits the DRAFT, which marks it decided —
+                                // so this removal cannot be undone by the default
+                                // re-seeding itself on the next recomposition.
+                                onClick = { draft = draft.removeTime(minutes) },
                                 label = { Text(formatAlarmTime(minutes)) },
                                 trailingIcon = {
                                     Icon(
@@ -946,10 +1004,21 @@ private fun AlarmPickerDialog(
                                 },
                             )
                         }
+                        // Clearing the whole schedule in one tap, which is what "I
+                        // don't want an alarm on this habit any more" usually
+                        // means. Only shown for two or more times: with one time
+                        // the chip's own ✕ already is this action, and two
+                        // controls doing the same thing is how a user clears the
+                        // list and then wonders which one they pressed.
+                        if (times.size > 1) {
+                            TextButton(onClick = { draft = draft.clearTimes() }) {
+                                Text("Remove all alarm times")
+                            }
+                        }
                     }
                 } else {
                     Text(
-                        text = "No alarms set yet.",
+                        text = "No alarms set for this habit.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -965,7 +1034,7 @@ private fun AlarmPickerDialog(
                 // the same reminder twice.
                 TextButton(
                     enabled = !alreadyAdded,
-                    onClick = { times = (times + pendingMinutes).distinct().sorted() },
+                    onClick = { draft = draft.addTime(pendingMinutes) },
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Add,
@@ -983,12 +1052,12 @@ private fun AlarmPickerDialog(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                RepeatSelector(mask = repeatMask, onMaskChange = { repeatMask = it })
+                RepeatSelector(mask = repeatMask, onMaskChange = { draft = draft.withRepeatMask(it) })
                 Spacer(Modifier.height(12.dp))
                 MotivationalMessageEditor(
                     habitLabel = habitName,
                     value = alarmMessage,
-                    onValueChange = { alarmMessage = it },
+                    onValueChange = { draft = draft.withMessage(it) },
                     previewLine = previewLine,
                     suggestions = messageSuggestions,
                 )
@@ -997,8 +1066,15 @@ private fun AlarmPickerDialog(
                 // Rendered for the habit's own schedule, so every time it has
                 // ever been set to is represented — the fired ones, the answered
                 // ones, and the ones still to come.
-                AlarmHistorySection(
+                HabitAlarmOverviewSection(
+                    title = s.habitsAlarmHistoryTitle,
                     slots = todayAlarmSlots,
+                    // The habit's current setup, described from the SAVED habit so
+                    // the block is a stable reference while the user edits the
+                    // schedule above it. Null on a first tap, where there is no
+                    // setup to describe yet.
+                    plan = existingHabit?.let { HabitAlarmSetup.of(it) },
+                    trackerProviders = TrackerConnections.sourcesFor(habitIconId),
                     onSelect = { detailSlot = it },
                 )
                 Spacer(Modifier.height(8.dp))
@@ -1034,11 +1110,20 @@ private fun AlarmPickerDialog(
         },
         confirmButton = {
             Button(
-                enabled = times.isNotEmpty(),
+                // Deliberately NOT gated on `times.isNotEmpty()`. Saving an EMPTY
+                // schedule is a real, supported outcome — it is how the user
+                // removes a habit's alarm — and the old `enabled = times.isNotEmpty()`
+                // made that unsavable, which is half of why removals never stuck.
                 onClick = { onConfirm(times, repeatMask, alarmMessage) },
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) {
-                Text(if (times.size > 1) "Save ${times.size} alarms" else "Save alarm")
+                Text(
+                    when {
+                        times.size > 1 -> "Save ${times.size} alarms"
+                        times.size == 1 -> "Save alarm"
+                        else -> "Save — no alarm"
+                    },
+                )
             }
         },
         dismissButton = {
@@ -1052,235 +1137,8 @@ private fun AlarmPickerDialog(
     // message included), which is what "tapping an entry shows the alarm detail"
     // should feel like. Dismissing returns them to the editor they came from.
     detailSlot?.let { slot ->
-        AlarmDetailDialog(slot = slot, onDismiss = { detailSlot = null })
+        AlarmOccurrenceDetailDialog(slot = slot, onDismiss = { detailSlot = null })
     }
-}
-
-/**
- * The day's alarms for this habit, as a chronological timeline.
- *
- * ## What it shows, and why every time appears
- *
- * One row per **scheduled time** — not one per habit, and not only the alarms
- * that left a trace. A habit set for 07:00/12:00/18:00 always renders three rows,
- * so the dialog answers the question the feature exists for: *which* of today's
- * alarms went off, which were answered, and which never happened. Deriving the
- * rows from the schedule (rather than from the recorded events) is what makes a
- * silent 12:00 visible as [AlarmSlotState.MISSED] instead of simply absent.
- *
- * [HabitAlarmHistory.daySlots] also includes any time that fired but is no longer
- * in the schedule, so re-editing a habit does not erase an alarm that really rang
- * this morning.
- *
- * ## Dumb by design
- *
- * All ordering and state derivation happens in [HabitAlarmHistory.daySlots]; this
- * only labels what it is given. That keeps the "07:00 done, 12:00 missed" logic
- * testable without Compose, and means the timeline cannot disagree with the
- * notification subtitle about what an occurrence was.
- */
-@Composable
-private fun AlarmHistorySection(
-    slots: List<AlarmDaySlot>,
-    onSelect: (AlarmDaySlot) -> Unit,
-) {
-    val s = appStrings()
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = s.habitsAlarmHistoryTitle,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        val answered = slots.count { it.isAnswered }
-        if (slots.isNotEmpty()) {
-            Text(
-                text = s.habitsAlarmHistorySummary.format(answered, slots.size),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        when {
-            // Nothing configured at all — distinct from "configured but silent",
-            // which is the informative case below.
-            slots.isEmpty() -> Text(
-                text = s.habitsAlarmHistoryEmpty,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            // Configured, but not one of them has rung yet today (every time is
-            // still ahead of the clock). Saying "nothing yet" is more useful than
-            // a list of identical "Later today" rows.
-            slots.none { it.state != AlarmSlotState.PENDING } -> Text(
-                text = s.habitsAlarmHistoryNoneYet,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            else -> Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                slots.forEach { slot ->
-                    AlarmHistoryRow(slot = slot, onClick = { onSelect(slot) })
-                }
-            }
-        }
-        if (slots.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = s.habitsAlarmDetailHint,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/**
- * One time in the timeline: the clock, its state, and the line it delivered.
- *
- * `clickable` carries a `contentDescription`-equivalent for screen readers via the
- * state label, because a row whose only text is "07:00" tells a TalkBack user
- * nothing about whether that alarm was answered.
- */
-@Composable
-private fun AlarmHistoryRow(
-    slot: AlarmDaySlot,
-    onClick: () -> Unit,
-) {
-    val s = appStrings()
-    val stateLabel = alarmStateLabel(s, slot.state)
-    // Answered occurrences get the muted treatment; an outstanding or missed one
-    // keeps the accent so it is what the eye lands on in the list.
-    val stateColor = when (slot.state) {
-        AlarmSlotState.ACKNOWLEDGED -> MaterialTheme.colorScheme.primary
-        AlarmSlotState.MISSED -> MaterialTheme.colorScheme.error
-        AlarmSlotState.FIRED, AlarmSlotState.PENDING -> MaterialTheme.colorScheme.onSurfaceVariant
-        AlarmSlotState.DISMISSED, AlarmSlotState.SNOOZED -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 4.dp),
-    ) {
-        Text(
-            text = slot.clockLabel,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stateLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = stateColor,
-            )
-            // The line the alarm actually said. Omitted entirely when none was
-            // recorded rather than showing a placeholder, so the row stays one
-            // line for a missed alarm that never delivered anything.
-            slot.message?.takeIf { it.isNotBlank() }?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        // A snooze is worth flagging inline: it reads as "not dealt with yet",
-        // which the plain state column alone would understate.
-        if (slot.state == AlarmSlotState.SNOOZED) {
-            Text(
-                text = s.habitsAlarmStateSnoozed,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/**
- * The detail of one occurrence: what it was scheduled for, what it actually did,
- * what it said, and when the user answered it.
- *
- * A read-only view of what was recorded — the alarm cannot be re-armed from here,
- * because the schedule row above is the one place that owns alarm times and a
- * second editing surface would be a second source of truth for them.
- */
-@Composable
-private fun AlarmDetailDialog(
-    slot: AlarmDaySlot,
-    onDismiss: () -> Unit,
-) {
-    val s = appStrings()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("${s.habitsAlarmDetailTitle} · ${slot.clockLabel}")
-        },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                DetailRow(label = s.habitsAlarmDetailTime, value = slot.clockLabel)
-                DetailRow(label = s.habitsAlarmDetailState, value = alarmStateLabel(s, slot.state))
-                DetailRow(
-                    label = s.habitsAlarmDetailMessage,
-                    value = slot.message?.takeIf { it.isNotBlank() }
-                        ?: s.habitsAlarmDetailNoMessage,
-                )
-                // Ring and answer times are separate rows because they answer
-                // different questions, and an alarm that was never answered has no
-                // answer time at all — which is exactly what "Not recorded" says.
-                val firedAt = slot.events.mapNotNull { it.firedAtEpochMs.takeIf { ms -> ms > 0L } }
-                    .minOrNull()
-                val answeredAt = slot.latest?.respondedAtEpochMs
-                DetailRow(
-                    label = s.habitsAlarmDetailFiredAt,
-                    value = alarmTimeOfDayLabel(firedAt ?: 0L)
-                        .ifBlank { s.habitsAlarmDetailNotRecorded },
-                )
-                if (slot.isAnswered) {
-                    DetailRow(
-                        label = s.habitsAlarmDetailAnsweredAt,
-                        value = alarmTimeOfDayLabel(answeredAt ?: 0L)
-                            .ifBlank { s.habitsAlarmDetailNotRecorded },
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(s.habitsDone) }
-        },
-    )
-}
-
-/** A label/value pair in the detail dialog. */
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Column(modifier = Modifier.padding(bottom = 10.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(text = value, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-/**
- * The display label for an occurrence's state.
- *
- * One mapping for the whole file, so the timeline row and the detail dialog can
- * never describe the same state with two different words — and so a new state
- * added to the data layer fails to compile here rather than rendering blank.
- */
-private fun alarmStateLabel(s: AppStrings, state: AlarmSlotState): String = when (state) {
-    AlarmSlotState.PENDING -> s.habitsAlarmStatePending
-    AlarmSlotState.FIRED -> s.habitsAlarmStateFired
-    AlarmSlotState.ACKNOWLEDGED -> s.habitsAlarmStateDone
-    AlarmSlotState.DISMISSED -> s.habitsAlarmStateDismissed
-    AlarmSlotState.SNOOZED -> s.habitsAlarmStateSnoozed
-    AlarmSlotState.MISSED -> s.habitsAlarmStateMissed
 }
 
 /**
