@@ -2,12 +2,21 @@
 #
 # Land "export every record + share habits" onto main.
 #
-# Fetched and executed by .github/workflows/land-reporting.yml, which is a thin
-# wrapper around this file. The logic lives here rather than inline in the
-# workflow so the workflow stays ~25 lines.
+# Fetched and executed by .github/workflows/land-reporting.yml. The logic lives
+# here rather than inline in the workflow so the workflow stays short.
 #
 # Sequence: guard -> fetch -> verify sha256 -> apply -> assert -> test -> land.
 # `:app:testDebugUnitTest` strictly precedes the push, so a red tree cannot land.
+#
+# Why a runner and not the dev sandbox: the sandbox has a hard 2 GiB cgroup
+# memory limit while gradle.properties requests -Xmx3g for Gradle PLUS -Xmx2g for
+# the Kotlin daemon, so the daemon is OOM-killed during compilation. Measured,
+# not assumed.
+#
+# ## Required environment (provided by Actions)
+#   GITHUB_TOKEN       - commit status + push (contents: write, statuses: write)
+#   GITHUB_REPOSITORY  - "owner/repo"
+#   GITHUB_SHA         - the commit the status is attached to
 
 set -uo pipefail
 
@@ -21,19 +30,31 @@ SELF_SCRIPT="land-reporting.sh"
 fail() { echo "::error::$*"; exit 1; }
 note() { echo "--- $*"; }
 
+post_status() {
+  curl -sS -X POST -H "Authorization: token ${GITHUB_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+    -d "{\"state\":\"$1\",\"context\":\"land-reporting\",\"description\":\"$2\"}" >/dev/null 2>&1 || true
+}
+
+# -- 0. Guard: already landed? -----------------------------------------------
 if [ -f "$FEATURE" ]; then
   echo "::notice::the export/share feature is already here - nothing to do"
   exit 0
 fi
+echo "PWD=$(pwd)"
+echo "root listing:"; ls -1 | head -20
 
+# -- 1. Fetch the patch, and prove it is the intended bytes ------------------
 note "fetch patch"
 curl -sS --fail --location -o /tmp/feature.patch "$PATCH_URL" || fail "could not download the patch"
 actual=$(sha256sum /tmp/feature.patch | cut -d' ' -f1)
 echo "bytes=$(wc -c < /tmp/feature.patch)"
 echo "sha256=$actual"
-[ "$actual" = "$PATCH_SHA256" ] || fail "patch sha256 mismatch - refusing to apply"
+[ "$actual" = "$PATCH_SHA256" ] || fail "patch sha256 mismatch - refusing to apply (expected $PATCH_SHA256)"
 echo "sha256 matches the published value"
 
+# -- 2. Apply ----------------------------------------------------------------
 note "apply"
 if git apply /tmp/feature.patch; then
   echo "applied cleanly"
@@ -45,6 +66,7 @@ fi
 git add -A
 echo "changed/added entries: $(git status --porcelain | wc -l)"
 
+# -- 3. The change is really there -------------------------------------------
 note "assert presence"
 for f in \
   android/app/src/main/java/com/rork/mindsetframestracker/data/HabitExportModels.kt \
@@ -61,23 +83,33 @@ do
 done
 echo "all 9 new files present"
 
-grep -q "DataExportSheet" android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt || fail "DataExportSheet not wired into SettingsScreen"
-grep -q "ShareHabitsSheet" android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt || fail "ShareHabitsSheet not wired into SettingsScreen"
-grep -q "importSharedData" android/app/src/main/java/com/rork/mindsetframestracker/ui/AppViewModel.kt || fail "importSharedData missing from AppViewModel"
+SETTINGS=android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt
+grep -q "DataExportSheet" "$SETTINGS" || fail "DataExportSheet is not wired into SettingsScreen"
+grep -q "ShareHabitsSheet" "$SETTINGS" || fail "ShareHabitsSheet is not wired into SettingsScreen"
+grep -q "importSharedData" android/app/src/main/java/com/rork/mindsetframestracker/ui/AppViewModel.kt \
+  || fail "importSharedData missing from AppViewModel"
 echo "both sheets are wired in"
 
-if grep -rnE "distinctBy *\{ *it\.habitId *\}" android/app/src/main/java/com/rork/mindsetframestracker/data/ ; then
-  fail "a habit-id-only dedup found - alarm events would collapse"
+if grep -rnE "distinctBy *\{ *it\.habitId *\}|groupBy *\{ *it\.habitId *\}" \
+     android/app/src/main/java/com/rork/mindsetframestracker/data/ ; then
+  fail "a habit-id-only dedup/grouping found - alarm events would collapse"
 fi
 echo "no habit-id-only dedup present"
 
-if grep -nE "stravaAccessToken|stravaRefreshToken|polarAccessToken" \
-     android/app/src/main/java/com/rork/mindsetframestracker/data/HabitDataExport.kt \
-     android/app/src/main/java/com/rork/mindsetframestracker/data/HabitExportWriters.kt ; then
-  fail "an OAuth token is referenced in the export writers"
+# Published data must never carry an OAuth token VALUE.
+#  - HabitExportWriters.kt PRODUCES the output, so it must never mention a token.
+#  - HabitDataExport.kt legitimately READS the token fields to decide whether
+#    Strava/Polar are connected; only the token NAME may appear there.
+if grep -n "Token" android/app/src/main/java/com/rork/mindsetframestracker/data/HabitExportWriters.kt ; then
+  fail "the export OUTPUT mentions a token - it must never reference one"
+fi
+if grep -nE "\.(stravaAccessToken|stravaRefreshToken|polarAccessToken)\b" \
+     android/app/src/main/java/com/rork/mindsetframestracker/data/HabitDataExport.kt ; then
+  fail "a token field is dereferenced in the export builder"
 fi
 echo "no token reaches the export"
 
+# -- 4. Package names must match directories ---------------------------------
 note "assert test package layout"
 bad=0
 for f in $(find android/app/src/test -name '*.kt'); do
@@ -88,6 +120,7 @@ done
 [ "$bad" -eq 0 ] || fail "test package/dir mismatch"
 echo "test packages match their directories"
 
+# -- 5. Compile + run the unit tests -----------------------------------------
 note "gradle :app:testDebugUnitTest"
 cd android
 chmod +x ./gradlew
@@ -118,15 +151,14 @@ echo "$totals"
 if [ "$gradle_rc" -ne 0 ]; then
   echo "--- first compile/test errors ---"
   grep -nE "^e: |error:|FAILED|expected:|AssertionError|Execution failed" /tmp/test.log | head -40
-  first=$(grep -m1 -E "^e: " /tmp/test.log | cut -c1-100)
-  curl -sS -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-    -d "{\"state\":\"failure\",\"context\":\"land-reporting\",\"description\":\"gradle failed: ${first}\"}" >/dev/null || true
+  first=$(grep -m1 -E "^e: |^FAILED" /tmp/test.log | cut -c1-100)
+  post_status failure "gradle failed: ${first}"
   fail "unit tests / compile failed"
 fi
 
 echo "::notice::$totals"
 
+# -- 6. Land ----------------------------------------------------------------
 note "land"
 git rm -q "$SELF" "$SELF_SCRIPT" 2>/dev/null || true
 git add -A
@@ -156,8 +188,5 @@ push_rc=$?
 echo "PUSH_RC=$push_rc"
 [ "$push_rc" -eq 0 ] || fail "could not push the verified branch"
 
-curl -sS -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/$(git rev-parse HEAD)" \
-  -d "{\"state\":\"success\",\"context\":\"land-reporting\",\"description\":\"$totals\"}" >/dev/null || true
-
+post_status success "$totals"
 echo "::notice::landed - verified tree $(git rev-parse HEAD)"
