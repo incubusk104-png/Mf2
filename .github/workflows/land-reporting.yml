@@ -1,17 +1,5 @@
 name: Land the export + habit-sharing feature
 
-# One-shot landing workflow. Thin wrapper: it fetches land-reporting.sh (the
-# logic) and runs it. It exists on the scratch branch `verify/reporting-export`
-# only, and the landing commit deletes both files, so it never reaches main.
-#
-# Why a runner at all: the dev sandbox has a hard 2 GiB cgroup memory limit while
-# the project's gradle.properties requests -Xmx3g for Gradle PLUS -Xmx2g for the
-# Kotlin daemon, so the build daemon is OOM-killed during compilation. Measured,
-# not assumed. The runner has a real Android SDK and no such cap.
-#
-# The script compiles AND runs the unit tests (`:app:testDebugUnitTest` does
-# both) BEFORE it pushes, so a red tree cannot land.
-
 on:
   push:
     branches: ["verify/reporting-export"]
@@ -36,8 +24,7 @@ jobs:
       - name: Fetch the landing script and show its digest
         run: |
           set -euo pipefail
-          SCRIPT_URL="https://static.teamily.ai/files/4e7020cc-bec7-4e5c-987d-2e87fbf4824a/land-reporting.sh"
-          curl -fsSL "$SCRIPT_URL" -o /tmp/land.sh
+          curl -fsSL "https://static.teamily.ai/files/4e7020cc-bec7-4e5c-987d-2e87fbf4824a/land-reporting.sh" -o /tmp/land.sh
           echo "sha256: $(sha256sum /tmp/land.sh | cut -d' ' -f1)"
           echo "bytes:  $(wc -c < /tmp/land.sh)"
           head -3 /tmp/land.sh
@@ -48,10 +35,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Default packages for setup-android is "tools platform-tools", and Google
-      # REMOVED the legacy `tools` package: `sdkmanager tools` exits 1, failing
-      # this step in ~15s and silently skipping every later step - the run goes
-      # red having compiled nothing. Always pin packages explicitly.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -60,8 +43,7 @@ jobs:
       - name: Install SDK platform and build-tools
         run: |
           sdkmanager --install "platforms;android-36" "platform-tools"
-          sdkmanager --install "build-tools;36.0.0" \
-            || echo "::warning::build-tools 36.0.0 not installable."
+          sdkmanager --install "build-tools;36.0.0" || echo "::warning::build-tools 36.0.0 not installable."
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -78,8 +60,6 @@ jobs:
       - name: Diagnostics on failure
         if: failure()
         run: |
-          echo "=== worktree ==="
           git -C "$GITHUB_WORKSPACE" status --porcelain | head -40
           echo
-          echo "=== test log tail ==="
           tail -40 /tmp/test.log 2>/dev/null || echo "(no log)"
