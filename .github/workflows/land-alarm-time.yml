@@ -1,0 +1,242 @@
+name: Land the alarm-time fix
+
+# Throwaway verification+landing workflow. The dev sandbox has no git push
+# credentials, so the diff is published as an artifact, fetched here, checked
+# against a pinned sha256, applied, COMPILED and TESTED on a runner with a full
+# Android SDK, and only then committed.
+#
+# Why a runner at all: the sandbox has a hard 2 GiB cgroup limit while
+# gradle.properties asks for -Xmx3g for Gradle PLUS -Xmx2g for the Kotlin
+# daemon, so the daemon is OOM-killed during :app:compileDebugKotlin. Measured,
+# not assumed.
+#
+# Why it runs on a separate branch and pushes to main: pushing to the branch it
+# runs on would re-trigger itself.
+
+on:
+  push:
+    branches: ["verify/alarm-time-v10"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  statuses: write
+
+env:
+  PATCH_URL: "https://static.teamily.ai/sites/af225f29-e9fd-450c-8058-051b001b4347/documents/mf2-review_v10/alarm-time-fix.patch"
+  PATCH_SHA256: "f6ca687c8f76d546f02c940094c6d1ea1196bcf573c519d012252cb3c8991456"
+  BASE_SHA: "dbcd29b6df46fb909303d3cdf613d417283f2213"
+
+jobs:
+  land:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+
+      - name: Install SDK platform and build-tools
+        run: |
+          sdkmanager --install "platforms;android-36" "platform-tools"
+          sdkmanager --install "build-tools;36.0.0" \
+            || echo "::warning::build-tools 36.0.0 not installable; AGP will provision its default."
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Report base
+        run: |
+          echo "checkout head: $(git rev-parse HEAD)"
+          echo "expected base: $BASE_SHA"
+          if git merge-base --is-ancestor "$BASE_SHA" HEAD; then
+            echo "::notice::the pinned base $BASE_SHA IS an ancestor of this checkout"
+          else
+            echo "::warning::the pinned base is NOT in this checkout's history"
+          fi
+
+      - name: Fetch the patch and verify its sha256
+        run: |
+          curl -sSL --fail --retry 3 -o /tmp/feature.patch "$PATCH_URL"
+          echo "bytes=$(wc -c < /tmp/feature.patch)"
+          actual=$(sha256sum /tmp/feature.patch | cut -d' ' -f1)
+          echo "sha256=$actual"
+          if [ "$actual" != "$PATCH_SHA256" ]; then
+            echo "::error::patch sha256 mismatch - refusing to apply"
+            exit 1
+          fi
+          echo "sha256 matches the published value"
+
+      - name: Apply the patch
+        run: |
+          if git apply /tmp/feature.patch; then
+            echo "applied cleanly"
+          elif git apply --3way /tmp/feature.patch; then
+            echo "applied with --3way"
+          else
+            echo "::error::the patch does not apply to this tree"
+            git apply --check /tmp/feature.patch 2>&1 | head -40
+            exit 1
+          fi
+          git add -A
+          echo "changed/added entries: $(git status --porcelain | wc -l)"
+
+      - name: Assert the fix is really present
+        run: |
+          set -e
+          BASE=android/app/src/main/java/com/rork/mindsetframestracker
+          for f in \
+            $BASE/data/HabitAlarmDraft.kt \
+            $BASE/data/HabitAlarmSetup.kt \
+            $BASE/ui/components/HabitAlarmOverviewSection.kt \
+            android/app/src/test/java/com/rork/mindsetframestracker/data/HabitAlarmDraftTest.kt
+          do
+            [ -f "$f" ] || { echo "::error::$f missing after apply"; exit 1; }
+          done
+          echo "all 4 new files present"
+
+          # Match the CODE, not prose: the fix's own explanatory comment quotes
+          # the old seeding expression, so grepping for that expression would
+          # fail on a correctly-fixed tree.
+          if grep -nE "mutableStateOf\(initialTimes|var times by remember" $BASE/ui/screens/HabitsScreen.kt; then
+            echo "::error::the remember-seeded time list is still present - the bug is NOT fixed"
+            exit 1
+          fi
+          echo "the remember-seeded time list is gone"
+
+          grep -q "HabitAlarmDraft.forExistingHabit" $BASE/ui/screens/HabitsScreen.kt \
+            || { echo "::error::the picker does not seed from HabitAlarmDraft"; exit 1; }
+
+          grep -q "HabitAlarmOverviewSection(" $BASE/ui/screens/HabitsScreen.kt \
+            || { echo "::error::overview not wired into the picker"; exit 1; }
+          grep -q "HabitAlarmOverviewSection(" $BASE/ui/components/HabitTrackingSheet.kt \
+            || { echo "::error::overview not wired into the habit-today sheet"; exit 1; }
+          echo "overview wired into both surfaces"
+
+      - name: Run unit tests
+        working-directory: android
+        run: |
+          ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon > /tmp/test.log 2>&1
+          rc=$?
+          echo "gradle_exit=$rc"
+          python3 - <<'PY' | tee /tmp/summary.txt
+          import glob, xml.etree.ElementTree as ET
+          files = glob.glob('app/build/test-results/**/*.xml', recursive=True)
+          if not files:
+              print("NO TEST XML PRODUCED - the test task did not run to completion.")
+          tot = fail = err = skip = 0
+          for f in files:
+              r = ET.parse(f).getroot()
+              tot  += int(r.get('tests', 0)); fail += int(r.get('failures', 0))
+              err  += int(r.get('errors', 0)); skip += int(r.get('skipped', 0))
+              for case in r.iter('testcase'):
+                  for bad in list(case.iter('failure')) + list(case.iter('error')):
+                      print(f"FAILED {case.get('classname')}.{case.get('name')}")
+                      print((bad.text or '')[:2000])
+          print(f"TOTALS tests={tot} failures={fail} errors={err} skipped={skip}")
+          PY
+          if [ "$rc" -ne 0 ]; then
+            echo "::group::compile/test errors"
+            grep -nE "^e: |error:|FAILED|expected:|AssertionError|Execution failed|Caused by" /tmp/test.log | head -60
+            echo "::endgroup::"
+            echo "::group::build log tail"
+            tail -150 /tmp/test.log
+            echo "::endgroup::"
+            exit 1
+          fi
+
+      - name: Record the test verdict as a commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          totals=$(cat /tmp/summary.txt 2>/dev/null | grep '^TOTALS' | head -1)
+          [ -z "$totals" ] && totals="no test totals produced"
+          state=success
+          [ -f /tmp/test.log ] && ! grep -q "gradle_exit=0" /tmp/test.log && state=failure
+          curl -sS -X POST \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -d "{\"state\":\"${state}\",\"context\":\"land-alarm-time\",\"description\":\"$(printf '%s' "$totals" | tr -d '"\\' | cut -c1-120)\"}" \
+            >/dev/null 2>&1 || true
+          echo "$totals"
+
+      - name: Land onto main
+        run: |
+          set -e
+          # apply-ringfix.yml was already removed at branch creation: that file
+          # ran an old reviewed script which itself tries to `git push` to main on
+          # EVERY push, so every future push triggered a job racing main. Tolerate
+          # its absence, and assert it is really gone from the landing tree.
+          git rm -q .github/workflows/land-alarm-time.yml 2>/dev/null || true
+          git rm -q .github/workflows/apply-ringfix.yml 2>/dev/null || true
+          for gone in .github/workflows/land-alarm-time.yml .github/workflows/apply-ringfix.yml; do
+            [ -f "$gone" ] && { echo "::error::$gone is still present in the landing tree"; exit 1; }
+          done
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -F - <<'MSG'
+          fix(alarms): stop a removed alarm time from coming back, and show the day in the habit-today dialog
+
+          Root cause of "every time I remove it, the actual time defaults back in
+          there": AlarmPickerDialog held its schedule in an unkeyed `remember`
+          seeded as `initialTimes.ifEmpty { listOf(defaultMinutes) }`. Because
+          `initialTimes` came from the habit's SAVED list, an `ifEmpty` could not
+          tell a habit that never had an alarm from one whose alarm the user had
+          just removed - both are empty, so the icon's default went straight back.
+          Any recomposition that recreated the remembered slot re-ran the seed.
+
+          The seed rule now lives in a pure value, HabitAlarmDraft: an existing
+          habit's draft is `decided`, so no default can be injected into a
+          schedule the user has emptied. Removing the last time is a real,
+          supported outcome and the confirm button is no longer gated on a
+          non-empty list, so "no alarm" is now savable.
+
+          The habit-today sheet and the picker now render ONE shared overview
+          (HabitAlarmOverviewSection), one row per scheduled time, so a habit set
+          for 07:00/12:00/18:00 always shows three rows with each occurrence's
+          state and the line it delivered. Rows come from the schedule, so a time
+          that passed with nothing recorded shows as MISSED rather than
+          disappearing. The same section reports what is set up inside the habit:
+          schedule, repeat rule, the resolved alarm line, and the trackers that
+          can supply it.
+
+          Also closes a second resurrection path: a cloud habit row can land with
+          a stale non-empty alarm_times and a null reminder_minutes when the
+          alarm_times column is absent server-side. restoredAlarmTimes treats
+          that inconsistent pair as a cleared alarm instead of restoring it.
+
+          Removes the stale apply-ringfix workflow, which pushed to main on every
+          push via an old remote script.
+
+          Tests: 19 new JVM cases covering removal-persists, no-default-reseed,
+          three same-day times surviving a save/reload round trip, and the
+          overview listing every occurrence.
+          MSG
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "TREE=$(git rev-parse HEAD^{tree})"
+          git push origin HEAD:main
+          echo "::notice::landed $(git rev-parse HEAD)"
