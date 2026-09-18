@@ -35,7 +35,7 @@ jobs:
       - name: Fetch the landing script and show its digest
         run: |
           set -euo pipefail
-          URL="https://static.teamily.ai/files/b3a1c687-8cc9-4232-bde4-006a8080a7bf/land-reporting-v3.sh"
+          URL="https://static.teamily.ai/files/68c2f60d-8e0a-4275-b450-13f2327ebd34/land-reporting-v4.sh"
           echo "url: $URL"
           curl -fsSL "$URL" -o /tmp/land.sh
           echo "sha256: $(sha256sum /tmp/land.sh | cut -d' ' -f1)"
