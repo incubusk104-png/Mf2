@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.rork.mindsetframestracker.data.AlarmEventOutcome
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
+import com.rork.mindsetframestracker.data.crossDayOccurrenceMinutes
 import com.rork.mindsetframestracker.data.MindsetRepository
 
 /**
@@ -111,10 +112,24 @@ class AlarmStopReceiver : BroadcastReceiver() {
         // Timers are skipped: they have no habit, and therefore no alarm history.
         if (!habitId.isNullOrBlank()) {
             runCatching {
+                // The ringing alarm carries its own scheduled time. When it does
+                // not (an older arming, or an action the OS rebuilt without the
+                // extra), resolve the occurrence from the stored state rather than
+                // dropping the answer on the floor — `markOutcome` returns null for
+                // a null time, so an unresolved stop left no trace at all.
+                //
+                // The resolver looks across today AND yesterday, because the one
+                // span that legitimately crosses midnight is a 23:55 alarm
+                // dismissed at 00:10: read as "today" there is no ring to find and
+                // the dismissal would vanish from the history.
+                val data = runCatching {
+                    com.rork.mindsetframestracker.data.MindsetRepository(context).load()
+                }.getOrNull()
+                val stoppedMinutes = stoppedAlarmMinutes ?: data?.crossDayOccurrenceMinutes(habitId)
                 HabitAlarmHistory.markOutcome(
                     context = context,
                     habitId = habitId,
-                    scheduledMinutes = stoppedAlarmMinutes,
+                    scheduledMinutes = stoppedMinutes,
                     outcome = AlarmEventOutcome.DISMISSED,
                 )
             }.onFailure { Log.w(TAG, "Could not record the stop for habit $habitId", it) }

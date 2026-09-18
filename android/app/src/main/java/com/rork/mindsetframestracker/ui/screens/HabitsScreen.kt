@@ -64,6 +64,12 @@ import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.data.AlarmDaySlot
 import com.rork.mindsetframestracker.data.AlarmSlotState
 import com.rork.mindsetframestracker.data.Habit
+import com.rork.mindsetframestracker.data.HabitTrackingMode
+import com.rork.mindsetframestracker.data.trackingModeOrDefault
+import com.rork.mindsetframestracker.data.trackingTargetSecondsOrDefault
+import com.rork.mindsetframestracker.data.TimerKind
+import com.rork.mindsetframestracker.notifications.TimerController
+import com.rork.mindsetframestracker.ui.components.HabitActivityToolsRow
 import com.rork.mindsetframestracker.data.HabitAlarmDraft
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.HabitAlarmSetup
@@ -164,6 +170,17 @@ fun HabitsScreen(
     // Screen-time habit flow: privacy consent → app + limit picker → add.
     var showScreenTimeConsent by remember { mutableStateOf(false) }
     var showScreenTimeSheet by remember { mutableStateOf(false) }
+    /**
+     * The packages the screen-time sheet was SEEDED with when it opened.
+     *
+     * Captured at open time and held for the save, so "absent from the sheet's
+     * result" can only mean "the user cleared it" for an app they were actually
+     * shown. Without this the save compared the result against a fresh
+     * computation of what *should* have been there, and anything the user had no
+     * chance to see — a limit whose row had not rendered yet — was
+     * indistinguishable from one they deliberately removed.
+     */
+    var screenTimeSheetPackages by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Privacy consent gate for activity-source connects launched from the
     // picker sheet. Holds the pending connect action until the user agrees.
@@ -320,6 +337,13 @@ fun HabitsScreen(
                 // Check free-tier cap before showing the time picker.
                 if (viewModel.canAddHabit()) {
                     if (icon.isScreenTime) {
+                        // The packages the sheet is about to show, captured
+                        // BEFORE it opens so the save knows what the user was
+                        // actually given the chance to remove.
+                        screenTimeSheetPackages = data.habits
+                            .filter { it.isScreenTimeHabit }
+                            .mapNotNull { it.monitoredPackage }
+                            .toSet()
                         // Screen-time habits go through the privacy consent +
                         // app-picker flow instead of the plain alarm picker.
                         showScreenTimeConsent = true
@@ -386,6 +410,26 @@ fun HabitsScreen(
             todayAlarmSlots = existingForIcon
                 ?.let { habit -> HabitAlarmHistory.daySlots(data, habit.id) }
                 .orEmpty(),
+            // The dialog starts the habit's own tool. Handed the timer service
+            // directly, exactly as the tracking sheet does, so a running clock
+            // outlives the dialog (backgrounded app, locked screen, killed
+            // process) and its completion records itself through the normal
+            // once-only funnel rather than being written here.
+            onStartTimer = { kind, targetSeconds ->
+                val habit = existingForIcon
+                if (habit != null) {
+                    TimerController.start(
+                        context = context,
+                        kind = kind,
+                        targetSeconds = targetSeconds,
+                        label = habit.name,
+                        habitId = habit.id,
+                    )
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Timer started for ${habit.name}")
+                    }
+                }
+            },
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
@@ -710,7 +754,13 @@ fun HabitsScreen(
                     showPremiumSheet = true
                     return@ScreenTimeHabitSheet
                 }
-                val total = viewModel.applyScreenTimeLimits(limits)
+                // Only an app the sheet was seeded with can be read as removed.
+                // Anything else absent from the result is a limit the user never
+                // saw, and calling that a deletion is what wiped habits.
+                val total = viewModel.applyScreenTimeLimits(
+                    limits = limits,
+                    removablePackages = screenTimeSheetPackages,
+                )
                 if (!ScreenTimeMonitor.hasPermission(context)) {
                     // Send the user to the system Usage Access switch —
                     // Android never auto-grants this special permission.
@@ -864,6 +914,14 @@ private fun AlarmPickerDialog(
      * [com.rork.mindsetframestracker.data.AppData].
      */
     todayAlarmSlots: List<AlarmDaySlot> = emptyList(),
+    /**
+     * Starts this habit's own activity tool (stopwatch or timer).
+     *
+     * Defaulted to a no-op so the dialog still composes in a preview or a
+     * caller that has no timer host — but the Habits screen always passes a
+     * real one, because it *is* the host (see the sheet's `onStartTimed`).
+     */
+    onStartTimer: (kind: com.rork.mindsetframestracker.data.TimerKind, targetSeconds: Int) -> Unit = { _, _ -> },
     onDismiss: () -> Unit,
     onConfirm: (times: List<Int>, repeatMask: Int, alarmMessage: String) -> Unit,
 ) {
@@ -1077,6 +1135,34 @@ private fun AlarmPickerDialog(
                     trackerProviders = TrackerConnections.sourcesFor(habitIconId),
                     onSelect = { detailSlot = it },
                 )
+                // ── The habit's activity tools ────────────────────────────────
+                // A walk measured by a stopwatch, or kept up by Strava / Health
+                // Connect. Rendered inside the alarm editor because this dialog
+                // IS the habit's dialog — tapping an added habit opens it — so
+                // this is where a user looking for "the stopwatch for my walk"
+                // actually arrives. It is also the second half of the flow the
+                // request describes: the alarm notifies, and then the tool is
+                // started from the same place the alarm was configured.
+                // Bound to a local first: reading `existingHabit` directly
+                // inside the lambda would not smart-cast it to non-null (it is a
+                // captured `val` from another scope), so the compiler would reject
+                // the `.trackingModeOrDefault` access even under the null check.
+                val setupHabit = existingHabit
+                if (setupHabit != null) {
+                    Spacer(Modifier.height(12.dp))
+                    HabitActivityToolsRow(
+                        trackingMode = setupHabit.trackingModeOrDefault,
+                        targetSeconds = setupHabit.trackingTargetSecondsOrDefault,
+                        trackerProviders = TrackerConnections.sourcesFor(habitIconId),
+                        onStartTool = {
+                            onStartTimer(
+                                if (setupHabit.trackingModeOrDefault == HabitTrackingMode.TIMER)
+                                    TimerKind.TIMER else TimerKind.STOPWATCH,
+                                setupHabit.trackingTargetSecondsOrDefault,
+                            )
+                        },
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 val nextRingAt = HabitRepeat.nextOfAll(
                     times = times,

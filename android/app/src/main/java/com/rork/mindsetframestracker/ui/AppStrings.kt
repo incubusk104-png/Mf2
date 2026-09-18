@@ -695,6 +695,31 @@ class AppStrings(private val table: Map<String, String>) {
     val habitSetupMessageCustom: String get() = s("habitSetupMessageCustom")
     /// Label for the tracker sources able to supply this habit.
     val habitSetupTracker: String get() = s("habitSetupTracker")
+
+    // ── Weekly consistency + activity tools ─────────────────────────────
+    /// Title of the weekly consistency card.
+    val insightsWeeklyConsistency: String get() = s("insightsWeeklyConsistency")
+    /// One-line explanation under that title.
+    val insightsWeeklyConsistencyCaption: String get() = s("insightsWeeklyConsistencyCaption")
+    /// Shown when there are no habits to chart yet.
+    val insightsWeeklyConsistencyEmpty: String get() = s("insightsWeeklyConsistencyEmpty")
+    /// Heading above the week's imported activity totals.
+    val insightsWeeklyActivity: String get() = s("insightsWeeklyActivity")
+    /// "Steps" stat label.
+    val insightsSteps: String get() = s("insightsSteps")
+    /// "Minutes" stat label.
+    val insightsMinutes: String get() = s("insightsMinutes")
+    /// "Distance" stat label.
+    val insightsDistance: String get() = s("insightsDistance")
+
+    /// Heading above the habit dialog's activity-tool rows.
+    val habitToolsTitle: String get() = s("habitToolsTitle")
+    /// The action that opens this habit's stopwatch / timer.
+    val habitToolsOpen: String get() = s("habitToolsOpen")
+    /// Detail line for an open-ended stopwatch with no goal.
+    val habitToolsOpenEnded: String get() = s("habitToolsOpenEnded")
+    /// Detail line for a tracker that can supply this habit.
+    val habitToolsTrackerReady: String get() = s("habitToolsTrackerReady")
 }
 
 // ── JSON-based loading ──────────────────────────────────────

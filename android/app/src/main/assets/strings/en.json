@@ -589,5 +589,16 @@
   "habitSetupRepeat": "Repeats",
   "habitSetupMessage": "Your alarm will say",
   "habitSetupMessageCustom": "Your own words — not the app's default.",
-  "habitSetupTracker": "Can be tracked by"
+  "habitSetupTracker": "Can be tracked by",
+  "insightsWeeklyConsistency": "This week's consistency",
+  "insightsWeeklyConsistencyCaption": "Every habit, day by day — a filled day is done, and a ring means a tracker recorded it.",
+  "insightsWeeklyConsistencyEmpty": "Add a habit to start seeing your week here.",
+  "insightsWeeklyActivity": "Activity from your trackers",
+  "insightsSteps": "Steps",
+  "insightsMinutes": "Minutes",
+  "insightsDistance": "Distance",
+  "habitToolsTitle": "Activity tools",
+  "habitToolsOpen": "Stopwatch / timer",
+  "habitToolsOpenEnded": "Open ended",
+  "habitToolsTrackerReady": "Ready to import your activity"
 }

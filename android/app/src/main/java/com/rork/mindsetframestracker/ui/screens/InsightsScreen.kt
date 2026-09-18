@@ -74,6 +74,7 @@ import com.rork.mindsetframestracker.ui.components.EntranceItem
 import com.rork.mindsetframestracker.ui.components.MoodPixelsCard
 import com.rork.mindsetframestracker.ui.components.TrendChart
 import com.rork.mindsetframestracker.ui.components.TrendPoint
+import com.rork.mindsetframestracker.ui.components.WeeklyConsistencyCard
 import com.rork.mindsetframestracker.ui.components.YearHeatmap
 import com.rork.mindsetframestracker.ui.components.YearHeatmapData
 import com.rork.mindsetframestracker.ui.components.buildYearHeatmapData
@@ -381,6 +382,15 @@ fun InsightsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             EntranceItem(index = 6) {
                 MoodConsistencyCard(moodStats = moodStats)
             }
+
+            // The week at a glance: every habit's seven days, plus the activity
+            // a tracker fed into them. Sits with the other consistency views
+            // because "am I keeping this up?" is the question all of them
+            // answer, and the day-level dots are what make the answer
+            // actionable rather than just a number.
+            EntranceItem(index = 7) {
+                WeeklyConsistencyCard(data = data)
+            }
         }
 
         // Sourced activity: Strava / Google Health Connect / Polar.
@@ -391,7 +401,7 @@ fun InsightsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         // again. Renders nothing at all when no source has recorded anything,
         // so an un-connected user sees no empty shell.
         if (rangeActivity.sessions > 0) {
-            EntranceItem(index = 7) {
+            EntranceItem(index = 8) {
                 ActivitySourcesCard(
                     totals = rangeActivity,
                     bySource = sourceTotals,

@@ -669,81 +669,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Returns the number of apps now limited, so the caller can tell the user
      * what actually happened.
      */
-    fun applyScreenTimeLimits(limits: List<com.rork.mindsetframestracker.data.ScreenTimeLimitInput>): Int {
-        val desired = limits.associateBy { it.packageName }
-        // Habits being dropped, captured before the update so their ids/keys
-        // can still be read afterwards.
-        val removedHabits = _state.value.habits.filter { habit ->
-            habit.isScreenTimeHabit && habit.monitoredPackage !in desired
-        }
-        // The server deletion queue is keyed by HABIT id (not package), so
-        // capture the ids here rather than re-deriving them post-update.
-        val removedIds = removedHabits.map { it.id }
+    fun applyScreenTimeLimits(
+        limits: List<com.rork.mindsetframestracker.data.ScreenTimeLimitInput>,
+        /**
+         * The packages the picker was SEEDED with when it opened.
+         *
+         * A screen-time habit is only ever dropped when its package was in this
+         * set and the user has since cleared it. Anything else — a limit that
+         * had not loaded yet, a habit that arrived from a cloud pull while the
+         * sheet was open — can therefore never be read as a removal, which is
+         * the path that deleted habits the user never touched.
+         */
+        removablePackages: Set<String> = emptySet(),
+    ): Int {
+        // The reconciliation is pure and lives in
+        // [com.rork.mindsetframestracker.data.planScreenTimeLimits], so the rule
+        // "a screen-time save never deletes a habit it was not shown" is a
+        // property a unit test asserts rather than a promise about this
+        // `update { }` block.
+        val plan = com.rork.mindsetframestracker.data.planScreenTimeLimits(
+            current = _state.value,
+            limits = limits,
+            removablePackages = removablePackages,
+        )
 
         update { data ->
-            val existingPackages = data.habits
-                .filter { it.isScreenTimeHabit }
-                .mapNotNull { it.monitoredPackage }
-                .toSet()
-
-            // 1. Drop limits the user cleared.
-            val kept = data.habits.filter { habit ->
-                if (!habit.isScreenTimeHabit) return@filter true
-                val pkg = habit.monitoredPackage ?: return@filter true
-                pkg in desired
-            }
-
-            // 2. Update existing, 3. create the rest.
-            val updated = kept.map { habit ->
-                if (!habit.isScreenTimeHabit) return@map habit
-                val pkg = habit.monitoredPackage ?: return@map habit
-                val want = desired[pkg] ?: return@map habit
-                if (habit.screenTimeLimitMinutes == want.limitMinutes &&
-                    habit.monitoredAppLabel == want.appLabel
-                ) {
-                    habit
-                } else {
-                    val updated = habit.copy(
-                        screenTimeLimitMinutes = want.limitMinutes,
-                        monitoredAppLabel = want.appLabel,
-                    )
-                    // Keep the habit's title in step with its limit — the title
-                    // is what the habit list and the dialogs show.
-                    updated.copy(name = updated.screenTimeSummary())
-                }
-            }
-
-            val additions = desired.values
-                .filter { it.packageName !in existingPackages }
-                .map { want ->
-                    val base = Habit(
-                        id = UUID.randomUUID().toString(),
-                        name = "",
-                        createdAt = System.currentTimeMillis(),
-                        iconId = "screenTime",
-                        monitoredPackage = want.packageName,
-                        screenTimeLimitMinutes = want.limitMinutes,
-                        monitoredAppLabel = want.appLabel,
-                    )
-                    base.copy(name = base.screenTimeSummary())
-                }
-
-            data.copy(
-                habits = updated + additions,
-                // Removing a screen-time habit must also drop its check-in
-                // history, the same way deleteHabit does — otherwise the
-                // heatmap and the weekly count keep counting a limit the user
-                // has removed.
-                checkIns = if (removedIds.isEmpty()) data.checkIns
-                else data.checkIns - removedIds.toSet(),
-            )
+            data.copy(habits = plan.habits, checkIns = plan.checkIns)
         }
 
         // Push the deletions server-side too, so a removed limit does not
         // reappear after a restore on another device. pushSnapshot only
         // upserts, so a locally-removed habit would otherwise survive in
-        // Supabase and come back on the next pull.
-        removedHabits.forEach { supabaseSync.queueHabitDeletion(it.id) }
+        // Supabase and come back on the next pull. The ids come from the plan,
+        // because the server deletion queue is keyed by HABIT id (not package).
+        plan.removed.forEach { supabaseSync.queueHabitDeletion(it.id) }
 
         queueSync()
         evaluateScreenTimeHabits()

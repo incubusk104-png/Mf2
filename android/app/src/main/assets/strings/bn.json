@@ -359,5 +359,16 @@
   "habitsAlarmDetailNoMessage": "No message was recorded for this alarm.",
   "habitsAlarmDetailNotRecorded": "Not recorded",
   "habitsAlarmDetailHint": "Tap an alarm to see what it said and when you answered it.",
-  "habitsAlarmOccurrenceOf": "%1$d of %2$d today"
+  "habitsAlarmOccurrenceOf": "%1$d of %2$d today",
+  "insightsWeeklyConsistency": "This week's consistency",
+  "insightsWeeklyConsistencyCaption": "Every habit, day by day — a filled day is done, and a ring means a tracker recorded it.",
+  "insightsWeeklyConsistencyEmpty": "Add a habit to start seeing your week here.",
+  "insightsWeeklyActivity": "Activity from your trackers",
+  "insightsSteps": "Steps",
+  "insightsMinutes": "Minutes",
+  "insightsDistance": "Distance",
+  "habitToolsTitle": "Activity tools",
+  "habitToolsOpen": "Stopwatch / timer",
+  "habitToolsOpenEnded": "Open ended",
+  "habitToolsTrackerReady": "Ready to import your activity"
 }
