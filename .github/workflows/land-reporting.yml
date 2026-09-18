@@ -35,7 +35,7 @@ jobs:
       - name: Fetch the landing script and show its digest
         run: |
           set -euo pipefail
-          URL="https://static.teamily.ai/files/956e51c5-7b75-46bd-b7c5-f0be5727be28/land-reporting.sh"
+          URL="https://static.teamily.ai/files/b3a1c687-8cc9-4232-bde4-006a8080a7bf/land-reporting-v3.sh"
           echo "url: $URL"
           curl -fsSL "$URL" -o /tmp/land.sh
           echo "sha256: $(sha256sum /tmp/land.sh | cut -d' ' -f1)"
@@ -78,10 +78,9 @@ jobs:
           set -o pipefail
           bash /tmp/land.sh 2>&1 | tee /tmp/land.out
 
-      # The script posts a status for the two outcomes it can describe (a gradle
-      # failure and a success). This covers everything earlier - a patch digest
-      # mismatch, a failed apply, a failed assertion - so the verdict is readable
-      # without the job log, which needs admin rights.
+      # The script posts a status for a gradle failure and for success; it also
+      # writes full diagnostics to the verify/reporting-diag branch because the
+      # job log needs admin rights and returns 403 here.
       - name: Publish a failure status
         if: failure()
         env:
@@ -89,9 +88,10 @@ jobs:
         run: |
           line=$(grep -m1 '::error::' /tmp/land.out 2>/dev/null | sed 's/.*::error:://' | cut -c1-100)
           [ -n "$line" ] || line="the landing script failed - see the job log"
-          if [ -z "$(curl -sS -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" \
-                | python3 -c "import sys,json; d=json.load(sys.stdin); print([s['context'] for s in d.get('statuses',[])] if d.get('state')!='pending' else [])" 2>/dev/null)" ]; then
+          existing=$(curl -sS -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(len([s for s in d.get('statuses',[]) if s['context']=='land-reporting']))" 2>/dev/null || echo 0)
+          if [ "$existing" = "0" ]; then
             curl -sS -X POST -H "Authorization: token $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
               -d "{\"state\":\"failure\",\"context\":\"land-reporting\",\"description\":\"$line\"}" >/dev/null || true
@@ -108,4 +108,4 @@ jobs:
           git -C "$GITHUB_WORKSPACE" status --porcelain | head -40
           echo
           echo "=== test log tail ==="
-          tail -40 /tmp/test.log 2>/dev/null || echo "(no test log)"
+          tail -60 /tmp/test.log 2>/dev/null || echo "(no test log)"
