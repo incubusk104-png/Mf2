@@ -720,6 +720,115 @@ class AppStrings(private val table: Map<String, String>) {
     val habitToolsOpenEnded: String get() = s("habitToolsOpenEnded")
     /// Detail line for a tracker that can supply this habit.
     val habitToolsTrackerReady: String get() = s("habitToolsTrackerReady")
+
+    // ── Data export sheet ─────────────────────────────────────────────────────
+    // Added so the export and share sheets follow the chosen language like every
+    // other surface. They previously held literals, so with a non-English
+    // language selected the rest of the app translated and these two sheets did
+    // not. Only en.json carries the values: `stringsFor` merges each language
+    // over the English base, so a non-English file without these keys falls back
+    // to English — which is the app's documented contract. Writing the English
+    // text INTO the 25 other files would instead render as though each had been
+    // translated, and would freeze the English copy in 25 places to keep in sync.
+    val shExportAllTitle: String get() = s("shExportAllTitle")
+    val shExportAllBody: String get() = s("shExportAllBody")
+    val shWhatIncluded: String get() = s("shWhatIncluded")
+    val shChooseFormat: String get() = s("shChooseFormat")
+    val shFormatJsonTitle: String get() = s("shFormatJsonTitle")
+    val shFormatJsonDesc: String get() = s("shFormatJsonDesc")
+    val shFormatCsvTitle: String get() = s("shFormatCsvTitle")
+    val shFormatCsvDesc: String get() = s("shFormatCsvDesc")
+    val shFormatReportTitle: String get() = s("shFormatReportTitle")
+    val shFormatReportDesc: String get() = s("shFormatReportDesc")
+    val shAlarmPerTimeNote: String get() = s("shAlarmPerTimeNote")
+    val shTokenNote: String get() = s("shTokenNote")
+    val shVerifiedComplete: String get() = s("shVerifiedComplete")
+    val shSomeOmitted: String get() = s("shSomeOmitted")
+    val shFileListsOmitted: String get() = s("shFileListsOmitted")
+    val shOmissionsBody: String get() = s("shOmissionsBody")
+    val shKindHabits: String get() = s("shKindHabits")
+    val shKindCheckIns: String get() = s("shKindCheckIns")
+    val shKindLogs: String get() = s("shKindLogs")
+    val shKindAlarms: String get() = s("shKindAlarms")
+    val shKindActivity: String get() = s("shKindActivity")
+    val shKindReflections: String get() = s("shKindReflections")
+
+    /** "All 240 records will be written." */
+    fun shAllRecordsWritten(count: Int): String = format("shAllRecordsWritten", count)
+
+    /** "3 record(s) can't be included" */
+    fun shOmissionsTitle(count: Int): String = format("shOmissionsTitle", count)
+
+    /** "12 (3 omitted)" */
+    fun shCountOmitted(inExport: Int, omitted: Int): String = format("shCountOmitted", inExport, omitted)
+
+    // ── Share habits sheet ────────────────────────────────────────────────────
+    val shShareTitle: String get() = s("shShareTitle")
+    val shShareBody: String get() = s("shShareBody")
+    val shSendHabits: String get() = s("shSendHabits")
+    val shShareFull: String get() = s("shShareFull")
+    val shShareListOnly: String get() = s("shShareListOnly")
+    val shShareAsFile: String get() = s("shShareAsFile")
+    val shCodeReady: String get() = s("shCodeReady")
+    val shCodeCopied: String get() = s("shCodeCopied")
+    val shReceiveTitle: String get() = s("shReceiveTitle")
+    val shReceiveBody: String get() = s("shReceiveBody")
+    val shPasteLabel: String get() = s("shPasteLabel")
+    val shCheckCode: String get() = s("shCheckCode")
+    val shOpenFile: String get() = s("shOpenFile")
+    val shImport: String get() = s("shImport")
+    val shCancel: String get() = s("shCancel")
+    val shNothingNew: String get() = s("shNothingNew")
+    val shImported: String get() = s("shImported")
+    val shImportNote: String get() = s("shImportNote")
+    val shBadCode: String get() = s("shBadCode")
+    val shNotACode: String get() = s("shNotACode")
+    val shNotAnExport: String get() = s("shNotAnExport")
+    val shCouldntReadFile: String get() = s("shCouldntReadFile")
+    val shShareFileLabel: String get() = s("shShareFileLabel")
+    val shCopyCode: String get() = s("shCopyCode")
+    val shLabelSharedCode: String get() = s("shLabelSharedCode")
+    val shLabelExportFile: String get() = s("shLabelExportFile")
+
+    /** "That code was made by a newer version of the app (format 2). Update and try again." */
+    fun shCodeTooNew(schemaVersion: Int): String = format("shCodeTooNew", schemaVersion)
+
+    /** "Ready to import from export file" */
+    fun shReadyToImport(label: String): String = format("shReadyToImport", label)
+
+    /** "Couldn't write the file: permission denied" */
+    fun shCouldntWriteFile(reason: String): String = format("shCouldntWriteFile", reason)
+
+    /** "Couldn't build the code: too large" */
+    fun shCouldntBuildCode(reason: String): String = format("shCouldntBuildCode", reason)
+
+    /** "• 42 history records added (30 check-ins, 8 logs, 4 alarm records)" */
+    fun shImportSummaryRecords(records: Int, checkIns: Int, logs: Int, alarms: Int): String =
+        format("shImportSummaryRecords", records, checkIns, logs, alarms)
+
+    /** "• 2 already in your habits — skipped" */
+    fun shImportSummaryDuplicates(count: Int): String = format("shImportSummaryDuplicates", count)
+
+    /** "• 1 habit(s) renamed to avoid a clash with an existing one" */
+    fun shImportSummaryRenamed(count: Int): String = format("shImportSummaryRenamed", count)
+
+    /**
+     * Substitutes the app's `%1$s` / `%1$d` positional placeholders.
+     *
+     * `String.format` is **not** used: a habit name, a share code or a file name
+     * the user typed can contain its own `%`, and `format` would read those as
+     * conversions and throw (or substitute the wrong value). Replacing only the
+     * exact `%N$x` tokens this app writes keeps the substitution literal and
+     * cannot be confused by user text.
+     */
+    private fun format(key: String, vararg args: Any): String {
+        var out = s(key)
+        args.forEachIndexed { index, value ->
+            val n = index + 1
+            out = out.replace("%$n\$s", value.toString()).replace("%$n\$d", value.toString())
+        }
+        return out
+    }
 }
 
 // ── JSON-based loading ──────────────────────────────────────

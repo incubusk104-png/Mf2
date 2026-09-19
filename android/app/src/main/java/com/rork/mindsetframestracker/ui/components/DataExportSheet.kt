@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.data.HabitDataExport
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.ExportKindCount
+import com.rork.mindsetframestracker.ui.AppStrings
+import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.util.HabitShare
 
 /**
@@ -74,6 +76,7 @@ fun DataExportSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
+    val s = appStrings()
     // Built once per opening: the counts must describe the same snapshot the
     // export will write, so re-computing them on every recomposition would let
     // the table and the file drift apart.
@@ -89,15 +92,13 @@ fun DataExportSheet(
                 .verticalScroll(rememberScrollState()),
         ) {
             Text(
-                "Export all your data",
+                s.shExportAllTitle,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "A complete copy of everything Mindset Frames has recorded — every habit, " +
-                    "every check-in, every detailed log entry, every alarm that rang, your " +
-                    "imported activity and your reflections.",
+                s.shExportAllBody,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -105,19 +106,19 @@ fun DataExportSheet(
             Spacer(Modifier.height(16.dp))
 
             // ── The completeness verdict ─────────────────────────────────────
-            CompletenessVerdict(bundle.verification.isComplete, bundle.verification.totalRecords)
+            CompletenessVerdict(s, bundle.verification.isComplete, bundle.verification.totalRecords)
 
             Spacer(Modifier.height(12.dp))
 
             // ── Per-record-type counts ───────────────────────────────────────
             Text(
-                "What will be included",
+                s.shWhatIncluded,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(6.dp))
-            countRows().forEach { (label, count) ->
-                CountRow(label, bundle.verification.counts.firstOrNull { it.kind == count })
+            countRows(s).forEach { (label, count) ->
+                CountRow(s, label, bundle.verification.counts.firstOrNull { it.kind == count })
             }
 
             // ── Omissions, if any (never hidden) ─────────────────────────────
@@ -126,15 +127,14 @@ fun DataExportSheet(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "${bundle.verification.omissions.size} record(s) can't be included",
+                    s.shOmissionsTitle(bundle.verification.omissions.size),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.error,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "These belong to habits you deleted, or fall outside the period you chose. " +
-                        "They are listed in the exported file itself, so the record is never hidden.",
+                    s.shOmissionsBody,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -143,7 +143,7 @@ fun DataExportSheet(
             Spacer(Modifier.height(20.dp))
 
             Text(
-                "Choose a format",
+                s.shChooseFormat,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -151,36 +151,34 @@ fun DataExportSheet(
 
             FormatButton(
                 icon = Icons.Outlined.Code,
-                title = "Complete data (JSON)",
-                description = "Lossless and re-importable — the safest full backup.",
+                title = s.shFormatJsonTitle,
+                description = s.shFormatJsonDesc,
                 onClick = { onExport(HabitShare.ExportFormat.JSON) },
             )
             Spacer(Modifier.height(8.dp))
             FormatButton(
                 icon = Icons.Outlined.TableChart,
-                title = "Spreadsheet (CSV)",
-                description = "One delimited table per record type, for Excel or Sheets.",
+                title = s.shFormatCsvTitle,
+                description = s.shFormatCsvDesc,
                 onClick = { onExport(HabitShare.ExportFormat.CSV) },
             )
             Spacer(Modifier.height(8.dp))
             FormatButton(
                 icon = Icons.Outlined.Description,
-                title = "Readable report (text)",
-                description = "The same data laid out to read, with the completeness proof.",
+                title = s.shFormatReportTitle,
+                description = s.shFormatReportDesc,
                 onClick = { onExport(HabitShare.ExportFormat.REPORT) },
             )
 
             Spacer(Modifier.height(16.dp))
             Text(
-                "Alarm records keep every scheduled time separately — a habit that rings at " +
-                    "07:00, 12:00 and 18:00 appears three times, not once.",
+                s.shAlarmPerTimeNote,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Your tracker sign-in tokens are never included, because this file is meant " +
-                    "to be shareable.",
+                s.shTokenNote,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -190,7 +188,7 @@ fun DataExportSheet(
 
 /** The headline verdict: complete, or exactly how many records are missing. */
 @Composable
-private fun CompletenessVerdict(isComplete: Boolean, totalRecords: Int) {
+private fun CompletenessVerdict(s: AppStrings, isComplete: Boolean, totalRecords: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -212,7 +210,7 @@ private fun CompletenessVerdict(isComplete: Boolean, totalRecords: Int) {
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
-                text = if (isComplete) "Verified complete" else "Some records can't be included",
+                text = if (isComplete) s.shVerifiedComplete else s.shSomeOmitted,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isComplete) MaterialTheme.colorScheme.onPrimaryContainer
@@ -220,9 +218,9 @@ private fun CompletenessVerdict(isComplete: Boolean, totalRecords: Int) {
             )
             Text(
                 text = if (isComplete) {
-                    "All $totalRecords records will be written."
+                    s.shAllRecordsWritten(totalRecords)
                 } else {
-                    "The file will list exactly what was left out."
+                    s.shFileListsOmitted
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = if (isComplete) MaterialTheme.colorScheme.onPrimaryContainer
@@ -234,7 +232,7 @@ private fun CompletenessVerdict(isComplete: Boolean, totalRecords: Int) {
 
 /** One "Habits 3 ✓" line. */
 @Composable
-private fun CountRow(label: String, count: ExportKindCount?) {
+private fun CountRow(s: AppStrings, label: String, count: ExportKindCount?) {
     if (count == null) return
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -248,7 +246,7 @@ private fun CountRow(label: String, count: ExportKindCount?) {
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = if (count.omitted > 0) "${count.inExport} (${count.omitted} omitted)"
+            text = if (count.omitted > 0) s.shCountOmitted(count.inExport, count.omitted)
             else count.inExport.toString(),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
@@ -259,13 +257,13 @@ private fun CountRow(label: String, count: ExportKindCount?) {
 }
 
 /** Human label for each record kind, in the order they are shown. */
-private fun countRows(): List<Pair<String, String>> = listOf(
-    "Habits" to "habit",
-    "Check-ins" to "checkIn",
-    "Detailed log entries" to "habitLog",
-    "Alarm records (per time)" to "alarmEvent",
-    "Activity records" to "activityRecord",
-    "Reflections" to "reflection",
+private fun countRows(s: AppStrings): List<Pair<String, String>> = listOf(
+    s.shKindHabits to "habit",
+    s.shKindCheckIns to "checkIn",
+    s.shKindLogs to "habitLog",
+    s.shKindAlarms to "alarmEvent",
+    s.shKindActivity to "activityRecord",
+    s.shKindReflections to "reflection",
 )
 
 /** One format choice: icon, title, one-line explanation, and a share action. */

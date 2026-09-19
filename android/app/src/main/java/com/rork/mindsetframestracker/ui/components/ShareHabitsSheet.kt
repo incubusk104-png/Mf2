@@ -52,6 +52,7 @@ import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.HabitDataExport
 import com.rork.mindsetframestracker.data.HabitExportBundle
 import com.rork.mindsetframestracker.data.HabitShareCodec
+import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.util.HabitShare
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -92,6 +93,10 @@ fun ShareHabitsSheet(
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // The sheet's text comes from the app's string table, so it follows the
+    // language like every other screen. It previously held literals, so with a
+    // non-English language selected this sheet did not translate.
+    val s = appStrings()
 
     var pastedCode by remember { mutableStateOf("") }
         var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -120,7 +125,7 @@ fun ShareHabitsSheet(
         pendingPlan = plan
         pendingLabel = label
         if (plan.isEmpty) {
-            report("Nothing new in that code — it's already in your habits.", isError = false)
+            report(s.shNothingNew, isError = false)
         } else {
             report(null, isError = false)
         }
@@ -128,13 +133,13 @@ fun ShareHabitsSheet(
 
     fun handleCode(raw: String) {
         when (val result = HabitShareCodec.decode(raw)) {
-            is HabitShareCodec.DecodeResult.Success -> planFromPayload(result.payload, "shared code")
+            is HabitShareCodec.DecodeResult.Success -> planFromPayload(result.payload, s.shLabelSharedCode)
             HabitShareCodec.DecodeResult.NotAShareCode ->
-                report("That doesn't look like a Mindset Frames code — check the whole thing was copied.", true)
+                report(s.shNotACode, true)
             HabitShareCodec.DecodeResult.Corrupt ->
-                report("That code is damaged or incomplete — ask for it to be sent again.", true)
+                report(s.shBadCode, true)
             is HabitShareCodec.DecodeResult.TooNew ->
-                report("That code was made by a newer version of the app (format ${result.schemaVersion}). Update and try again.", true)
+                report(s.shCodeTooNew(result.schemaVersion), true)
         }
     }
 
@@ -150,7 +155,7 @@ fun ShareHabitsSheet(
                 }.getOrNull()
             }
             if (text.isNullOrBlank()) {
-                report("Couldn't read that file.", true)
+                report(s.shCouldntReadFile, true)
                 return@launch
             }
             // A shared file is either a JSON export or a text file whose body
@@ -175,8 +180,8 @@ fun ShareHabitsSheet(
                         habits = parsed.habits,
                         moodHistory = parsed.moodHistory,
                     )
-                }.onSuccess { planFromPayload(it, "export file") }
-                    .onFailure { report("That file isn't a Mindset Frames export.", true) }
+                }.onSuccess { planFromPayload(it, s.shLabelExportFile) }
+                    .onFailure { report(s.shNotAnExport, true) }
             }
         }
     }
@@ -189,14 +194,13 @@ fun ShareHabitsSheet(
                 .verticalScroll(rememberScrollState()),
         ) {
             Text(
-                "Share your habits",
+                s.shShareTitle,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Send your habits — and as much of their history as you like — so someone " +
-                    "else can try them, or keep a copy for yourself.",
+                s.shShareBody,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -234,7 +238,7 @@ fun ShareHabitsSheet(
 
             // ── Share out ────────────────────────────────────────────────────
             Spacer(Modifier.height(20.dp))
-            Text("Send your habits", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(s.shSendHabits, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
 
             OutlinedButton(
@@ -245,17 +249,17 @@ fun ShareHabitsSheet(
                         includeHistory = true,
                         appVersionName = appVersionName,
                         appVersionCode = appVersionCode,
-                        onError = { report("Couldn't build the code: $it", true) },
+                        onError = { report(s.shCouldntBuildCode(it), true) },
                     )
                     if (code != null) {
                         sharedCode = code
-                        report("Code ready — choose where to send it.", false)
+                        report(s.shCodeReady, false)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Outlined.IosShare, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Share habits + history as a code", modifier = Modifier.padding(start = 8.dp))
+                Text(s.shShareFull, modifier = Modifier.padding(start = 8.dp))
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
@@ -266,13 +270,13 @@ fun ShareHabitsSheet(
                         includeHistory = false,
                         appVersionName = appVersionName,
                         appVersionCode = appVersionCode,
-                        onError = { report("Couldn't build the code: $it", true) },
+                        onError = { report(s.shCouldntBuildCode(it), true) },
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Outlined.IosShare, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Share habit list only (smaller)", modifier = Modifier.padding(start = 8.dp))
+                Text(s.shShareListOnly, modifier = Modifier.padding(start = 8.dp))
             }
 
             if (sharedCode != null) {
@@ -281,14 +285,14 @@ fun ShareHabitsSheet(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                         clipboard?.setPrimaryClip(
-                            ClipData.newPlainText("Mindset Frames habits", sharedCode.orEmpty()),
+                            ClipData.newPlainText(s.shShareFileLabel, sharedCode.orEmpty()),
                         )
-                        report("Code copied to the clipboard.", false)
+                        report(s.shCodeCopied, false)
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Copy the code instead", modifier = Modifier.padding(start = 8.dp))
+                    Text(s.shCopyCode, modifier = Modifier.padding(start = 8.dp))
                 }
             }
 
@@ -301,24 +305,23 @@ fun ShareHabitsSheet(
                         format = HabitShare.ExportFormat.REPORT,
                         appVersionName = appVersionName,
                         appVersionCode = appVersionCode,
-                        onError = { report("Couldn't write the file: $it", true) },
+                        onError = { report(s.shCouldntWriteFile(it), true) },
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Outlined.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Send a readable file instead", modifier = Modifier.padding(start = 8.dp))
+                Text(s.shShareAsFile, modifier = Modifier.padding(start = 8.dp))
             }
 
             // ── Import ───────────────────────────────────────────────────────
             Spacer(Modifier.height(20.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             Spacer(Modifier.height(20.dp))
-            Text("Receive habits", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(s.shReceiveTitle, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Paste a code someone sent you, or open a shared file. You'll see exactly what " +
-                    "would be added before anything changes.",
+                s.shReceiveBody,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -327,7 +330,7 @@ fun ShareHabitsSheet(
             OutlinedTextField(
                 value = pastedCode,
                 onValueChange = { pastedCode = it },
-                label = { Text("Paste a share code") },
+                label = { Text(s.shPasteLabel) },
                 placeholder = { Text(HabitShareCodec.PREFIX + "…") },
                 singleLine = false,
                 minLines = 3,
@@ -339,7 +342,7 @@ fun ShareHabitsSheet(
                 enabled = pastedCode.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Check what this code contains")
+                Text(s.shCheckCode)
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
@@ -347,7 +350,7 @@ fun ShareHabitsSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Outlined.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("Open a shared file", modifier = Modifier.padding(start = 8.dp))
+                Text(s.shOpenFile, modifier = Modifier.padding(start = 8.dp))
             }
 
             // ── The pending import, with its exact effect ─────────────────────
@@ -362,7 +365,7 @@ fun ShareHabitsSheet(
                         .padding(14.dp),
                 ) {
                     Text(
-                        "Ready to import from $pendingLabel",
+                        s.shReadyToImport(pendingLabel),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -375,23 +378,26 @@ fun ShareHabitsSheet(
                     }
                     if (plan.duplicateHabits.isNotEmpty()) {
                         Text(
-                            "• ${plan.duplicateHabits.size} already in your habits — skipped",
+                            s.shImportSummaryDuplicates(plan.duplicateHabits.size),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (plan.renamedHabits.isNotEmpty()) {
                         Text(
-                            "• ${plan.renamedHabits.size} habit(s) renamed to avoid a clash with an existing one",
+                            s.shImportSummaryRenamed(plan.renamedHabits.size),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (plan.totalNewRecords > 0) {
                         Text(
-                            "• ${plan.totalNewRecords} history records added " +
-                                "(${plan.newCheckIns} check-ins, ${plan.newLogs} logs, " +
-                                "${plan.newAlarmEvents} alarm records)",
+                            s.shImportSummaryRecords(
+                                plan.totalNewRecords,
+                                plan.newCheckIns,
+                                plan.newLogs,
+                                plan.newAlarmEvents,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -403,11 +409,11 @@ fun ShareHabitsSheet(
                                 onImport(HabitShareCodec.applyImport(data, plan))
                                 pendingPlan = null
                                 pastedCode = ""
-                                report("Imported. Your new habits are ready.", false)
+                                report(s.shImported, false)
                             },
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text("Import")
+                            Text(s.shImport)
                         }
                         TextButton(
                             onClick = {
@@ -416,7 +422,7 @@ fun ShareHabitsSheet(
                             },
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text("Cancel")
+                            Text(s.shCancel)
                         }
                     }
                 }
@@ -424,8 +430,7 @@ fun ShareHabitsSheet(
 
             Spacer(Modifier.height(16.dp))
             Text(
-                "Imported habits keep their own alarms, repeat days and tracking tool. Your " +
-                    "existing habits are never overwritten.",
+                s.shImportNote,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
