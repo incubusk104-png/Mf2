@@ -22,7 +22,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -91,8 +90,6 @@ import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.integrations.TrackerConnections
-import com.rork.mindsetframestracker.integrations.TrackerState
-import com.rork.mindsetframestracker.integrations.TrackerProvider
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
@@ -103,7 +100,7 @@ import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
 import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
-import com.rork.mindsetframestracker.ui.components.TrackerConnectSheet
+import com.rork.mindsetframestracker.ui.components.HabitTrackerConnectHost
 import com.rork.mindsetframestracker.ui.components.AlarmOccurrenceDetailDialog
 import com.rork.mindsetframestracker.ui.components.HabitAlarmOverviewSection
 import com.rork.mindsetframestracker.ui.components.HabitPickerGrid
@@ -160,13 +157,19 @@ fun HabitsScreen(
     // ── Tracker connect pop-up ────────────────────────────────────────────────
     // "add a pop-up that lets the user connect external fitness trackers —
     // Strava, Google Health (Health Connect) and Polar". One sheet, all three,
-    // with each provider's real state, reachable from the Habits header — where
-    // a user who wants their walking tracked is already looking.
+    // with each provider's real state. What changed is WHERE it is opened from:
+    // this used to be reachable from the Habits header, a separate position
+    // beside the list, and it is now opened from inside a habit's own dialog —
+    // so connecting belongs to the habit it will track rather than sitting
+    // next to the list as a feature of its own.
     var showTrackerSheet by remember { mutableStateOf(false) }
-    // The provider currently mid-connect, so its row can show progress instead of
-    // looking like the tap was ignored (the OAuth path resolves a client id over
-    // the network before it can open the browser).
-    var trackerBusyProvider by remember { mutableStateOf<TrackerProvider?>(null) }
+    /**
+     * The habit whose dialog opened the connect sheet, so the sheet can name it.
+     *
+     * Null while no dialog has opened it, which is also the honest label for a
+     * connect flow that is not scoped to one habit.
+     */
+    var trackerSheetHabitLabel by remember { mutableStateOf<String?>(null) }
 
     // Screen-time habit flow: privacy consent → app + limit picker → add.
     var showScreenTimeConsent by remember { mutableStateOf(false) }
@@ -336,20 +339,6 @@ fun HabitsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
-                    // A plain entry point to the pop-up, so connecting a tracker
-                    // does not require knowing it lives under Settings.
-                    TextButton(
-                        onClick = { showTrackerSheet = true },
-                        modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.FavoriteBorder,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Connect fitness trackers")
-                    }
                 }
             },
             onIconTapped = { icon ->
@@ -449,10 +438,14 @@ fun HabitsScreen(
                     }
                 }
             },
-            // Opens the same connect pop-up the Habits screen's tracker button
-            // opens, so the dialog's provider rows are a real entry point rather
-            // than a status list with nowhere to go.
-            onOpenTracker = { showTrackerSheet = true },
+            // Opens the connect-fitness flow for THIS habit, from the rows
+            // above. The label travels with it so the sheet reads as this
+            // habit's connection rather than a global setting the user
+            // wandered into.
+            onOpenTracker = {
+                trackerSheetHabitLabel = icon.label
+                showTrackerSheet = true
+            },
             trackerStatuses = allTrackerStatuses,
             onDismiss = {
                 alarmPickerIcon = null
@@ -660,87 +653,21 @@ fun HabitsScreen(
         )
     }
 
-    // ── Tracker connect pop-up ───────────────────────────────────────────────
+    // ── Tracker connect pop-up ─────────────────────────────────────────────
+    // The flow itself — consent gate, tier gate, in-flight spinner, provider
+    // rows — lives in [HabitTrackerConnectHost] so every habit dialog opens the
+    // same one. Re-implementing that ordering per caller is how the flow's
+    // earlier defects got in, so this surface only decides *which habit* it is
+    // for and hands over.
     if (showTrackerSheet) {
-        val trackerStatuses = allTrackerStatuses
-        val connectedWithAuto = trackerStatuses.filter { it.isConnected }
-        // One switch for the whole set: on means every connected provider sweeps
-        // into the activity habits on app open. Presented as a single decision
-        // because that is how the user thinks about it — they connected a tracker
-        // *so that* the habit keeps itself up to date.
-        val autoTrackOn = connectedWithAuto.isNotEmpty() && connectedWithAuto.all { it.autoSync }
-        val trackerMessage by viewModel.stravaMessage.collectAsStateWithLifecycle()
-
-        // Clears the in-flight spinner on whichever happens first: a provider's
-        // connected state actually changing, or a status message arriving. Either
-        // means the attempt has resolved, so the row can never spin forever.
-        LaunchedEffect(
-            data.settings.healthConnectConnected,
-            data.settings.polarAccessToken,
-            data.settings.stravaRefreshToken,
-            trackerMessage,
-        ) {
-            trackerBusyProvider = null
-        }
-
-        TrackerConnectSheet(
-            statuses = trackerStatuses,
-            autoTrack = autoTrackOn,
-            busyProvider = trackerBusyProvider,
-            message = trackerMessage,
-            onAutoTrackChange = { enabled ->
-                // Applies to every CONNECTED provider: turning this off must
-                // actually stop the syncing, and a provider that isn't connected
-                // has nothing to switch.
-                connectedWithAuto.forEach { status ->
-                    when (status.provider) {
-                        TrackerProvider.HEALTH_CONNECT -> viewModel.setHealthConnectAutoSync(enabled)
-                        TrackerProvider.POLAR -> viewModel.setPolarAutoSync(enabled)
-                        TrackerProvider.STRAVA -> viewModel.setStravaAutoSync(enabled)
-                    }
-                }
+        HabitTrackerConnectHost(
+            viewModel = viewModel,
+            statuses = allTrackerStatuses,
+            habitLabel = trackerSheetHabitLabel,
+            onDismiss = {
+                showTrackerSheet = false
+                trackerSheetHabitLabel = null
             },
-            onConnect = { provider ->
-                // Screenshot defect 4: the tier-locked row was DRAWN as locked
-                // (lock icon, "Upgrade" label) and `isActionable` includes LOCKED
-                // — but this handler branched straight on the provider and ran
-                // the real OAuth flow for Strava regardless. So the lock icon and
-                // the "Upgrade" label were decoration: tapping them opened
-                // Strava's authorisation page for a feature the account had not
-                // paid for. The locked state now routes to the upgrade sheet, so
-                // the label and the behaviour finally agree.
-                if (trackerStatuses.firstOrNull { it.provider == provider }?.state == TrackerState.LOCKED) {
-                    showTrackerSheet = false
-                    showPremiumSheet = true
-                } else {
-                    trackerBusyProvider = provider
-                    when (provider) {
-                        // Privacy consent first — before the OAuth page or the system
-                        // permission dialog opens. Required by AppGallery review and
-                        // GDPR Art. 13, and it is also just the honest order.
-                        TrackerProvider.HEALTH_CONNECT -> {
-                            pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
-                            pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
-                        }
-                        TrackerProvider.POLAR -> {
-                            pendingSourceConsent = IntegrationConsent.POLAR
-                            pendingSourceAction = { viewModel.connectPolar() }
-                        }
-                        TrackerProvider.STRAVA -> {
-                            pendingSourceConsent = IntegrationConsent.STRAVA
-                            pendingSourceAction = { viewModel.connectStrava() }
-                        }
-                    }
-                }
-            },
-            onDisconnect = { provider ->
-                when (provider) {
-                    TrackerProvider.HEALTH_CONNECT -> viewModel.disconnectHealthConnect()
-                    TrackerProvider.POLAR -> viewModel.disconnectPolar()
-                    TrackerProvider.STRAVA -> viewModel.disconnectStrava()
-                }
-            },
-            onDismiss = { showTrackerSheet = false },
         )
     }
 

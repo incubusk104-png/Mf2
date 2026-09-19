@@ -130,6 +130,65 @@ internal fun HabitActivityToolsRow(
 
         // One row per provider that can actually supply this habit, so a
         // connected-but-irrelevant tracker is never advertised as if it could.
+        // Rendered through the same composable the tap-to-track sheet uses, so
+        // the two surfaces cannot describe one provider differently.
+        trackerProviders.forEach { provider ->
+            TrackerToolRow(
+                provider = provider,
+                status = statusByProvider[provider],
+                onOpen = onOpenTracker,
+            )
+        }
+    }
+}
+
+/**
+ * The tracker connections for one habit, as a titled group.
+ *
+ * ## Why this exists separately from [HabitActivityToolsRow]
+ *
+ * Two habit dialogs show a habit's trackers and they hold different things. The
+ * alarm editor holds a whole `Habit`; the tap-to-track and alarm-ring sheet only
+ * ever had the habit's *parts*. [HabitActivityToolsRow] needs a tracking mode to
+ * name the tool alongside the trackers, which the alarm editor has but the ring
+ * sheet would have to fabricate — and inventing a mode to satisfy a display
+ * component is how a row ends up describing a tool that will not run.
+ *
+ * Showing nothing was the alternative, and it is what made the user's request
+ * impossible: after the alarm rang, the dialog they landed on offered no way to
+ * connect the fitness app that could record the walk. This is the piece that
+ * makes "the connect action is available in the dialog the alarm leads to"
+ * true rather than aspirational.
+ *
+ * ## Why it is not called "connect button"
+ *
+ * It renders one row per provider that can actually supply this habit, with each
+ * provider's real state, so a connected-but-irrelevant tracker is never
+ * advertised as if it could record the habit in front of the user. The rows come
+ * from [TrackerConnections.sourcesFor], the same source the habits overview and
+ * the connect sweep use, so "this habit can be tracked by Strava" cannot be true
+ * on one surface and false on another.
+ *
+ * Renders nothing when no provider can supply the habit, so a plain checkbox
+ * habit's dialog is not padded with an empty heading.
+ */
+@Composable
+internal fun SectionTrackerRows(
+    trackerProviders: List<TrackerProvider>,
+    /**
+     * Opens the connect/disconnect flow. Null renders the rows as plain, honest
+     * status lines rather than buttons that would silently do nothing.
+     */
+    onOpenTracker: (() -> Unit)? = null,
+    /** Each provider's real state, so a row never offers a connect that cannot succeed. */
+    trackerStatuses: List<TrackerStatus> = emptyList(),
+) {
+    if (trackerProviders.isEmpty()) return
+    val s = appStrings()
+    val statusByProvider = trackerStatuses.associateBy { it.provider }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = s.habitToolsTitle, style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(6.dp))
         trackerProviders.forEach { provider ->
             TrackerToolRow(
                 provider = provider,

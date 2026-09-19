@@ -70,6 +70,16 @@ import com.rork.mindsetframestracker.integrations.TrackerStatus
 @Composable
 fun TrackerConnectSheet(
     statuses: List<TrackerStatus>,
+    /**
+     * The habit this connection is being set up for, so the sheet names it.
+     *
+     * Null or blank keeps the generic wording. Passed in rather than read from
+     * some global "current habit" because a tracker link is only meaningful
+     * *relative to a habit*: the sheet is opened from a habit's own dialog, and
+     * naming that habit is what stops "Connect fitness trackers" from reading as
+     * a separate feature the user wandered into by accident.
+     */
+    habitLabel: String? = null,
     autoTrack: Boolean,
     /** The provider currently mid-connect, so its row can show progress. */
     busyProvider: TrackerProvider? = null,
@@ -92,7 +102,13 @@ fun TrackerConnectSheet(
                 .verticalScroll(rememberScrollState()),
         ) {
             Text(
-                "Connect fitness trackers",
+                // Scoped to the habit whose dialog opened this, so the sheet reads
+                // as that habit's connection rather than a global setting.
+                text = if (habitLabel.isNullOrBlank()) {
+                    "Connect fitness trackers"
+                } else {
+                    "Connect fitness trackers for $habitLabel"
+                },
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )

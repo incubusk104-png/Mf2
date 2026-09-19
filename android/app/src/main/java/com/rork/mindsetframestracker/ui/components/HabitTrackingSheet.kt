@@ -58,6 +58,7 @@ import com.rork.mindsetframestracker.data.TIMER_PRESET_MINUTES
 import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.data.formatTimerDuration
 import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.TrackerStatus
 import com.rork.mindsetframestracker.ui.appStrings
 
 /**
@@ -153,6 +154,35 @@ fun HabitTrackingSheet(
      * there is no setup left to describe.
      */
     alarmSetup: HabitAlarmSetup? = null,
+    /**
+     * Opens the connect-fitness flow for THIS habit, from inside this dialog.
+     *
+     * The connect control used to be a global row at the top of the habits list
+     * — a separate position, which is what the request objected to. It now lives
+     * here, in the habit's own dialog, so opening a habit ("walk") offers the
+     * connections that can actually supply it.
+     *
+     * ## Why this sheet has to carry it, and not only the alarm editor
+     *
+     * This is the dialog the user lands on **after the alarm fires and notifies
+     * them** — the ring host and the tap-to-track path both open it. If the
+     * connect action existed only in the alarm editor, the one moment the user is
+     * most likely to want it (the alarm just told them to walk) would be the one
+     * moment it was missing. Carrying it here is what makes the alarm flow lead
+     * into the connection rather than merely precede it.
+     *
+     * Null (the default) leaves the section out entirely, so a caller with no
+     * tracker host renders nothing rather than buttons that do nothing.
+     */
+    onOpenTracker: (() -> Unit)? = null,
+    /**
+     * Each provider's resolved state, so a row can honestly say "Connected" or
+     * show a padlock instead of offering a connect that cannot succeed.
+     *
+     * Empty means the caller has not resolved them; the rows then name the
+     * providers without claiming a state.
+     */
+    trackerStatuses: List<TrackerStatus> = emptyList(),
 ) {
     val s = appStrings()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -272,6 +302,28 @@ fun HabitTrackingSheet(
                 detailSlot?.let { slot ->
                     AlarmOccurrenceDetailDialog(slot = slot, onDismiss = { detailSlot = null })
                 }
+            }
+
+            // ── Connect the fitness apps that can record this habit ───────────
+            // Inside the habit's own dialog, and deliberately outside the block
+            // above so it is shown even for a habit with no alarm configured —
+            // "connect Strava so my walks count" is a thing to do whether or
+            // not a reminder rings. Only rendered when a provider can actually
+            // supply this habit, so a journal entry is not offered Strava.
+            //
+            // Placed here rather than beside the tracking controls on purpose:
+            // the input above is how the user records the habit *now*, and the
+            // trackers below are how the habit records *itself*. Keeping them
+            // visually separate is what stops the connect row from reading as
+            // one more way to complete the habit.
+            val trackerProviders = TrackerConnections.sourcesFor(habitIconId)
+            if (trackerProviders.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                SectionTrackerRows(
+                    trackerProviders = trackerProviders,
+                    onOpenTracker = onOpenTracker,
+                    trackerStatuses = trackerStatuses,
+                )
             }
 
             if (recentLogs.isNotEmpty()) {

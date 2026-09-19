@@ -124,6 +124,9 @@ import com.rork.mindsetframestracker.data.trackingTargetSecondsOrDefault
 import com.rork.mindsetframestracker.data.trackingUnitOrDefault
 import com.rork.mindsetframestracker.notifications.TimerController
 import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
+import com.rork.mindsetframestracker.ui.components.HabitTrackerConnectHost
+import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.BadgeTier
 import com.rork.mindsetframestracker.data.completedCountOn
@@ -209,6 +212,29 @@ fun HomeScreen(
     // all this holds is which habit was tapped — never the shape of the form.
     // A walk and a journal entry open the same sheet and see different tools.
     var trackingHabitId by remember { mutableStateOf<String?>(null) }
+    /**
+     * Whether the connect-fitness flow is open over the tracking sheet.
+     *
+     * Opened from the tracker rows *inside* the habit dialog (see
+     * [com.rork.mindsetframestracker.ui.components.HabitTrackerConnectHost]), not
+     * from a global position — the connect control now belongs to the habit whose
+     * dialog it was opened from.
+     */
+    var showTrackerConnect by remember { mutableStateOf(false) }
+
+    // ── Each provider's resolved state, for the habit dialog's tracker rows ──
+    // Resolved once per real change so a row can honestly read "Connected" or
+    // show a padlock. Keyed on exactly the inputs `TrackerConnections.statuses`
+    // reads, so an unrelated recomposition does not re-resolve — which would
+    // make the rows flicker — while a genuine connect or permission grant is
+    // reflected.
+    val currentTier = data.settings.subscriptionTier()
+    val trackerStatuses = remember(
+        data.settings.healthConnectConnected,
+        data.settings.polarAccessToken,
+        data.settings.stravaRefreshToken,
+        currentTier,
+    ) { TrackerConnections.statuses(context, data.settings, currentTier) }
 
     // Resolved from the state on every frame rather than captured when the tap
     // happened, so an edit or a sync that lands while the sheet is open is
@@ -234,6 +260,12 @@ fun HomeScreen(
             // entry. `of` returns null only if the habit vanished mid-frame.
             alarmSlots = HabitAlarmHistory.daySlots(data, trackingHabit.id),
             alarmSetup = HabitAlarmSetup.of(trackingHabit),
+            // The connections that can record THIS habit, inside this dialog. The
+            // rows come from the habit's own icon, so a journal entry is never
+            // offered Strava. Dismissing the sheet closes the connect flow with
+            // it, so the layering cannot outlive the dialog it belongs to.
+            onOpenTracker = { showTrackerConnect = true },
+            trackerStatuses = trackerStatuses,
             onRecord = { title, note, durationSeconds, count ->
                 // One write path for every mode: the record's shape is decided
                 // by the habit's mode inside the ViewModel, and the check-in is
@@ -268,6 +300,15 @@ fun HomeScreen(
             },
             onDismiss = { trackingHabitId = null },
         )
+
+        if (showTrackerConnect) {
+            HabitTrackerConnectHost(
+                viewModel = viewModel,
+                statuses = trackerStatuses,
+                habitLabel = trackingHabit.name,
+                onDismiss = { showTrackerConnect = false },
+            )
+        }
     }
 
     // Huawei IAP resolves through Activity.startActivityForResult, handled in

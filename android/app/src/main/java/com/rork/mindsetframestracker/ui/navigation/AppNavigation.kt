@@ -92,6 +92,9 @@ import com.rork.mindsetframestracker.ui.screens.SettingsScreen
 import com.rork.mindsetframestracker.ui.screens.SplashScreen
 import com.rork.mindsetframestracker.ui.screens.TimerScreen
 import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
+import com.rork.mindsetframestracker.ui.components.HabitTrackerConnectHost
+import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
 import com.rork.mindsetframestracker.util.rememberIsOnline
@@ -287,6 +290,25 @@ private fun HabitTimerOptionsHost(
     // I/O to the ring path — the sheet's own recent-logs section renders it.
     val appData by viewModel.state.collectAsStateWithLifecycle()
 
+    // ── The connect-fitness flow, hosted here too ───────────────────────
+    // This is the dialog the user lands on right after the alarm notifies them,
+    // so the connection belongs here as much as in the alarm editor: the ring
+    // says "go for your walk" and this is where they can connect Strava or
+    // Health Connect so the walk records itself. Leaving it out of this sheet
+    // is what made the connect control feel like a separate feature.
+    //
+    // The host layers ABOVE this sheet rather than replacing it, so dismissing
+    // the connect flow returns the user to the ring dialog they came from —
+    // which is where they now want to be, since connecting was in service of
+    // recording the habit that just rang.
+    var showTrackerConnect by remember { mutableStateOf(false) }
+    val settings = appData.settings
+    val trackerStatuses = remember(
+        settings.healthConnectConnected,
+        settings.polarAccessToken,
+        settings.stravaRefreshToken,
+    ) { TrackerConnections.statuses(context, settings, settings.subscriptionTier()) }
+
     HabitTrackingSheet(
         habitName = name,
         habitIconId = habit?.iconId ?: pending.iconId,
@@ -302,6 +324,12 @@ private fun HabitTimerOptionsHost(
         // configuration to describe.
         alarmSlots = HabitAlarmHistory.daySlots(appData, pending.habitId),
         alarmSetup = habit?.let { HabitAlarmSetup.of(it) },
+        // The habit's relevant tracker connections, reachable from the dialog the
+        // alarm just sent the user to. Always non-null here: this sheet only
+        // exists while `request` is set, so there is no "already dismissed" state
+        // to guard against.
+        onOpenTracker = { showTrackerConnect = true },
+        trackerStatuses = trackerStatuses,
         onRecord = { title, note, durationSeconds, count ->
             // Recorded through the single tracking entry point, so the ring
             // writes the same payload (and the same [HabitLogEntry]) the
@@ -353,6 +381,15 @@ private fun HabitTimerOptionsHost(
             minimizeNonce++
         },
     )
+
+    if (showTrackerConnect) {
+        HabitTrackerConnectHost(
+            viewModel = viewModel,
+            statuses = trackerStatuses,
+            habitLabel = name,
+            onDismiss = { showTrackerConnect = false },
+        )
+    }
 }
 
 /**
