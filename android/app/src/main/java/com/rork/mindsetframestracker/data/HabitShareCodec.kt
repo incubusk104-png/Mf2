@@ -180,6 +180,25 @@ object HabitShareCodec {
     data class ImportPlan(
         /** Habits that will be added, with ids already remapped. */
         val newHabits: List<HabitExportEntry>,
+        /**
+         * Habits already present and identical — skipped as *habits*, but their
+         * history is still merged.
+         *
+         * ## Why the entries are kept rather than just their names (D4)
+         *
+         * This list used to be `List<String>` of names, and `applyImport`
+         * iterated only `newHabits` — so a habit that already existed had its
+         * incoming history **discarded entirely**, even when the sender had
+         * days and records this device had never seen. `applyImport`'s own
+         * comment claimed it merged them ("Existing duplicate habits may still
+         * carry history the sender has and we don't"), but the data had been
+         * dropped one step earlier, so the claim was unreachable code.
+         *
+         * That is the D4 symptom: a shared habit arrives with its records present
+         * in the file and absent on the receiving device, unattributable to
+         * anything. Keeping the entry means the history has somewhere to land.
+         */
+        val duplicateEntryHabits: List<HabitExportEntry>,
         /** Habits already present and identical - skipped. */
         val duplicateHabits: List<String>,
         /** Habits whose id collided with a *different* habit; renamed on import. */
@@ -222,6 +241,7 @@ object HabitShareCodec {
     fun planImport(existing: AppData, payload: SharePayload): ImportPlan {
         val existingById = existing.habits.associateBy { it.id }
         val newHabits = ArrayList<HabitExportEntry>()
+        val duplicateEntries = ArrayList<HabitExportEntry>()
         val duplicates = ArrayList<String>()
         val renamed = ArrayList<Pair<String, String>>()
         var newCheckIns = 0
@@ -251,6 +271,8 @@ object HabitShareCodec {
 
             if (clash != null && isSameHabit(clash, incoming)) {
                 duplicates += incoming.name
+                // D4: kept so its history can still be merged in `applyImport`.
+                duplicateEntries += remapped
             } else {
                 newHabits += remapped
             }
@@ -276,6 +298,7 @@ object HabitShareCodec {
 
         return ImportPlan(
             newHabits = newHabits,
+            duplicateEntryHabits = duplicateEntries,
             duplicateHabits = duplicates,
             renamedHabits = renamed,
             newCheckIns = newCheckIns,
@@ -301,35 +324,59 @@ object HabitShareCodec {
         val reflections = existing.reflections.toMutableMap()
 
         plan.newHabits.forEach { entry ->
-            val id = entry.habit.id
-            val days = checkIns.getOrPut(id) { ArrayList() }.toMutableList()
-            entry.checkIns.forEach { if (it !in days) days += it }
-            checkIns[id] = days.sorted()
-
-            val knownLogIds = logs.map { it.id }.toSet()
-            entry.logs.forEach { if (it.id !in knownLogIds) logs += it }
-
-            val knownEventKeys = alarms.filter { it.habitId == id }.map { it.eventKey }.toSet()
-            entry.alarmEvents.forEach { if (it.eventKey !in knownEventKeys) alarms += it }
-
-            val knownActivityIds = activity.map { it.id }.toSet()
-            entry.activity.forEach { if (it.id !in knownActivityIds) activity += it }
-
-            entry.reflections.forEach { (day, text) -> reflections.putIfAbsent(day, text) }
+            mergeEntryHistory(entry, checkIns, logs, alarms, activity, reflections)
         }
 
-        // Existing duplicate habits may still carry history the sender has and
-        // we don't; merge that too, or a re-share from a more active device would
-        // silently contribute nothing.
-        val reimportedIds = plan.newHabits.map { it.habit.id }.toSet()
+        // D4: a habit that already existed still contributes its history. This is
+        // the half that was unreachable before — the entries had been dropped by
+        // `planImport`, so a re-share from a more active device added nothing.
+        // Same merge, same id (a duplicate keeps the existing habit's id), so a
+        // record already present is a no-op rather than a duplicate.
+        plan.duplicateEntryHabits.forEach { entry ->
+            mergeEntryHistory(entry, checkIns, logs, alarms, activity, reflections)
+        }
+
+        val knownHabitIds = habits.map { it.id }.toSet()
         return existing.copy(
             habits = habits,
             checkIns = checkIns,
             habitLogs = logs,
-            alarmEvents = alarms.filter { it.habitId in habits.map { h -> h.id }.toSet() || it.habitId in reimportedIds },
+            alarmEvents = alarms.filter { it.habitId in knownHabitIds },
             activityRecords = activity,
             reflections = reflections,
         )
+    }
+
+    /**
+     * Merges one imported entry's history into the accumulators, by natural key.
+     *
+     * Extracted so the "new habit" and "already had this habit" paths cannot
+     * merge differently — the whole point of D4 is that the second path used to
+     * not merge at all.
+     */
+    private fun mergeEntryHistory(
+        entry: HabitExportEntry,
+        checkIns: MutableMap<String, List<String>>,
+        logs: MutableList<HabitLogEntry>,
+        alarms: MutableList<HabitAlarmEvent>,
+        activity: MutableList<ActivityRecord>,
+        reflections: MutableMap<String, String>,
+    ) {
+        val id = entry.habit.id
+        val days = checkIns.getOrPut(id) { emptyList() }.toMutableList()
+        entry.checkIns.forEach { if (it !in days) days += it }
+        checkIns[id] = days.sorted()
+
+        val knownLogIds = logs.map { it.id }.toSet()
+        entry.logs.forEach { if (it.id !in knownLogIds) logs += it }
+
+        val knownEventKeys = alarms.filter { it.habitId == id }.map { it.eventKey }.toSet()
+        entry.alarmEvents.forEach { if (it.eventKey !in knownEventKeys) alarms += it }
+
+        val knownActivityIds = activity.map { it.id }.toSet()
+        entry.activity.forEach { if (it.id !in knownActivityIds) activity += it }
+
+        entry.reflections.forEach { (day, text) -> reflections.putIfAbsent(day, text) }
     }
 
     /**

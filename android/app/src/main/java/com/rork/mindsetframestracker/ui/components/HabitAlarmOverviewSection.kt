@@ -86,6 +86,14 @@ internal fun HabitAlarmOverviewSection(
     plan: HabitAlarmSetup?,
     /** Providers able to track this habit, for the "what's inside" summary. */
     trackerProviders: List<TrackerProvider> = emptyList(),
+    /**
+     * Jumps to the tracker connect pop-up from the "what's inside" summary.
+     *
+     * The summary names the providers that can supply this habit; without this
+     * the name is a fact the user cannot act on from where they are reading it.
+     * Null (no host) renders the line as plain text.
+     */
+    onOpenTracker: (() -> Unit)? = null,
     onSelect: (AlarmDaySlot) -> Unit,
 ) {
     val s = appStrings()
@@ -145,7 +153,11 @@ internal fun HabitAlarmOverviewSection(
         // happened today, this says what the habit is configured to do.
         if (plan != null) {
             Spacer(Modifier.height(12.dp))
-            HabitSetupSummary(plan = plan, trackerProviders = trackerProviders)
+            HabitSetupSummary(
+                plan = plan,
+                trackerProviders = trackerProviders,
+                onOpenTracker = onOpenTracker,
+            )
         }
     }
 }
@@ -162,6 +174,7 @@ internal fun HabitAlarmOverviewSection(
 private fun HabitSetupSummary(
     plan: HabitAlarmSetup,
     trackerProviders: List<TrackerProvider>,
+    onOpenTracker: (() -> Unit)? = null,
 ) {
     val s = appStrings()
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -201,6 +214,7 @@ private fun HabitSetupSummary(
             OverviewFact(
                 label = s.habitSetupTracker,
                 value = trackerProviders.joinToString(", ") { it.label },
+                onClick = onOpenTracker,
             )
         }
     }
@@ -208,8 +222,12 @@ private fun HabitSetupSummary(
 
 /** A label/value pair in the habit-today overview. */
 @Composable
-private fun OverviewFact(label: String, value: String) {
-    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+private fun OverviewFact(label: String, value: String, onClick: (() -> Unit)? = null) {
+    Column(
+        modifier = Modifier
+            .padding(bottom = 8.dp)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,

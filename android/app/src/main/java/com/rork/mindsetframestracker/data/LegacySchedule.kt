@@ -77,10 +77,81 @@ fun legacyAlarmTimes(alarmTimes: List<Int>?, reminderMinutes: Int?): List<Int> {
  * habit that genuinely has 07:00/12:00/18:00 restores all three, and a project
  * that predates the column still restores its single legacy time.
  */
-fun restoredAlarmTimes(cloudAlarmTimes: List<Int>?, cloudReminderMinutes: Int?): List<Int> {
+fun restoredAlarmTimes(cloudAlarmTimes: List<Int>?, cloudReminderMinutes: Int?): List<Int> =
+    restoredSchedule(cloudAlarmTimes, cloudReminderMinutes).times
+
+/**
+ * A restored schedule together with whether the row that produced it was
+ * structurally valid.
+ *
+ * The flag is the point. A row violating the invariant is **evidence of a
+ * writer bug**, and the previous behaviour — silently reading it as "no alarm"
+ * — destroyed the evidence along with the data. This keeps the schedule and
+ * reports the breach, so the caller can log and surface it while the user's
+ * alarms survive.
+ */
+data class RestoredSchedule(
+    val times: List<Int>,
+    /**
+     * True when the cloud row had a non-empty `alarm_times` alongside a null
+     * `reminder_minutes`, which no writer in this app can produce.
+     */
+    val inconsistent: Boolean,
+)
+
+/**
+ * The schedule to use when **restoring** a habit from the cloud.
+ *
+ * ## Why the plain [legacyAlarmTimes] rule is not enough on the restore path
+ *
+ * Everywhere else the two columns are written together, so "a non-empty
+ * `alarm_times` wins outright" holds. The cloud is the one place where they can
+ * land at *different times*, and that was a second way a removed alarm came
+ * back:
+ *
+ *  1. A habit has 21:00. The row is written with `alarm_times = [1260]` and
+ *     `reminder_minutes = 1260`.
+ *  2. The user removes the alarm. Locally that is `alarmTimes = []` and
+ *     `reminderMinutes = null`.
+ *  3. The push sends both — but the live project never had the `alarm_times`
+ *     migration applied (`PGRST204`), so that field is dropped from the payload
+ *     while `reminder_minutes = null` lands. See the dropped-column handling in
+ *     `SupabaseSync.upsert`.
+ *  4. The cloud row is now **inconsistent**: `alarm_times = [1260]` (stale) with
+ *     `reminder_minutes = NULL` (fresh).
+ *
+ * ## Why this no longer "repairs" the row by clearing the schedule
+ *
+ * The first fix for that case treated the pair as "the user cleared the alarm"
+ * and returned an empty schedule. That was wrong in two ways, and the second is
+ * worse than the first:
+ *
+ *  - **It cannot distinguish the two readings.** ``alarm_times=[1260],
+ *    reminder_minutes=null`` is either "a stale list plus a cleared alarm" or "a
+ *    real 21:00 alarm whose mirrored column was written null by the dropped-field
+ *    path". Nothing in the row says which. Choosing "no alarm" picks the reading
+ *    that loses the user's data.
+ *  - **It defends against an input the writer makes impossible.** The invariant
+ *    `alarm_times.firstOrNull() == reminder_minutes` holds in both directions
+ *    (see `Habit.withAlarmTimes` and the `legacyAlarmTimes` writer), so a row that
+ *    breaks it is not a normal state to normalise — it is a bug report. Quietly
+ *    emptying the schedule deleted every alarm on that habit with no message,
+ *    which is precisely the "my alarm vanished / my alarm came back" symptom
+ *    this whole path was meant to end.
+ *
+ * So the schedule is **preserved** and the breach is reported via
+ * [RestoredSchedule.inconsistent], which the sync layer logs and surfaces. A row
+ * that *is* consistent goes through [legacyAlarmTimes] unchanged, so a habit with
+ * a genuine 07:00/12:00/18:00 restores all three, and a project that predates the
+ * column still restores its single legacy time.
+ */
+fun restoredSchedule(
+    cloudAlarmTimes: List<Int>?,
+    cloudReminderMinutes: Int?,
+): RestoredSchedule {
     val times = cloudAlarmTimes.orEmpty()
-    // Inconsistent row: a schedule the client never confirmed, with the column
-    // that did land saying "no alarm". Trust the one that landed.
-    if (times.isNotEmpty() && cloudReminderMinutes == null) return emptyList()
-    return legacyAlarmTimes(times, cloudReminderMinutes)
+    return RestoredSchedule(
+        times = legacyAlarmTimes(times, cloudReminderMinutes),
+        inconsistent = times.isNotEmpty() && cloudReminderMinutes == null,
+    )
 }

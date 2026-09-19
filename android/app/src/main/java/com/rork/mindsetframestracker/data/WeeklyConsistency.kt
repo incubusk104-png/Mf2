@@ -20,20 +20,50 @@ data class HabitWeekConsistency(
     val habitName: String,
     /** The seven day keys, oldest first, ending on the week's last day. */
     val dayKeys: List<String>,
-    /** The subset of [dayKeys] this habit was checked on. */
+    /**
+     * The subset of [dayKeys] this habit's schedule actually asked for.
+     *
+     * ## Why the denominator is not just `dayKeys`
+     *
+     * A habit that rings Monday–Friday was never due on a Sunday, so counting
+     * that Sunday against it is not a measurement of anything the user chose.
+     * Dividing by the full window meant a weekday habit's best possible reading
+     * was "5 of 7 days" — it could never be perfect, was permanently listed in
+     * [WeeklyConsistency.needsAttention], and the surfaced number contradicted
+     * the repeat rule the user had just set in the alarm picker.
+     *
+     * The helper that fixes this (`HabitRepeat.allows`, via
+     * `Habit.dueDayKeysIn`) already existed and was unused — this is that wire.
+     *
+     * Equal to [dayKeys] for a habit with no repeating schedule, so those habits
+     * keep the previous reading rather than becoming a degenerate "0 of 0".
+     */
+    val dueDayKeys: List<String>,
+    /** The subset of [dueDayKeys] this habit was checked on. */
     val doneKeys: Set<String>,
-    /** The subset of [dayKeys] with at least one sourced activity record. */
+    /** The subset of [dueDayKeys] with at least one sourced activity record. */
     val sourcedKeys: Set<String>,
 ) {
-    /** 0.0 – 1.0 share of the week completed. 0.0 for an empty window. */
+    /**
+     * 0.0 – 1.0 share of the **due** days completed. 0.0 for an empty window.
+     *
+     * `doneKeys` is already clipped to the due days, so this cannot exceed 1.0
+     * even if a check-in somehow lands on a day the schedule excludes — that
+     * would otherwise be a ratio above 1, which every consumer of this value
+     * (a bar, a percentage) would render as nonsense.
+     */
     val ratio: Double
-        get() = if (dayKeys.isEmpty()) 0.0 else doneKeys.size.toDouble() / dayKeys.size
+        get() = if (dueDayKeys.isEmpty()) 0.0 else doneKeys.size.toDouble() / dueDayKeys.size
 
-    /** "5 of 7 days". */
-    val label: String get() = "${doneKeys.size} of ${dayKeys.size} days"
+    /**
+     * "5 of 5 days" for a weekday habit, "3 of 7 days" for a daily one — the
+     * denominator names the days the habit was due, so the figure is a fair
+     * reading of the user's own schedule.
+     */
+    val label: String get() = "${doneKeys.size} of ${dueDayKeys.size} days"
 
-    /** True when every day in the window was completed. */
-    val isPerfect: Boolean get() = dayKeys.isNotEmpty() && doneKeys.size == dayKeys.size
+    /** True when every day the habit was **due** was completed. */
+    val isPerfect: Boolean get() = dueDayKeys.isNotEmpty() && doneKeys.size == dueDayKeys.size
 
     /** How many of the completions a tracker supplied rather than a manual tap. */
     val sourcedCount: Int get() = doneKeys.count { it in sourcedKeys }
@@ -86,12 +116,21 @@ fun AppData.weeklyConsistency(days: List<String>): WeeklyConsistency {
         .mapValues { (_, records) -> records.map { it.dayKey() }.toSet() }
 
     val rows = habits.map { habit ->
+        // The days this habit was due, from its own repeat mask. Everything the
+        // row reports is then measured against that, so a weekday habit reads
+        // "5 of 5" rather than being marked down for a Sunday it never wanted.
+        val due = habit.dueDayKeysIn(days)
+        val dueSet = due.toSet()
         HabitWeekConsistency(
             habitId = habit.id,
             habitName = habit.name,
             dayKeys = days,
-            doneKeys = checkIns[habit.id].orEmpty().toSet().intersect(daySet),
-            sourcedKeys = sourcedByHabit[habit.id].orEmpty(),
+            dueDayKeys = due,
+            // Clipped to the due days: a check-in on a day the schedule excludes
+            // is not counted, or the ratio could exceed 1.0 and "perfect" would
+            // be reached with days to spare.
+            doneKeys = checkIns[habit.id].orEmpty().toSet().intersect(dueSet),
+            sourcedKeys = sourcedByHabit[habit.id].orEmpty().intersect(dueSet),
         )
     }
 

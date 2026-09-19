@@ -20,6 +20,7 @@ import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.integrations.StravaTokens
 import com.rork.mindsetframestracker.integrations.TrackerConnections
 import com.rork.mindsetframestracker.data.AppData
+import com.rork.mindsetframestracker.data.mergeHabitsPreferringLocal
 import com.rork.mindsetframestracker.data.CloudBackupWorker
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.BadgeTier
@@ -679,8 +680,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * had not loaded yet, a habit that arrived from a cloud pull while the
          * sheet was open — can therefore never be read as a removal, which is
          * the path that deleted habits the user never touched.
+         *
+         * The default lives in `planScreenTimeLimits` and resolves to every
+         * screen-time habit currently present, so an omitted argument means "we
+         * were not told what was shown" rather than "nothing may be removed" —
+         * the latter silently disabled every removal. Passing null keeps that
+         * resolution in the one place the rule is defined.
          */
-        removablePackages: Set<String> = emptySet(),
+        removablePackages: Set<String>? = null,
     ): Int {
         // The reconciliation is pure and lives in
         // [com.rork.mindsetframestracker.data.planScreenTimeLimits], so the rule
@@ -690,7 +697,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val plan = com.rork.mindsetframestracker.data.planScreenTimeLimits(
             current = _state.value,
             limits = limits,
-            removablePackages = removablePackages,
+            // Null means "we were not told what the user was shown", which
+            // resolves to every limit that currently exists — not to "nothing
+            // may be removed". The old `emptySet()` default silently disabled
+            // every removal for any caller that omitted the argument.
+            removablePackages = removablePackages
+                ?: _state.value.habits
+                    .filter { it.isScreenTimeHabit }
+                    .mapNotNull { it.monitoredPackage }
+                    .toSet(),
         )
 
         update { data ->
@@ -1536,8 +1551,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         update { data ->
             val localPins = data.habits.filter { it.isPinned }.map { it.id }.toSet()
-            val mergedHabits = (snapshot.habits + data.habits)
-                .distinctBy { it.id }
+            // Merged through the ONE named rule, not `distinctBy`. The inline
+            // version kept the FIRST occurrence, and this list was built
+            // cloud-first — so an unrelated background restore could silently
+            // revert a habit the user had just edited, while every other
+            // collection in this same function unions with LOCAL winning.
+            // `mergeHabitsPreferringLocal` makes that tie-break explicit and
+            // consistent; see its doc for why local is the right winner.
+            //
+            // The local side is `data` (this device's current state) and the
+            // incoming side is `snapshot` (the cloud), which is the pairing the
+            // old `snapshot.habits + data.habits` ordering inverted.
+            val mergedHabits = mergeHabitsPreferringLocal(
+                local = data.habits,
+                incoming = snapshot.habits,
+            ).habits
                 .map { habit -> if (habit.id in localPins) habit.copy(isPinned = true) else habit }
             val mergedCheckIns = (data.checkIns.keys + snapshot.checkIns.keys).associateWith { habitId ->
                 (data.checkIns[habitId].orEmpty() + snapshot.checkIns[habitId].orEmpty()).distinct()
@@ -1930,7 +1958,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * broken code rather than a paywall.
      */
     fun importSharedData(merged: AppData) {
-        update { merged }
+        // The incoming merge is applied through the SAME id-conflict rule a
+        // background restore uses, rather than trusted as a wholesale
+        // replacement. Two entry points that both call themselves "merge" must
+        // not disagree about which copy of a habit wins.
+        update { current ->
+            val habits = mergeHabitsPreferringLocal(
+                local = current.habits,
+                incoming = merged.habits,
+            ).habits
+            // Non-habit collections are unioned by id with the local entry
+            // winning, matching `restoreFromCloud`, so re-importing a code whose
+            // history has since grown cannot delete the newer local records.
+            val checkIns = merged.checkIns.keys.associateWith { habitId ->
+                (current.checkIns[habitId].orEmpty() + merged.checkIns[habitId].orEmpty()).distinct()
+            }
+            val logs = (current.habitLogs + merged.habitLogs)
+                .associateBy { it.id }
+                .values
+                .sortedBy { it.recordedAtEpochMs }
+            val activity = (current.activityRecords + merged.activityRecords)
+                .associateBy { it.id }
+                .values
+                .sortedBy { it.timestamp }
+            merged.copy(
+                habits = habits,
+                checkIns = checkIns,
+                habitLogs = logs,
+                activityRecords = activity,
+            )
+        }
         queueSync()
     }
 
@@ -2080,6 +2137,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 .distinct()
                 .map { Habit(UUID.randomUUID().toString(), it, System.currentTimeMillis()) }
             data.copy(
+                // By name here rather than id: a bulk add creates fresh ids, so
+                // the only sense in which two of them are "the same habit" is the
+                // name the user typed. Not routed through `mergeHabitsPreferring
+                // Local` because that rule is about id conflicts between devices,
+                // which cannot arise from a list built in this one call.
                 habits = (data.habits + newHabits).distinctBy { it.name },
                 moodHistory = if (mood != null) {
                     data.moodHistory + (Dates.todayKey() to mood)

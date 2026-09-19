@@ -73,7 +73,29 @@ fun planScreenTimeLimits(
      * arrived from a cloud pull while the sheet was open). Treating that
      * absence as a removal is how a save could delete a habit nobody touched.
      */
-    removablePackages: Set<String> = emptySet(),
+    /**
+     * Defaults to **every screen-time habit currently on the device** rather than
+     * to `emptySet()`.
+     *
+     * ## Why the default was the wrong kind of safe
+     *
+     * `emptySet()` made the parameter's omission fail *closed* — nothing could be
+     * removed — which correctly prevents the deletion bug this parameter exists
+     * for. But it does so by making every removal impossible, and it does it
+     * **silently**: a caller that forgot the argument would get a picker whose
+     * limits could be added and never cleared, with no error and no hint. A
+     * default that turns a whole user action into a no-op is not a safe default.
+     *
+     * Defaulting to the current packages is the honest reading of "we were not
+     * told what was shown, so assume the user was shown everything that exists".
+     * A caller that *does* know the seeded set — the picker, which captures it on
+     * open — still passes it explicitly and keeps the strict behaviour where an
+     * unseen limit can never be read as cleared.
+     */
+    removablePackages: Set<String> = current.habits
+        .filter { it.isScreenTimeHabit }
+        .mapNotNull { it.monitoredPackage }
+        .toSet(),
 ): ScreenTimePlan {
     val desired = limits.associateBy { it.packageName }
     val existingPackages = current.habits

@@ -211,6 +211,24 @@ fun HabitsScreen(
     var activityPickerIconId by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    /**
+     * Every provider's resolved state, hoisted to the screen so the habit
+     * dialog's tool rows and the connect sheet read from the **same** source.
+     * Resolving it twice would let a row say "ready" while the sheet it opens
+     * says "not available".
+     *
+     * Keyed on the three inputs `TrackerConnections.statuses` actually reads, so
+     * a state change (a new connection, a permission grant) is reflected without
+     * re-resolving on every unrelated recomposition of this screen — and so
+     * quiet recompositions cannot be mistaken for a status change, which is what
+     * would make a row flicker.
+     */
+    val allTrackerStatuses = remember(
+        data.settings.healthConnectConnected,
+        data.settings.polarAccessToken,
+        data.settings.stravaRefreshToken,
+        currentTier,
+    ) { TrackerConnections.statuses(context, data.settings, currentTier) }
 
     // Which catalog icons already have a habit (so the grid can show the check badge).
     val selectedIconIds = remember(data.habits) {
@@ -430,6 +448,11 @@ fun HabitsScreen(
                     }
                 }
             },
+            // Opens the same connect pop-up the Habits screen's tracker button
+            // opens, so the dialog's provider rows are a real entry point rather
+            // than a status list with nowhere to go.
+            onOpenTracker = { showTrackerSheet = true },
+            trackerStatuses = allTrackerStatuses,
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
@@ -638,7 +661,7 @@ fun HabitsScreen(
 
     // ── Tracker connect pop-up ───────────────────────────────────────────────
     if (showTrackerSheet) {
-        val trackerStatuses = TrackerConnections.statuses(context, data.settings, currentTier)
+        val trackerStatuses = allTrackerStatuses
         val connectedWithAuto = trackerStatuses.filter { it.isConnected }
         // One switch for the whole set: on means every connected provider sweeps
         // into the activity habits on app open. Presented as a single decision
@@ -922,6 +945,22 @@ private fun AlarmPickerDialog(
      * real one, because it *is* the host (see the sheet's `onStartTimed`).
      */
     onStartTimer: (kind: com.rork.mindsetframestracker.data.TimerKind, targetSeconds: Int) -> Unit = { _, _ -> },
+    /**
+     * Opens the tracker connect/disconnect pop-up from this dialog's tracker rows.
+     *
+     * Separate from [onStartTimer] because they are different actions on
+     * different things: one starts a local clock, the other opens a connection
+     * flow. Sharing one callback is what made a tracker row start a stopwatch,
+     * which is the bug this parameter exists to fix.
+     *
+     * Takes **no provider argument** on purpose. The connect pop-up lists all
+     * three providers and is not opened "for" a particular one, so a provider
+     * parameter would be a value every caller ignores — and the row carrying it
+     * would look like it did something provider-specific when it does not.
+     */
+    onOpenTracker: (() -> Unit)? = null,
+    /** Each provider's resolved state, so a row never offers a connect that cannot succeed. */
+    trackerStatuses: List<com.rork.mindsetframestracker.integrations.TrackerStatus> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (times: List<Int>, repeatMask: Int, alarmMessage: String) -> Unit,
 ) {
@@ -1133,6 +1172,7 @@ private fun AlarmPickerDialog(
                     // setup to describe yet.
                     plan = existingHabit?.let { HabitAlarmSetup.of(it) },
                     trackerProviders = TrackerConnections.sourcesFor(habitIconId),
+                    onOpenTracker = onOpenTracker,
                     onSelect = { detailSlot = it },
                 )
                 // ── The habit's activity tools ────────────────────────────────
@@ -1161,6 +1201,13 @@ private fun AlarmPickerDialog(
                                 setupHabit.trackingTargetSecondsOrDefault,
                             )
                         },
+                        // The fix for the reported bug: the tracker rows used to
+                        // be handed `onStartTool`, so "Strava — ready to import"
+                        // started a count-up clock instead of connecting. They now
+                        // open the connect pop-up, and carry the real statuses so a
+                        // provider this build cannot use is not drawn as tappable.
+                        onOpenTracker = onOpenTracker,
+                        trackerStatuses = trackerStatuses,
                     )
                 }
                 Spacer(Modifier.height(8.dp))

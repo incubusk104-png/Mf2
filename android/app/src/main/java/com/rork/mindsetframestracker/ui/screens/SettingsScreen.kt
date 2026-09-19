@@ -138,6 +138,7 @@ import com.rork.mindsetframestracker.data.isLanguageUnlocked
 import com.rork.mindsetframestracker.billing.Entitlements
 import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.data.hasFeatureAccess
+import com.rork.mindsetframestracker.data.cloudConfigurationWarning
 import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
@@ -664,6 +665,26 @@ fun SettingsScreen(viewModel: AppViewModel) {
         }
 
         val signedOutMessage = syncState.message
+        // D10: when no Supabase URL/key was compiled in, `available` is false and
+        // BOTH cards above are hidden — so sign-in, backup and the tracker
+        // connections vanish from Settings with no explanation at all. The user
+        // sees a working-looking app that silently never syncs, and the only
+        // mention of the missing secret was in an Actions log. This states it in
+        // the place the user is already looking.
+        if (!syncState.available) {
+            cloudConfigurationWarning(
+                supabaseUrl = com.rork.mindsetframestracker.BuildConfig.SUPABASE_URL,
+                anonKey = com.rork.mindsetframestracker.BuildConfig.SUPABASE_ANON_KEY,
+            )?.let { warning ->
+                SettingsCard(title = "Cloud sync unavailable") {
+                    Text(
+                        text = warning,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
         if (syncState.available && syncState.email == null && signedOutMessage != null) {
             AuthMessageBanner(message = signedOutMessage, isError = syncState.isError)
             LaunchedEffect(signedOutMessage) {

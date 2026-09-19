@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,10 +23,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.data.HabitTrackingMode
 import com.rork.mindsetframestracker.integrations.TrackerProvider
+import com.rork.mindsetframestracker.integrations.TrackerState
+import com.rork.mindsetframestracker.integrations.TrackerStatus
 import com.rork.mindsetframestracker.ui.appStrings
 
 /**
@@ -40,6 +45,21 @@ import com.rork.mindsetframestracker.ui.appStrings
  * describes — saw a check-in and no sign that a stopwatch was available, so the
  * feature may as well not have been there. This names the tool, its target, and
  * the single action that starts it.
+ *
+ * ## Why tracker rows no longer share the tool's action
+ *
+ * Every provider row used to be handed the **same `onClick` as the stopwatch
+ * row**, so tapping "Strava — ready to import your activity" started a count-up
+ * clock: nothing connected, and no way to connect from where the user was. The
+ * two are different actions on different objects — one starts a local clock, the
+ * other opens a connection flow — and collapsing them into one callback made the
+ * tracker line a lie about what it does. [onOpenTracker] is separate for exactly
+ * that reason, which is what makes the row's wording honest.
+ *
+ * A provider that *cannot* be connected is no longer drawn as though it could
+ * be: a tier-locked Strava shows a padlock and routes to the upgrade path rather
+ * than launching an OAuth flow the user is not entitled to, and a provider this
+ * build has no credentials for shows a warning instead of a dead button.
  *
  * ## Why it takes plain values instead of a `Habit`
  *
@@ -67,10 +87,33 @@ internal fun HabitActivityToolsRow(
     targetSeconds: Int,
     trackerProviders: List<TrackerProvider>,
     onStartTool: () -> Unit,
+    /**
+     * Opens the connect/disconnect flow.
+     *
+     * Null (the default) means this surface cannot host the flow, in which case
+     * the provider rows are rendered as plain, non-tappable status lines rather
+     * than as buttons that would silently do nothing — the failure mode the old
+     * shared callback produced.
+     *
+     * Takes no provider argument: the connect pop-up lists every provider and is
+     * not opened "for" one of them.
+     */
+    onOpenTracker: (() -> Unit)? = null,
+    /**
+     * Each provider's real state, so a row can honestly say "Not available" or
+     * show a lock instead of offering a connect that cannot succeed.
+     *
+     * Empty means the caller has no status to hand (it has not resolved them
+     * yet); the rows then name the provider without claiming a state, which is
+     * honest and still tells the user the option exists.
+     */
+    trackerStatuses: List<TrackerStatus> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val s = appStrings()
     if (trackingMode == HabitTrackingMode.CHECK && trackerProviders.isEmpty()) return
+
+    val statusByProvider = trackerStatuses.associateBy { it.provider }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(text = s.habitToolsTitle, style = MaterialTheme.typography.labelLarge)
@@ -78,6 +121,7 @@ internal fun HabitActivityToolsRow(
 
         if (trackingMode != HabitTrackingMode.CHECK) {
             CompactToolRow(
+                icon = Icons.Outlined.PlayArrow,
                 title = s.habitToolsOpen,
                 detail = toolDetailLabel(targetSeconds),
                 onClick = onStartTool,
@@ -87,13 +131,56 @@ internal fun HabitActivityToolsRow(
         // One row per provider that can actually supply this habit, so a
         // connected-but-irrelevant tracker is never advertised as if it could.
         trackerProviders.forEach { provider ->
-            CompactToolRow(
-                title = provider.label,
-                detail = s.habitToolsTrackerReady,
-                onClick = onStartTool,
+            TrackerToolRow(
+                provider = provider,
+                status = statusByProvider[provider],
+                onOpen = onOpenTracker,
             )
         }
     }
+}
+
+/**
+ * One provider's row inside a habit dialog.
+ *
+ * The state drives every visual choice, so the row cannot claim more than the
+ * connect flow will deliver: connected providers read as connected and route to
+ * the manage sheet, locked ones show a padlock, and those this build cannot use
+ * at all show a warning icon instead of a call to action.
+ */
+@Composable
+private fun TrackerToolRow(
+    provider: TrackerProvider,
+    status: TrackerStatus?,
+    onOpen: (() -> Unit)?,
+) {
+    val connected = status?.isConnected == true
+    val unavailable = status != null && !status.isActionable
+    val locked = status?.state == TrackerState.LOCKED
+
+    val detail = when {
+        status == null -> "Connect to import this habit automatically"
+        connected -> "Connected \u2014 activity imports automatically"
+        locked -> "Included with Premium"
+        unavailable -> status.detail
+        else -> "Ready to import your activity"
+    }
+
+    CompactToolRow(
+        // The provider's own mark rather than the shared play arrow, so a tracker
+        // row no longer looks identical to the stopwatch row above it.
+        icon = when {
+            locked -> Icons.Outlined.Lock
+            unavailable -> Icons.Outlined.ErrorOutline
+            else -> provider.icon()
+        },
+        title = provider.label,
+        detail = detail,
+        // A provider this build cannot use stays non-tappable: a button that
+        // cannot succeed is worse than no button, because it reads as a bug.
+        enabled = onOpen != null && status?.isActionable != false,
+        onClick = onOpen ?: {},
+    )
 }
 
 /**
@@ -116,23 +203,29 @@ private fun toolDetailLabel(targetSeconds: Int): String {
 /** One tappable line: an icon, a title, a muted detail and a start affordance. */
 @Composable
 private fun CompactToolRow(
+    icon: ImageVector,
     title: String,
     detail: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Icon(
-            imageVector = Icons.Outlined.PlayArrow,
+            imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            },
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(10.dp))

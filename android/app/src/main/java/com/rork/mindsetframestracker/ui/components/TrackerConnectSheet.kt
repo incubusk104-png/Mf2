@@ -283,8 +283,25 @@ private fun TrackerRow(
     }
 }
 
-/** The icon that identifies each provider, shared by every surface that lists them. */
-private fun TrackerProvider.icon(): ImageVector = when (this) {
+/**
+ * The icon that identifies each provider, shared by every surface that lists them.
+ *
+ * ## Why this is `internal` rather than `private`
+ *
+ * It was `private` here, and `TrackerConnectSheet` was the only caller. The habit
+ * dialog now lists the same three providers, and a private helper cannot be
+ * reached from another file — so it would have re-declared the mapping, and two
+ * declarations of "Strava is the running icon" is how two screens come to show
+ * *different* icons for one service (and how a fourth provider gets added to one
+ * list and silently renders a fallback in the other).
+ *
+ * ## Why the provider's own icon is worth having in the habit dialog
+ *
+ * Every tracker row there used to draw the same generic play arrow as the
+ * stopwatch row, so the two were visually identical — a large part of why tapping
+ * "Strava" and getting a stopwatch felt like a mis-tap rather than a bug.
+ */
+internal fun TrackerProvider.icon(): ImageVector = when (this) {
     TrackerProvider.HEALTH_CONNECT -> Icons.Outlined.MonitorHeart
     TrackerProvider.STRAVA -> Icons.AutoMirrored.Outlined.DirectionsRun
     TrackerProvider.POLAR -> Icons.Outlined.FavoriteBorder

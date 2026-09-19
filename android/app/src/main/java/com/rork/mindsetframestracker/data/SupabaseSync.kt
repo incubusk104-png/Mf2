@@ -1113,8 +1113,17 @@ class SupabaseSync(context: Context) {
                         occurrence_key = it.occurrenceKey,
                     )
                 }
-            val activities = data.activityRecords
-                .filter { runCatching { UUID.fromString(it.habitId) }.isSuccess }
+            // D2: partitioned, not filtered. The old `.filter { UUID.fromString
+            // (it.habitId).isSuccess }` discarded every record the server's uuid
+            // column cannot hold WITHOUT a count, a message or an entry in the
+            // export's completeness list — unlike the habit payload, nothing
+            // reconciled it. And because an unattributed record is never pushed,
+            // it could never be attributed on another device either, so the loss
+            // reproduced on every device forever. The dropped half is now a value
+            // the report below can name.
+            val (attributableActivity, unattributedActivity) =
+                partitionByAttributableHabitId(data.activityRecords)
+            val activities = attributableActivity
                 .map { record ->
                     val startedAt = java.time.Instant.ofEpochMilli(record.timestamp)
                     ActivityRow(
@@ -1147,10 +1156,14 @@ class SupabaseSync(context: Context) {
                         heart_rate_max = record.heartRateMax,
                         steps = record.steps?.toInt(),
                         elevation_gain_meters = record.elevationGainMeters,
-                        raw_data = buildJsonObject {
-                            put("source", JsonPrimitive(record.source))
-                            record.sleepMinutes?.let { put("sleep_minutes", JsonPrimitive(it)) }
-                        },
+                        raw_data = activityRawData(
+                            source = record.source,
+                            // D1/D2: the attribution the server's columns cannot
+                            // carry, so a restore can reattach this record to its
+                            // habit instead of dropping the link.
+                            habitId = record.habitId,
+                            sleepMinutes = record.sleepMinutes,
+                        ),
                     )
                 }
 
@@ -1226,7 +1239,7 @@ class SupabaseSync(context: Context) {
             // Nothing failed, but something was not stored in full. A success
             // with a caveat, and saying so is the whole point: the app must never
             // claim a complete backup it did not achieve.
-            if (missingTables.isNotEmpty() || droppedFields.isNotEmpty()) {
+            if (missingTables.isNotEmpty() || droppedFields.isNotEmpty() || unattributedActivity.isNotEmpty()) {
                 // Names the affected fields compactly, then says the only thing
                 // that matters to the user. Note there is deliberately NO
                 // instruction to "apply a migration" any more: that was a
@@ -1235,6 +1248,12 @@ class SupabaseSync(context: Context) {
                 val parts = mutableListOf<String>()
                 if (missingTables.isNotEmpty()) parts += missingTables
                 if (droppedFields.isNotEmpty()) parts += droppedFields
+                // D2: named separately because it is a ROW count rather than a
+                // field, and it is the one omission the user can actually act on
+                // — by attributing the activity to a habit where it was captured.
+                if (unattributedActivity.isNotEmpty()) {
+                    parts += "${unattributedActivity.size} activity record(s) with no habit linked"
+                }
                 // Written after the full push, because these rows DID land.
                 prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
                 lastPushPartial = true
@@ -1281,7 +1300,27 @@ class SupabaseSync(context: Context) {
                         // the push path serialises with, so the round trip is
                         // symmetric and neither direction can reinterpret the
                         // other's rows.
-                        alarmTimes = restoredAlarmTimes(it.alarm_times, it.reminder_minutes),
+                        // D6: a row whose two alarm columns disagree breaches the
+                        // invariant every writer maintains
+                        // (`alarm_times.firstOrNull() == reminder_minutes`), so it
+                        // is evidence of a writer bug rather than a state to
+                        // normalise. The breach is logged and the schedule is
+                        // KEPT — the previous behaviour read it as "no alarm" and
+                        // emptied it, silently deleting every alarm on the habit,
+                        // which is the "my alarm vanished / it came back"
+                        // complaint this path kept producing.
+                        alarmTimes = restoredSchedule(it.alarm_times, it.reminder_minutes)
+                            .also { schedule ->
+                                if (schedule.inconsistent) {
+                                    Log.w(
+                                        TAG,
+                                        "Habit ${it.id}: alarm_times=${it.alarm_times} with " +
+                                            "reminder_minutes=null — invariant breached; " +
+                                            "keeping the schedule instead of clearing it.",
+                                    )
+                                }
+                            }
+                            .times,
                         isPinned = it.is_pinned,
                         durationSeconds = it.duration_seconds,
                         repeatDaysMask = it.repeat_days_mask,
@@ -1314,7 +1353,14 @@ class SupabaseSync(context: Context) {
                 activityRecords = activities.map { row ->
                     ActivityRecord(
                         id = row.provider_activity_id,
-                        habitId = "",
+                        // D1: this was hardcoded "". Every restored activity
+                        // arrived honest about its numbers and blind about which
+                        // habit it belonged to, so per-habit sourced consistency
+                        // read zero on any second device while the totals looked
+                        // right. The link rides in raw_data because the table's
+                        // own habit_id column is nullable and never written — see
+                        // `activityRawData`.
+                        habitId = habitIdFromActivityRawData(row.raw_data),
                         source = row.raw_data?.get("source")?.jsonPrimitive?.contentOrNull
                             ?: row.provider,
                         activityType = row.activity_type,
