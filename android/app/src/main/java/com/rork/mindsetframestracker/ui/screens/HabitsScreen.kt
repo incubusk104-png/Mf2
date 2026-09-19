@@ -91,6 +91,7 @@ import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.TrackerState
 import com.rork.mindsetframestracker.integrations.TrackerProvider
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
@@ -700,22 +701,35 @@ fun HabitsScreen(
                 }
             },
             onConnect = { provider ->
-                trackerBusyProvider = provider
-                when (provider) {
-                    // Privacy consent first — before the OAuth page or the system
-                    // permission dialog opens. Required by AppGallery review and
-                    // GDPR Art. 13, and it is also just the honest order.
-                    TrackerProvider.HEALTH_CONNECT -> {
-                        pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
-                        pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
-                    }
-                    TrackerProvider.POLAR -> {
-                        pendingSourceConsent = IntegrationConsent.POLAR
-                        pendingSourceAction = { viewModel.connectPolar() }
-                    }
-                    TrackerProvider.STRAVA -> {
-                        pendingSourceConsent = IntegrationConsent.STRAVA
-                        pendingSourceAction = { viewModel.connectStrava() }
+                // Screenshot defect 4: the tier-locked row was DRAWN as locked
+                // (lock icon, "Upgrade" label) and `isActionable` includes LOCKED
+                // — but this handler branched straight on the provider and ran
+                // the real OAuth flow for Strava regardless. So the lock icon and
+                // the "Upgrade" label were decoration: tapping them opened
+                // Strava's authorisation page for a feature the account had not
+                // paid for. The locked state now routes to the upgrade sheet, so
+                // the label and the behaviour finally agree.
+                if (trackerStatuses.firstOrNull { it.provider == provider }?.state == TrackerState.LOCKED) {
+                    showTrackerSheet = false
+                    showPremiumSheet = true
+                } else {
+                    trackerBusyProvider = provider
+                    when (provider) {
+                        // Privacy consent first — before the OAuth page or the system
+                        // permission dialog opens. Required by AppGallery review and
+                        // GDPR Art. 13, and it is also just the honest order.
+                        TrackerProvider.HEALTH_CONNECT -> {
+                            pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
+                            pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
+                        }
+                        TrackerProvider.POLAR -> {
+                            pendingSourceConsent = IntegrationConsent.POLAR
+                            pendingSourceAction = { viewModel.connectPolar() }
+                        }
+                        TrackerProvider.STRAVA -> {
+                            pendingSourceConsent = IntegrationConsent.STRAVA
+                            pendingSourceAction = { viewModel.connectStrava() }
+                        }
                     }
                 }
             },
