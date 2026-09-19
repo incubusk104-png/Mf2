@@ -86,7 +86,15 @@ internal fun HabitActivityToolsRow(
     trackingMode: HabitTrackingMode,
     targetSeconds: Int,
     trackerProviders: List<TrackerProvider>,
-    onStartTool: () -> Unit,
+    /**
+     * Starts the tool (stopwatch / timer) for this habit.
+     *
+     * Defaulted to null so the *link*-only host (the per-habit tracker section)
+     * does not have to pass a no-op that would look like a real handler. A null
+     * handler hides the tool row entirely rather than rendering a button that
+     * does nothing.
+     */
+    onStartTool: (() -> Unit)? = null,
     /**
      * Opens the connect/disconnect flow.
      *
@@ -99,6 +107,20 @@ internal fun HabitActivityToolsRow(
      * not opened "for" one of them.
      */
     onOpenTracker: (() -> Unit)? = null,
+    /**
+     * Links/unlinks a provider for **this habit** — the per-habit connect the
+     * request asks for.
+     *
+     * Separate from [onOpenTracker] because they are different actions on
+     * different scopes. [onOpenTracker] opens the account-level sheet, which is
+     * only the right destination when the service is not authorised at all;
+     * once it is authorised, the remaining question is "should *this* habit use
+     * it?" — and that answer lives here, on the habit, not in a global sheet.
+     *
+     * Null means this surface cannot host the link, in which case each row falls
+     * back to [onOpenTracker].
+     */
+    onLinkTracker: ((TrackerProvider) -> Unit)? = null,
     /**
      * Each provider's real state, so a row can honestly say "Not available" or
      * show a lock instead of offering a connect that cannot succeed.
@@ -124,7 +146,10 @@ internal fun HabitActivityToolsRow(
                 icon = Icons.Outlined.PlayArrow,
                 title = s.habitToolsOpen,
                 detail = toolDetailLabel(targetSeconds),
-                onClick = onStartTool,
+                // A null handler would render a button that silently does
+                // nothing, so it is degraded to a no-op rather than smuggled
+                // through a non-null parameter type.
+                onClick = onStartTool ?: {},
             )
         }
 
@@ -135,6 +160,7 @@ internal fun HabitActivityToolsRow(
                 provider = provider,
                 status = statusByProvider[provider],
                 onOpen = onOpenTracker,
+                onLink = onLinkTracker,
             )
         }
     }
@@ -149,21 +175,40 @@ internal fun HabitActivityToolsRow(
  * at all show a warning icon instead of a call to action.
  */
 @Composable
-private fun TrackerToolRow(
+internal fun TrackerToolRow(
     provider: TrackerProvider,
     status: TrackerStatus?,
     onOpen: (() -> Unit)?,
+    onLink: ((TrackerProvider) -> Unit)? = null,
 ) {
     val connected = status?.isConnected == true
+    val linkedHere = status?.linkedToThisHabit == true
+    val linkedElsewhere = status?.linkedElsewhereLabel
     val unavailable = status != null && !status.isActionable
     val locked = status?.state == TrackerState.LOCKED
 
     val detail = when {
         status == null -> "Connect to import this habit automatically"
-        connected -> "Connected \u2014 activity imports automatically"
         locked -> "Included with Premium"
+        linkedHere -> "Linked to this habit — activity imports automatically"
+        // Names the habit that holds it. Without this the row simply offered
+        // "Link" and the user had no way to know their tracker was already
+        // serving a different habit — nor that linking here would move it.
+        linkedElsewhere != null -> "Linked to $linkedElsewhere"
+        connected -> "Connected — tap to link this habit"
         unavailable -> status.detail
         else -> "Ready to import your activity"
+    }
+
+    val actionLabel = when {
+        locked || unavailable -> null
+        linkedHere -> "Unlink"
+        // Authorised at the account level: one tap links it here, with no OAuth
+        // round trip, because the grant already exists.
+        connected -> "Link"
+        // Not authorised yet: the account-level sheet is the right destination,
+        // and completing it links this habit (the host holds the pending target).
+        else -> "Connect"
     }
 
     CompactToolRow(
@@ -176,10 +221,24 @@ private fun TrackerToolRow(
         },
         title = provider.label,
         detail = detail,
+        actionLabel = actionLabel,
         // A provider this build cannot use stays non-tappable: a button that
         // cannot succeed is worse than no button, because it reads as a bug.
-        enabled = onOpen != null && status?.isActionable != false,
-        onClick = onOpen ?: {},
+        enabled = when {
+            locked || unavailable -> false
+            linkedHere -> onLink != null
+            else -> onLink != null || onOpen != null
+        },
+        onClick = {
+            when {
+                // In the habit's own dialog the link is the whole point: the
+                // account is already authorised, so this tap decides whether
+                // THIS habit uses the tracker.
+                linkedHere -> onLink?.invoke(provider)
+                connected -> onLink?.invoke(provider) ?: onOpen?.invoke()
+                else -> onOpen?.invoke()
+            }
+        },
     )
 }
 
@@ -208,6 +267,16 @@ private fun CompactToolRow(
     detail: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    /**
+     * The row's action, named on the row itself.
+     *
+     * Link and unlink are not the same tap: a user who taps a row reading "Link"
+     * and has it instead *unlink* a tracker has lost their automatic tracking
+     * with no idea why. Spelling the action out is what makes it impossible to
+     * mistake which one this tap will do. Null (the tool row's case) shows no
+     * label, because starting a stopwatch carries no such ambiguity.
+     */
+    actionLabel: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -242,6 +311,18 @@ private fun CompactToolRow(
                 text = detail,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (actionLabel != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                },
             )
         }
     }

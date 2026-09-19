@@ -947,6 +947,31 @@ class SupabaseSync(context: Context) {
         val monitored_package: String? = null,
         val screen_time_limit_minutes: Int? = null,
         val monitored_app_label: String? = null,
+        /**
+         * The per-habit tracker links, as provider names.
+         *
+         * ## Why the link syncs but the *connection* does not
+         *
+         * The two are different kinds of fact. A connection (an OAuth token) is
+         * bound to this device's authorisation and is deliberately **never**
+         * uploaded — only the fact that a provider is connected is stored, never
+         * the credential. A *link* is a piece of the user's own configuration:
+         * "this Walk habit gets its data from Strava". Losing it on restore or on
+         * a second device is exactly the same class of data loss as losing the
+         * habit's name, so it belongs in the snapshot.
+         *
+         * The consequence is deliberate and worth stating: a restored link on a
+         * device with no matching connection is harmless. The row reads "Link"
+         * (the connection is absent), and `HabitTrackerLinks` refuses every
+         * import until the user authorises that provider here — no data is
+         * written and no orphaned record is created.
+         *
+         * Defaulted to empty so an un-migrated project (no such column yet)
+         * degrades exactly as `alarm_message` does: the field is reported as
+         * dropped for that pass and every other habit edit still syncs, rather
+         * than the whole batch being lost because one column is absent.
+         */
+        val tracker_provider_ids: List<String> = emptyList(),
     )
 
     @Serializable
@@ -1070,6 +1095,11 @@ class SupabaseSync(context: Context) {
                     monitored_package = it.monitoredPackage,
                     screen_time_limit_minutes = it.screenTimeLimitMinutes,
                     monitored_app_label = it.monitoredAppLabel,
+                    // Sorted into canonical provider order, so the same link set
+                    // never produces two different column values (which would
+                    // make an otherwise-identical push look like a change and
+                    // keep re-writing the row).
+                    tracker_provider_ids = com.rork.mindsetframestracker.integrations.HabitTrackerLinks.sortProviderIds(it.trackerProviderIds),
                 )
             }
             // Defense in depth: habit_id is a `uuid` column in Supabase.
@@ -1327,6 +1357,13 @@ class SupabaseSync(context: Context) {
                         monitoredPackage = it.monitored_package,
                         screenTimeLimitMinutes = it.screen_time_limit_minutes,
                         monitoredAppLabel = it.monitored_app_label,
+                        // Unknown provider names are dropped on read (see
+                        // HabitTrackerLinks.providerOf) rather than carried
+                        // through: a name written by a newer build that added a
+                        // fourth provider must not survive into this build's
+                        // state and then be written back in a different order.
+                        trackerProviderIds = it.tracker_provider_ids
+                            .filter { id -> com.rork.mindsetframestracker.integrations.HabitTrackerLinks.providerOf(id) != null },
                     )
                 },
                 checkIns = checkins.groupBy({ it.habit_id }, { it.day }),

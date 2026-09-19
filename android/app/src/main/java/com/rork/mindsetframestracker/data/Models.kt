@@ -124,6 +124,57 @@ data class Habit(
      * and its own orphan cleanup — for one nullable string.
      */
     val alarmMessage: String? = null,
+    /**
+     * **Which fitness trackers this habit is linked to** \u2014 the per-habit half of
+     * the tracker integration, stored as [com.rork.mindsetframestracker.
+     * integrations.TrackerProvider] names (`"STRAVA"`, `"POLAR"`,
+     * `"HEALTH_CONNECT"`).
+     *
+     * ## Why the link is per habit and not a global switch
+     *
+     * The user's own words: *"the tracker should not be a separate/global thing
+     * sitting in its own position \u2014 each habit should carry the features related
+     * to it."* Walking exists in Google Health, Polar and Strava, so the connect
+     * action belongs on the **Walk** habit, and the activity it imports belongs to
+     * that habit's record.
+     *
+     * The distinction that matters is between *connectivity* and *attribution*.
+     * The OAuth grant is genuinely account-wide \u2014 the user authorises Strava
+     * once, not once per habit \u2014 so the tokens stay in [AppSettings]. What is
+     * per-habit is **which habit the data lands on**. Before this field existed
+     * there was no way to express that, so every sync call site guessed from the
+     * icon and every sport habit imported the same account-wide report, each
+     * under its own id, double-counting one workout against two habits.
+     *
+     * ## Why a `List<String>` and not a single id
+     *
+     * A habit may legitimately draw on more than one source \u2014 a walk measured by
+     * the phone's own Health Connect *and* imported from Strava when the user
+     * wears a watch. The single-*habit* rule (one provider, one habit) is enforced
+     * where it belongs, in
+     * [com.rork.mindsetframestracker.integrations.HabitTrackerLinks.bindFor],
+     * rather than by narrowing the type: a `String?` could not express the
+     * legitimate case, and would have to be widened later by a migration.
+     *
+     * ## Why strings rather than the enum
+     *
+     * So a value written by a newer build that adds a fourth provider is ignored
+     * by an older one instead of failing to decode the whole blob \u2014 the same
+     * forward-compatibility rule `trackingUnit` and `accentPack` follow. An
+     * unrecognised id is dropped on read by
+     * [com.rork.mindsetframestracker.integrations.HabitTrackerLinks.providerOf].
+     *
+     * ## Empty means unbound, and unbound means no import
+     *
+     * Empty is the default and the state of every habit that existed before this
+     * shipped \u2014 deliberately, because the pre-existing behaviour (every sport
+     * habit swept by every connected provider) is the defect being removed.
+     * Empty does **not** mean "use all candidate sources": an unbound provider
+     * resolves to no habit and writes nothing, so a user who has not chosen a
+     * tracker for a habit gets no mysteriously-attributed activity. The user
+     * chooses, from inside the habit.
+     */
+    val trackerProviderIds: List<String> = emptyList(),
 )
 
 /** [Habit.repeatDaysMask] value meaning "every day". */

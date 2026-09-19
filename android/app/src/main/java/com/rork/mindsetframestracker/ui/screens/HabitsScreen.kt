@@ -103,6 +103,9 @@ import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
 import com.rork.mindsetframestracker.ui.components.ActivitySource
 import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
+import com.rork.mindsetframestracker.integrations.HabitTrackerLinks
+import com.rork.mindsetframestracker.integrations.candidateSourcesFor
+import com.rork.mindsetframestracker.integrations.TrackerStatus
 import com.rork.mindsetframestracker.ui.components.TrackerConnectSheet
 import com.rork.mindsetframestracker.ui.components.AlarmOccurrenceDetailDialog
 import com.rork.mindsetframestracker.ui.components.HabitAlarmOverviewSection
@@ -208,6 +211,15 @@ fun HabitsScreen(
 
     // Activity source picker state: when the user taps an activity-trackable
     // icon, we store the newly created habit info here and show the sheet.
+    /** The habit a tracker-link action applies to, or null for the account-level view. */
+    var trackerSheetHabitId by remember { mutableStateOf<String?>(null) }
+    /**
+     * A provider the user asked to link but which still needs its account
+     * connecting first. Held so the link can be completed the moment the OAuth
+     * round trip lands — without it the user connects Strava and the habit they
+     * started from is left silently unlinked.
+     */
+    var pendingLinkProvider by remember { mutableStateOf<TrackerProvider?>(null) }
     var activityPickerHabitId by remember { mutableStateOf<String?>(null) }
     var activityPickerIconId by remember { mutableStateOf<String?>(null) }
 
@@ -229,7 +241,11 @@ fun HabitsScreen(
         data.settings.polarAccessToken,
         data.settings.stravaRefreshToken,
         currentTier,
-    ) { TrackerConnections.statuses(context, data.settings, currentTier) }
+        // The per-habit links are part of the answer now: which habit a provider
+        // serves decides the row's action ("Link" / "Unlink" / "Linked to Walk"),
+        // so a changed link must re-resolve rather than show a stale action.
+        data.habits,
+    ) { TrackerConnections.statuses(context, data.settings, currentTier, data.habits) }
 
     // Which catalog icons already have a habit (so the grid can show the check badge).
     val selectedIconIds = remember(data.habits) {
@@ -336,20 +352,27 @@ fun HabitsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
                     )
-                    // A plain entry point to the pop-up, so connecting a tracker
-                    // does not require knowing it lives under Settings.
-                    TextButton(
-                        onClick = { showTrackerSheet = true },
+                    // ── Where trackers live now ────────────────────
+                    // This used to be a "Connect fitness trackers" button that
+                    // opened one global sheet. That is the shape the user
+                    // rejected: a tracker is not a global thing in its own
+                    // position, it is a feature OF a habit — walking lives in
+                    // Google Health, Polar and Strava, so the connect action
+                    // belongs on the Walk habit.
+                    //
+                    // There is deliberately no global entry point any more. A
+                    // hint rather than a button, because a button here would
+                    // have to pick a habit on the user's behalf, which is the
+                    // guessing that put one account-wide report on every sport
+                    // habit. Account-level authorisation is still available in
+                    // Settings; the *link* is made per habit, from the habit.
+                    Text(
+                        "Trackers are linked per habit — open a habit and link the " +
+                            "app you use for it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.FavoriteBorder,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Connect fitness trackers")
-                    }
+                    )
                 }
             },
             onIconTapped = { icon ->
@@ -452,8 +475,38 @@ fun HabitsScreen(
             // Opens the same connect pop-up the Habits screen's tracker button
             // opens, so the dialog's provider rows are a real entry point rather
             // than a status list with nowhere to go.
-            onOpenTracker = { showTrackerSheet = true },
-            trackerStatuses = allTrackerStatuses,
+            // The link action belongs to THIS habit, so the sheet is opened
+            // carrying the habit it was opened from.
+            onOpenTracker = {
+                trackerSheetHabitId = alarmSetupExistingHabitId
+                showTrackerSheet = true
+            },
+            // ── The per-habit link ────────────────────────────────────
+            // Toggled, not set: the row's own label (Link / Unlink) already
+            // told the user which direction this tap goes, so the handler has
+            // to agree with the label rather than pick its own direction. A tap
+            // that unlinked a tracker the user believed they were linking is
+            // how someone loses automatic tracking with no idea why.
+            onLinkTracker = { provider ->
+                val target = alarmSetupExistingHabitId
+                // A null target means the habit was deleted while the dialog
+                // was open. Linking then would point at nothing — the orphaned
+                // binding the per-habit model exists to prevent.
+                if (target != null) {
+                    if (HabitTrackerLinks.of(data.habits).allows(target, provider)) {
+                        viewModel.unlinkTrackerForHabit(target, provider)
+                    } else {
+                        viewModel.linkTrackerForHabit(target, provider)
+                    }
+                }
+            },
+            // Re-scoped to the habit being edited, so a provider already serving
+            // another habit says so rather than offering to re-link it.
+            trackerStatuses = TrackerConnections.forHabit(
+                base = allTrackerStatuses,
+                habits = data.habits,
+                forHabitId = alarmSetupExistingHabitId,
+            ),
             onDismiss = {
                 alarmPickerIcon = null
                 alarmSetupExistingHabitId = null
@@ -709,26 +762,43 @@ fun HabitsScreen(
                 // Strava's authorisation page for a feature the account had not
                 // paid for. The locked state now routes to the upgrade sheet, so
                 // the label and the behaviour finally agree.
-                if (trackerStatuses.firstOrNull { it.provider == provider }?.state == TrackerState.LOCKED) {
-                    showTrackerSheet = false
-                    showPremiumSheet = true
-                } else {
-                    trackerBusyProvider = provider
-                    when (provider) {
-                        // Privacy consent first — before the OAuth page or the system
-                        // permission dialog opens. Required by AppGallery review and
-                        // GDPR Art. 13, and it is also just the honest order.
-                        TrackerProvider.HEALTH_CONNECT -> {
-                            pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
-                            pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
-                        }
-                        TrackerProvider.POLAR -> {
-                            pendingSourceConsent = IntegrationConsent.POLAR
-                            pendingSourceAction = { viewModel.connectPolar() }
-                        }
-                        TrackerProvider.STRAVA -> {
-                            pendingSourceConsent = IntegrationConsent.STRAVA
-                            pendingSourceAction = { viewModel.connectStrava() }
+                val status = trackerStatuses.firstOrNull { it.provider == provider }
+                val target = trackerSheetHabitId
+                when {
+                    status?.state == TrackerState.LOCKED -> {
+                        showTrackerSheet = false
+                        showPremiumSheet = true
+                    }
+                    // Already authorised at the ACCOUNT level: this tap is a
+                    // LINK, not a connection. Running the OAuth flow again would
+                    // ask the user to re-authorise a service they already
+                    // authorised, which is what made the rows read as broken.
+                    target != null && status?.isConnected == true -> {
+                        showTrackerSheet = false
+                        trackerSheetHabitId = null
+                        viewModel.linkTrackerForHabit(target, provider)
+                    }
+                    else -> {
+                        trackerBusyProvider = provider
+                        // Remembered so the link completes when the account
+                        // connection lands.
+                        pendingLinkProvider = target?.let { provider }
+                        when (provider) {
+                            // Privacy consent first — before the OAuth page or the system
+                            // permission dialog opens. Required by AppGallery review and
+                            // GDPR Art. 13, and it is also just the honest order.
+                            TrackerProvider.HEALTH_CONNECT -> {
+                                pendingSourceConsent = IntegrationConsent.HEALTH_CONNECT
+                                pendingSourceAction = { viewModel.requestHealthConnectPermissions() }
+                            }
+                            TrackerProvider.POLAR -> {
+                                pendingSourceConsent = IntegrationConsent.POLAR
+                                pendingSourceAction = { viewModel.connectPolar() }
+                            }
+                            TrackerProvider.STRAVA -> {
+                                pendingSourceConsent = IntegrationConsent.STRAVA
+                                pendingSourceAction = { viewModel.connectStrava() }
+                            }
                         }
                     }
                 }
@@ -973,6 +1043,16 @@ private fun AlarmPickerDialog(
      * would look like it did something provider-specific when it does not.
      */
     onOpenTracker: (() -> Unit)? = null,
+    /**
+     * Links/unlinks one provider for THIS habit, called with the provider the
+     * user tapped.
+     *
+     * The dialog cannot reach the view model itself — it is a private
+     * composable with no reference to one — so the caller supplies this, for the
+     * same reason [onOpenTracker] is a parameter. Null hides the per-habit link
+     * action entirely rather than rendering a row that does nothing.
+     */
+    onLinkTracker: ((TrackerProvider) -> Unit)? = null,
     /** Each provider's resolved state, so a row never offers a connect that cannot succeed. */
     trackerStatuses: List<com.rork.mindsetframestracker.integrations.TrackerStatus> = emptyList(),
     onDismiss: () -> Unit,
@@ -1185,7 +1265,7 @@ private fun AlarmPickerDialog(
                     // schedule above it. Null on a first tap, where there is no
                     // setup to describe yet.
                     plan = existingHabit?.let { HabitAlarmSetup.of(it) },
-                    trackerProviders = TrackerConnections.sourcesFor(habitIconId),
+                    trackerProviders = candidateSourcesFor(habitIconId),
                     onOpenTracker = onOpenTracker,
                     onSelect = { detailSlot = it },
                 )
@@ -1207,7 +1287,7 @@ private fun AlarmPickerDialog(
                     HabitActivityToolsRow(
                         trackingMode = setupHabit.trackingModeOrDefault,
                         targetSeconds = setupHabit.trackingTargetSecondsOrDefault,
-                        trackerProviders = TrackerConnections.sourcesFor(habitIconId),
+                        trackerProviders = candidateSourcesFor(habitIconId),
                         onStartTool = {
                             onStartTimer(
                                 if (setupHabit.trackingModeOrDefault == HabitTrackingMode.TIMER)
@@ -1221,6 +1301,7 @@ private fun AlarmPickerDialog(
                         // open the connect pop-up, and carry the real statuses so a
                         // provider this build cannot use is not drawn as tappable.
                         onOpenTracker = onOpenTracker,
+                        onLinkTracker = onLinkTracker,
                         trackerStatuses = trackerStatuses,
                     )
                 }

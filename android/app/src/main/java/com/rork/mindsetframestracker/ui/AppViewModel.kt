@@ -16,9 +16,13 @@ import com.rork.mindsetframestracker.billing.RestoreResult
 import com.rork.mindsetframestracker.billing.SubscriptionBilling
 import com.rork.mindsetframestracker.billing.SubscriptionResult
 import com.rork.mindsetframestracker.billing.SubscriptionTier
+import com.rork.mindsetframestracker.integrations.HabitTrackerLinks
+import com.rork.mindsetframestracker.integrations.providersLeftUnboundAfter
 import com.rork.mindsetframestracker.integrations.StravaAuthClient
 import com.rork.mindsetframestracker.integrations.StravaTokens
 import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.TrackerProvider
+import com.rork.mindsetframestracker.ui.components.stravaActivityTypeFor
 import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.mergeHabitsPreferringLocal
 import com.rork.mindsetframestracker.data.CloudBackupWorker
@@ -485,12 +489,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Pulls recent Strava activities into [habitId]. Refreshes the access
      * token through the Edge Function first when it is about to expire.
+     *
+     * ## The link gate
+     *
+     * Import is refused unless [habitId] owns the Strava link. This is the whole
+     * fix for the misattribution defect: `fetchRecentActivities` asks Strava for
+     * the **athlete's** last ten activities with no habit filter, so the payload
+     * is account-wide. Called for every sport habit — which is what the old sweep
+     * did — one workout was appended under each habit's own id
+     * (`strava_<activityId>`, so the rows were distinct and nothing deduped
+     * them) and the weekly rollup counted it once per habit. The second habit
+     * normally lost the race (blank activity type, expired token), which is
+     * exactly why the first habit to fail left the next one to absorb the whole
+     * account report.
      */
     fun syncStravaActivities(habitId: String, activityType: String) {
         val settings = _state.value.settings
         val refresh = settings.stravaRefreshToken
         if (refresh.isNullOrBlank()) {
             _stravaMessage.value = "Connect Strava first."
+            return
+        }
+        if (!isTrackerLinked(habitId, TrackerProvider.STRAVA)) {
+            _stravaMessage.value =
+                "Strava isn't linked to this habit — open the habit and link it there."
             return
         }
         viewModelScope.launch {
@@ -513,6 +535,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 .onFailure { _stravaMessage.value = "Couldn't fetch Strava activities. Try again later." }
         }
     }
+
+    /**
+     * Links [provider] to [habitId], taking it from whichever habit held it.
+     *
+     * This is the per-habit connect the request asks for: the link belongs to the
+     * habit, so the user opens their Walk habit and links Strava there, rather
+     * than finding a global switch in a separate place.
+     *
+     * Returns false when [habitId] no longer exists (a dialog left open across a
+     * delete), in which case nothing is written — silently linking to a vanished
+     * habit would create the orphaned binding the whole model exists to prevent.
+     */
+    fun linkTrackerForHabit(habitId: String, provider: TrackerProvider): Boolean {
+        val before = _state.value.habits
+        val result = HabitTrackerLinks.bindFor(before, habitId, provider)
+        if (!result.applied) return false
+        update { it.copy(habits = result.habits) }
+        val name = before.firstOrNull { it.id == habitId }?.name ?: "this habit"
+        // A transfer is reported rather than performed silently: the habit that
+        // lost the link stops receiving data, and the user needs to know that
+        // happened because they caused it from a different screen.
+        result.takenFrom?.let { previous ->
+            _stravaMessage.value =
+                "${provider.label} now feeds $name. It was linked to ${previous.name} and has been moved."
+        }
+        return true
+    }
+
+    /**
+     * Unlinks [provider] from [habitId] only.
+     *
+     * Scoped to the one habit on purpose. "This habit no longer uses Strava" and
+     * "my Strava account is no longer connected" are different intentions, and
+     * treating the first as the second is the class of bug that deleted habits
+     * when a screen-time limit was edited. Disconnecting the account clears the
+     * tokens and is a separate action.
+     */
+    fun unlinkTrackerForHabit(habitId: String, provider: TrackerProvider) {
+        val habits = HabitTrackerLinks.unbindFor(_state.value.habits, habitId, provider)
+        if (habits == _state.value.habits) return
+        update { it.copy(habits = habits) }
+        // Says outright that the account survived, because the old row read
+        // "Disconnect" and a user who wanted only to stop tracking one habit had
+        // every reason to fear it would unlink Strava everywhere.
+        _stravaMessage.value =
+            "${provider.label} unlinked from this habit. Your ${provider.label} account stays connected."
+    }
+
+    /**
+     * True when [provider] is linked to [habitId] — the gate every import path
+     * must pass before it writes a record.
+     *
+     * Read from the live state on each call rather than captured, so a sweep in
+     * flight cannot import on a link the user has just removed.
+     */
+    private fun isTrackerLinked(habitId: String, provider: TrackerProvider): Boolean =
+        HabitTrackerLinks.of(_state.value.habits).allows(habitId, provider)
 
     private fun saveStravaTokens(tokens: StravaTokens) {
         update {
@@ -547,6 +626,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val token = settings.polarAccessToken
         if (token.isNullOrBlank()) {
             _stravaMessage.value = "Connect Polar first (Settings > Activity sync)."
+            return
+        }
+        if (!isTrackerLinked(habitId, TrackerProvider.POLAR)) {
+            _stravaMessage.value =
+                "Polar isn't linked to this habit — open the habit and link it there."
             return
         }
         if (settings.polarUserId == 0L) {
@@ -853,6 +937,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _stravaMessage.value = "Connect Health Connect first (Settings > Activity sync)."
             return
         }
+        if (!isTrackerLinked(habitId, TrackerProvider.HEALTH_CONNECT)) {
+            _stravaMessage.value =
+                "Health Connect isn't linked to this habit — open the habit and link it there."
+            return
+        }
         viewModelScope.launch {
             // Verify permissions are still valid before attempting a sync
             if (!verifyHealthConnectPermissions()) return@launch
@@ -919,32 +1008,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun runAutoSync() {
         val s = _state.value.settings
-        // EVERY trackable habit, not just the first one. This used to be
-        // `habits.firstOrNull { ... }`, so a user with Walk, Run and Gym had exactly
-        // one of them ever refreshed from their tracker — the others sat
-        // permanently empty with nothing to explain why. "Track my walking habit
-        // from Health Connect" is not satisfied by syncing whichever fitness
-        // habit happens to be first in the list.
-        val trackable = TrackerConnections.trackableHabits(_state.value.habits)
-        if (trackable.isEmpty()) return
+        // Each habit is swept ONLY by the providers actually linked to it.
+        //
+        // The previous sweep ran every connected provider against every
+        // icon-compatible habit, and that is the defect: Strava's payload is the
+        // athlete's last ten activities with NO habit filter, so running it once
+        // per sport habit filed one account-wide report under each habit's own
+        // id — the ids are `strava_<activityId>`, distinct rows, nothing deduped,
+        // so the weekly rollup counted the same workout once per habit. Polar is
+        // worse: its daily step roll-up belongs to no workout at all, and it was
+        // written onto every sport habit.
+        //
+        // An unbound habit is now skipped entirely. That is the correct outcome,
+        // not a regression — there is no tracker data that belongs to it, and
+        // guessing was how the data ended up on the wrong habit.
+        val links = HabitTrackerLinks.of(_state.value.habits)
+        val linked = links.linkedHabits(_state.value.habits)
+        if (linked.isEmpty()) return
 
         var syncedAny = false
-        trackable.forEach { habit ->
+        linked.forEach { (habit, providers) ->
             val iconId = habit.iconId ?: return@forEach
-            // Polar — only with a real OAuth token AND auto-sync enabled
-            if (isPolarConnected() && s.polarAutoSync) {
-                syncPolarToHabit(habit.id, iconId)
+            // Polar — only with a real OAuth token AND auto-sync enabled.
+            if (TrackerProvider.POLAR in providers && isPolarConnected() && s.polarAutoSync) {
+                // The provider's OWN vocabulary, resolved from the icon. Passing
+                // the raw iconId here is what put an unplaceable activity type on
+                // every Health Connect record.
+                syncPolarToHabit(habit.id, stravaActivityTypeFor(iconId))
                 syncedAny = true
             }
             // Health Connect — permissions re-verified inside the sync call,
             // because they can be revoked from the Health Connect app at any time
-            if (s.healthConnectConnected && s.healthConnectAutoSync) {
+            if (TrackerProvider.HEALTH_CONNECT in providers &&
+                s.healthConnectConnected &&
+                s.healthConnectAutoSync
+            ) {
                 syncHealthConnectToHabit(habit.id, iconId)
                 syncedAny = true
             }
             // Strava — only with a refresh token AND auto-sync enabled
-            if (!s.stravaRefreshToken.isNullOrBlank() && s.stravaAutoSync) {
-                syncStravaActivities(habit.id, iconId)
+            if (TrackerProvider.STRAVA in providers &&
+                !s.stravaRefreshToken.isNullOrBlank() &&
+                s.stravaAutoSync
+            ) {
+                syncStravaActivities(habit.id, stravaActivityTypeFor(iconId))
                 syncedAny = true
             }
         }
@@ -954,7 +1061,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // one habit was updated.
         if (syncedAny) {
             _stravaMessage.value =
-                "Checked ${trackable.size} activity habit(s) against your connected trackers."
+                "Checked ${linked.size} linked activity habit(s) against your trackers."
         }
     }
 
@@ -2101,11 +2208,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteHabit(habitId: String) {
+        // Which provider links die with this habit, resolved BEFORE the delete.
+        //
+        // A binding is a field on the habit, so deleting the habit does delete
+        // its bindings — there is no orphaned row to clean up. What is left
+        // behind is a *silent* state change: the account-level connection
+        // survives, so the provider still reads "Connected" while now serving
+        // nothing. Every future sweep skips it and the user's activity simply
+        // stops arriving, with no screen anywhere explaining why. Naming it is
+        // the whole point — the state is unavoidable, but it need not be
+        // invisible.
+        val orphaned = providersLeftUnboundAfter(_state.value.habits, habitId)
         update { data ->
             data.copy(
                 habits = data.habits.filterNot { it.id == habitId },
                 checkIns = data.checkIns - habitId,
             )
+        }
+        if (orphaned.isNotEmpty()) {
+            val names = orphaned.joinToString(", ") { it.label }
+            _stravaMessage.value =
+                "This habit's $names link was removed with it. $names is still connected " +
+                    "to your account — link it to another habit to keep importing."
         }
         // A local delete only removes the habit from _state — pushSnapshot()
         // upserts whatever's currently in _state, it never deletes rows that

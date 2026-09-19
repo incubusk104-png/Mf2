@@ -6,7 +6,6 @@ import com.rork.mindsetframestracker.billing.Feature
 import com.rork.mindsetframestracker.billing.SubscriptionTier
 import com.rork.mindsetframestracker.data.AppSettings
 import com.rork.mindsetframestracker.data.Habit
-import com.rork.mindsetframestracker.data.isSportActivityIcon
 
 /**
  * The three external fitness services the app can pull activity data from, as
@@ -84,11 +83,58 @@ data class TrackerStatus(
     val isConnected: Boolean,
     /** Whether this provider's auto-sync is on. */
     val autoSync: Boolean,
+    /**
+     * The habit this provider is linked to, or null when it is linked to none.
+     *
+     * Carried on the status (rather than looked up by the row) so a rendered row
+     * can never disagree with the import path about which habit owns this
+     * provider — they read the same snapshot.
+     */
+    val linkedHabitId: String? = null,
+    /**
+     * The **name** of the habit holding the link, when that is a different habit
+     * from the one being viewed.
+     *
+     * A name rather than an id because the only use is to tell the user where
+     * their tracker currently points ("Linked to Walk"). Without it, tapping
+     * Link on a second habit silently moved the tracker and the first habit's
+     * statistics simply stopped arriving, with nothing on screen explaining it.
+     */
+    val linkedElsewhereLabel: String? = null,
+    /**
+     * True when this provider's link belongs to the habit currently on screen.
+     *
+     * Defaults to false so a status built without per-habit context never
+     * *claims* a link — the safe direction, since a false negative only omits an
+     * affordance while a false positive would offer to unlink something that
+     * belongs to another habit.
+     */
+    val linkedToThisHabit: Boolean = false,
 ) {
-    /** The row's action label, which is honest about what will happen. */
+    /**
+     * The row's action label, which is honest about what will happen.
+     *
+     * ## Why this depends on the per-habit link and not just connectivity
+     *
+     * The account-level connected state (`isConnected`) answers "has the user
+     * authorised Strava", not "is Strava serving *this* habit". The two came
+     * apart the moment the link became per habit, and the old label — a flat
+     * `isConnected -> "Disconnect"` — then read as *"this habit is connected"* on
+     * a habit that had never been bound, and as *"disconnect my Strava account"*
+     * on a habit where the user only meant to stop using it here.
+     *
+     * The distinction it now draws: **Unlink** (this habit stops using it; the
+     * account stays connected, and the user's other habits are untouched) versus
+     * **Disconnect** (reserved for the account-level action in Settings).
+     */
     val actionLabel: String
         get() = when {
-            isConnected -> "Disconnect"
+            // This habit holds the link: the only correct action is to give it up.
+            linkedToThisHabit && isConnected -> "Unlink"
+            // Authorised at the account level but not serving this habit — one tap,
+            // no OAuth round trip, because the grant already exists.
+            !linkedToThisHabit && isConnected -> "Link"
+            linkedToThisHabit -> "Finish setup"
             state == TrackerState.READY -> "Connect"
             state == TrackerState.LOCKED -> "Upgrade"
             else -> "Not available"
@@ -96,47 +142,61 @@ data class TrackerStatus(
 
     /** True when tapping the action is meaningful. */
     val isActionable: Boolean
-        get() = isConnected || state == TrackerState.READY || state == TrackerState.LOCKED
+        get() = linkedToThisHabit ||
+            !linkedToThisHabit && (isConnected || state == TrackerState.READY) ||
+            state == TrackerState.LOCKED
 }
 
 object TrackerConnections {
 
     /**
-     * Which providers can track a habit with this icon, in the order they are
-     * shown.
+     * Which providers *could* serve a habit with this icon.
      *
-     * Strava last on purpose: it is the only tier-gated one, so the two free
-     * options appear first and a user on the free tier never has to read past a
-     * lock to find something they can use.
+     * **This is not the binding.** It answers "what is this icon compatible
+     * with", which is the right question for deciding what to OFFER, and the
+     * wrong question for deciding what to IMPORT. Every call site used to treat
+     * it as the latter, and that is the defect the per-habit link removes: a
+     * habit the user never connected anything to was advertised as having three
+     * sources, and was swept by all three.
+     *
+     * Use [HabitTrackerLinks.Index.activeProvidersFor] to ask what a habit is
+     * actually linked to. Kept as a named function only so existing UI that
+     * genuinely wants the candidate list (the connect sheet's offer) does not
+     * have to reach across a package; new code should call [candidateSourcesFor].
      */
-    fun sourcesFor(iconId: String?): List<TrackerProvider> {
-        if (iconId.isNullOrBlank()) return emptyList()
-        return buildList {
-            if (MindsetHealthConnectClient.isActivitySupported(iconId)) {
-                add(TrackerProvider.HEALTH_CONNECT)
-            }
-            if (PolarClient.isActivitySupported(iconId)) {
-                add(TrackerProvider.POLAR)
-            }
-            // Strava records every sport, so it is offered for any sport icon
-            // rather than only the ids in one hand-maintained list.
-            if (isSportActivityIcon(iconId)) add(TrackerProvider.STRAVA)
-        }
-    }
+    @Deprecated(
+        "Name and intent are now split: use candidateSourcesFor(iconId) for what may be offered, " +
+            "and HabitTrackerLinks for what is actually linked. See HabitTrackerLink.kt.",
+        ReplaceWith("candidateSourcesFor(iconId)"),
+    )
+    fun sourcesFor(iconId: String?): List<TrackerProvider> = candidateSourcesFor(iconId)
 
     /**
-     * The habits a tracker sweep should write into: every habit that names a
-     * sport icon and has at least one source able to supply it.
+     * The habits a tracker sweep should write into: every habit with a real
+     * tracker link whose icon the linked provider can actually supply.
      *
-     * This is deliberately a list rather than "the first one". `runAutoSync` used
-     * to sync only `habits.firstOrNull { … }`, so a user with Walk, Run and Gym
-     * had exactly one of them ever updated from their tracker — the other two
-     * sat permanently empty with no indication why. Syncing every eligible habit
-     * is what "track habits like walking from those apps" actually means when a
-     * user has more than one such habit.
+     * ## What changed, and why the old rule was wrong
+     *
+     * This used to be `habits.filter { sourcesFor(it.iconId).isNotEmpty() }` —
+     * pure icon compatibility, with no knowledge of what the user had connected.
+     * `runAutoSync` then ran **every** connected provider against **every** such
+     * habit, so a user with a Walk and a Run habit had one account-wide Strava
+     * report appended under the Walk id and again under the Run id; the ids are
+     * `strava_<activityId>`, so the rows were distinct, nothing deduped them, and
+     * the same workout was counted against two habits. The same loop wrote
+     * Polar's *unattributable daily step roll-up* onto every sport habit.
+     *
+     * Requiring a binding makes "which habit does this data belong to?" a
+     * question with an answer the user supplied, instead of one this function
+     * guesses. An unbound habit is not swept at all — which is the correct
+     * outcome, not a regression: there is no tracker data that belongs to it.
+     *
+     * Kept (rather than deleted) because several callers ask the coarse question
+     * "is there anything to sweep at all", and it must now answer it from the
+     * links.
      */
     fun trackableHabits(habits: List<Habit>): List<Habit> =
-        habits.filter { sourcesFor(it.iconId).isNotEmpty() }
+        HabitTrackerLinks.of(habits).linkedHabits(habits).map { it.first }
 
     /**
      * The current state of all three providers.
@@ -144,16 +204,90 @@ object TrackerConnections {
      * Every fact here comes from the same source the connect flow itself reads
      * (`canAttemptConnect`, the Health Connect SDK status, the stored tokens), so
      * the row can never claim a provider is ready and then fail to open it.
+     *
+     * ## Per-habit links
+     *
+     * Each row also carries which habit its provider is linked to, so a row can
+     * say "Linked to Walk" instead of offering to reconnect a provider that is
+     * already pointed at another habit.
      */
     fun statuses(
         context: Context,
         settings: AppSettings,
         tier: SubscriptionTier,
-    ): List<TrackerStatus> = listOf(
-        healthConnectStatus(context, settings),
-        polarStatus(settings),
-        stravaStatus(settings, tier),
+        /**
+         * The habits whose bindings decide `linkedToThisHabit` / `linkedElsewhereLabel`.
+         *
+         * Defaults to empty so a caller that only wants the account-level view
+         * (Settings) is unaffected — and, importantly, so an omitted list yields
+         * `linkedElsewhereLabel == null` rather than a wrong habit name.
+         */
+        habits: List<Habit> = emptyList(),
+        /** The habit whose dialog is rendering, for the per-habit link flags. */
+        forHabitId: String? = null,
+    ): List<TrackerStatus> {
+        // One snapshot per read, so all three rows resolve the same bindings and
+        // the dialog cannot show two providers disagreeing about one habit.
+        val links = LinkContext(HabitTrackerLinks.of(habits), habits, forHabitId)
+        return listOf(
+            healthConnectStatus(context, settings).withLink(links),
+            polarStatus(settings).withLink(links),
+            stravaStatus(settings, tier).withLink(links),
+        )
+    }
+
+    /**
+     * Everything needed to resolve one provider's per-habit link flags.
+     *
+     * Bundled rather than passed as three parameters to each status function so
+     * the three cannot be given inconsistent values — the failure that would let
+     * one row claim a link the others deny.
+     */
+    private data class LinkContext(
+        val index: HabitTrackerLinks.Index,
+        val habits: List<Habit>,
+        val forHabitId: String?,
     )
+
+    /**
+     * Applies the binding to an account-level status.
+     *
+     * Kept as one function so all three providers resolve their link flags
+     * identically: three copies of "who holds this provider" is how one row ends
+     * up claiming a link the others deny.
+     */
+    private fun TrackerStatus.withLink(links: LinkContext): TrackerStatus {
+        // No holder means the provider is authorised but serving no habit — left
+        // unlinked rather than defaulting to "this habit", which is the guess
+        // that attributed one account-wide report to every sport habit.
+        val holder = links.index.habitFor(provider) ?: return this
+        return copy(
+            linkedHabitId = holder,
+            linkedElsewhereLabel = links.habits.firstOrNull { it.id == holder }
+                ?.takeIf { holder != links.forHabitId }
+                ?.name,
+            linkedToThisHabit = holder == links.forHabitId,
+        )
+    }
+
+    /**
+     * The same account-level statuses, re-scoped to one habit.
+     *
+     * The account-level [statuses] answer "has the user authorised this service",
+     * which is a fact about the *account*. A dialog needs the other half: "is
+     * this service serving THIS habit?" Re-scoping from the already-resolved base
+     * list rather than recomputing means the dialog cannot disagree with the
+     * screen that opened it about whether a provider is connected — only about
+     * which habit it serves, which is exactly the question being asked.
+     */
+    fun forHabit(
+        base: List<TrackerStatus>,
+        habits: List<Habit>,
+        forHabitId: String?,
+    ): List<TrackerStatus> {
+        val links = LinkContext(HabitTrackerLinks.of(habits), habits, forHabitId)
+        return base.map { it.withLink(links) }
+    }
 
     /**
      * Health Connect: the only one whose availability is a device property rather

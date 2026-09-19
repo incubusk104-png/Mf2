@@ -194,6 +194,15 @@ object StravaAuthClient {
                         activityName = obj.optString("name").takeIf { it.isNotBlank() },
                         elevationGainMeters = elevation,
                     )
+                        // The provider's own sport token is replaced with the app's
+                        // catalog id. Strava spells sports its own way ("Ride",
+                        // "NordicSki", "VirtualRide") and the payload is
+                        // account-wide, so the sport here is frequently not the
+                        // sport the habit is for. Storing the raw token would make
+                        // the activity sheet render "Ride" next to screens that say
+                        // cycling, and would break every reader that matches on a
+                        // catalog id.
+                        .withCanonicalActivityType(null)
                     // Count only what was actually persisted. saveActivityRecord
                     // returns null on a failed write, and incrementing regardless
                     // made a total storage failure report as "N activities saved".

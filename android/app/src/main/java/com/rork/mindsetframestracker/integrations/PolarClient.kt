@@ -7,6 +7,7 @@ import android.util.Log
 import com.rork.mindsetframestracker.BuildConfig
 import com.rork.mindsetframestracker.data.ActivityRecord
 import com.rork.mindsetframestracker.data.MindsetRepository
+import com.rork.mindsetframestracker.integrations.withCanonicalActivityType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -424,6 +425,11 @@ object PolarClient {
             steps = activity.steps,
             calories = activity.calories,
         )
+            // Polar's client never sends a sport token of its own, so the type
+            // falls back to the habit's icon — a real catalog id. Normalised here
+            // rather than trusted, because a re-import of a record written by an
+            // older build still carries whatever that build stored.
+            .withCanonicalActivityType(null)
         // Honest result: a failed write must not be reported to the caller as a
         // successful sync. saveActivityRecord swallows its own exception and
         // returns null, so its return value is the only signal available.

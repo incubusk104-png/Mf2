@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.serialization.json.Json
 import java.util.UUID
+import com.rork.mindsetframestracker.integrations.withCanonicalActivityType
 
 /**
  * Fully local, on-device persistence. Single JSON blob in SharedPreferences —
@@ -166,14 +167,26 @@ class MindsetRepository(context: Context) {
      */
     fun saveActivityRecord(record: ActivityRecord): ActivityRecord? = runCatching {
         val current = load()
-        val existing = current.activityRecords.indexOfFirst { it.id == record.id }
+        // The activity type is forced onto the app's catalog vocabulary at this
+        // single choke point, which every provider client writes through.
+        //
+        // Doing it here rather than at each reader is the point: a reader that
+        // has to understand both the provider's vocabulary and the catalog's is
+        // a reader that will eventually be written by someone who knows only
+        // one — and that is how a Strava "Ride" came to be rendered beside
+        // screens that say cycling, while anything matching on a catalog id
+        // silently stopped matching.
+        val normalized = record.withCanonicalActivityType(
+            current.habits.firstOrNull { it.id == record.habitId }?.iconId,
+        )
+        val existing = current.activityRecords.indexOfFirst { it.id == normalized.id }
         val merged = if (existing >= 0) {
-            current.activityRecords.toMutableList().apply { this[existing] = record }
+            current.activityRecords.toMutableList().apply { this[existing] = normalized }
         } else {
-            current.activityRecords + record
+            current.activityRecords + normalized
         }
         save(current.copy(activityRecords = merged))
-        record
+        normalized
     }.onFailure { Log.w(TAG, "Failed to persist activity record ${record.id}", it) }.getOrNull()
 
     /**

@@ -62,7 +62,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.rork.mindsetframestracker.integrations.HabitTrackerLinks
 import com.rork.mindsetframestracker.integrations.MindsetHealthConnectClient
+import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
@@ -92,6 +95,7 @@ import com.rork.mindsetframestracker.ui.screens.SettingsScreen
 import com.rork.mindsetframestracker.ui.screens.SplashScreen
 import com.rork.mindsetframestracker.ui.screens.TimerScreen
 import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
+import com.rork.mindsetframestracker.ui.components.HabitTrackerLinkSection
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
 import com.rork.mindsetframestracker.util.rememberIsOnline
@@ -302,6 +306,42 @@ private fun HabitTimerOptionsHost(
         // configuration to describe.
         alarmSlots = HabitAlarmHistory.daySlots(appData, pending.habitId),
         alarmSetup = habit?.let { HabitAlarmSetup.of(it) },
+        // ── Tracker links for THIS habit ─────────────────────────
+        // The per-habit connect, passed as DATA rather than inserted here: the
+        // rows belong in the sheet's own layout, and the sheet is what renders
+        // them. This is the surface the user lands on after an alarm fires, so
+        // the connect action is reachable from the ring path without a detour —
+        // which is the whole point of the request.
+        trackerHabit = habit,
+        allHabits = appData.habits,
+        // Account-level state, read from the already-loaded snapshot. Resolved
+        // here rather than inside the sheet because this is the ring path, where
+        // touching the Health Connect SDK would put I/O between an alarm firing
+        // and the dialog the user is waiting for.
+        trackerStatuses = TrackerConnections.statuses(
+            context = context,
+            settings = appData.settings,
+            tier = appData.settings.subscriptionTier(),
+            habits = appData.habits,
+        ),
+        onLinkTracker = { provider ->
+            val id = habit?.id
+            // A null habit means it was deleted while the ring was open. Linking
+            // then would target nothing — the orphaned binding the per-habit
+            // model exists to prevent — and the sheet's own setup block is
+            // already null in that case, so there is nothing to offer.
+            if (id != null) {
+                // Toggled rather than set: the row's label already told the user
+                // which direction this tap goes, so the handler must agree with
+                // the label rather than pick its own direction.
+                if (HabitTrackerLinks.of(appData.habits).allows(id, provider)) {
+                    viewModel.unlinkTrackerForHabit(id, provider)
+                } else {
+                    viewModel.linkTrackerForHabit(id, provider)
+                }
+            }
+        },
+
         onRecord = { title, note, durationSeconds, count ->
             // Recorded through the single tracking entry point, so the ring
             // writes the same payload (and the same [HabitLogEntry]) the

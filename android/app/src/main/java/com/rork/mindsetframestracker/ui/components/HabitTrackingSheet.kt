@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.data.AlarmDaySlot
 import com.rork.mindsetframestracker.data.HabitAlarmSetup
+import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.HabitIconCatalog
 import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
@@ -58,6 +59,9 @@ import com.rork.mindsetframestracker.data.TIMER_PRESET_MINUTES
 import com.rork.mindsetframestracker.data.TimerKind
 import com.rork.mindsetframestracker.data.formatTimerDuration
 import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.candidateSourcesFor
+import com.rork.mindsetframestracker.integrations.TrackerProvider
+import com.rork.mindsetframestracker.integrations.TrackerStatus
 import com.rork.mindsetframestracker.ui.appStrings
 
 /**
@@ -153,6 +157,54 @@ fun HabitTrackingSheet(
      * there is no setup left to describe.
      */
     alarmSetup: HabitAlarmSetup? = null,
+    /**
+     * The habit this dialog belongs to, for the per-habit tracker links.
+     *
+     * The sheet otherwise takes only the *fields* it renders (name, icon, mode),
+     * which was enough while every section either described the habit to itself
+     * or described nothing. The tracker links are the first section that needs
+     * the habit's **identity**, because a link is a fact about the habit — not a
+     * property of its name or icon — and the id is what the import path matches
+     * on. Null when the caller could not resolve the habit (deleted mid-frame),
+     * in which case the section is omitted: offering to link a tracker to a
+     * habit that no longer exists is exactly the orphaned binding the per-habit
+     * model exists to prevent.
+     */
+    trackerHabit: Habit? = null,
+    /**
+     * Every habit, so a tracker already serving another one can say which.
+     *
+     * Without it a row could only say "Link", and the user would have no way to
+     * know that linking here moves the tracker off the habit it currently feeds.
+     */
+    allHabits: List<Habit> = emptyList(),
+    /**
+     * Account-level tracker state, re-scoped to [trackerHabit] inside the section.
+     *
+     * Passed rather than resolved here because this sheet is on the ring path,
+     * where building three provider statuses means touching the Health Connect
+     * SDK — I/O that must not sit between an alarm firing and the dialog the user
+     * is waiting for. The host already has these resolved.
+     */
+    trackerStatuses: List<TrackerStatus> = emptyList(),
+    /**
+     * Links/unlinks a provider for [trackerHabit].
+     *
+     * Null leaves the tracker rows as plain status lines rather than buttons that
+     * would do nothing — the failure mode the old shared callback produced, where
+     * a tappable row silently had no effect.
+     */
+    onLinkTracker: ((TrackerProvider) -> Unit)? = null,
+    /**
+     * Opens the account-level connect flow, for a provider not authorised at all.
+     *
+     * Null on the ring path deliberately: a ring can fire while the app is
+     * mid-something-else, and pushing the user into an OAuth browser round trip
+     * from there would abandon the habit they were in the middle of recording.
+     * The row then reads as a status line, and the account is connected from
+     * Settings or the habit's edit sheet.
+     */
+    onOpenAccountSheet: (() -> Unit)? = null,
 ) {
     val s = appStrings()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -263,7 +315,7 @@ fun HabitTrackingSheet(
                     // The providers that can actually supply this habit's icon,
                     // so the sheet never advertises an integration that cannot
                     // apply to what is on screen.
-                    trackerProviders = TrackerConnections.sourcesFor(habitIconId),
+                    trackerProviders = candidateSourcesFor(habitIconId),
                     onSelect = { detailSlot = it },
                 )
                 // Layered over the sheet rather than replacing it: the user is
@@ -272,6 +324,32 @@ fun HabitTrackingSheet(
                 detailSlot?.let { slot ->
                     AlarmOccurrenceDetailDialog(slot = slot, onDismiss = { detailSlot = null })
                 }
+            }
+
+            // ── Tracker links for THIS habit ──────────────────────────────
+            // Inside the habit's dialog, which is the request: opening "walk"
+            // offers the connect action for the fitness apps that know walking.
+            // Rendered here rather than beside the call site because the rows are
+            // read in the context of what the habit already contains, and because
+            // the ring path renders this same sheet — so the dialog the user sees
+            // after an alarm fires offers the same action.
+            // The section renders nothing when this habit's icon admits no
+            // tracker, so the guard is only about having a habit at all — a
+            // second opinion here would be a second place to disagree.
+            if (trackerHabit != null) {
+                Spacer(Modifier.height(18.dp))
+                HabitTrackerLinkSection(
+                    habit = trackerHabit,
+                    allStatuses = trackerStatuses,
+                    habits = allHabits,
+                    // No account-level sheet on this path: opening OAuth from a
+                    // ring would abandon the habit the user was recording. An
+                    // unauthorised provider shows as a status line, and the
+                    // account is connected from the habit's edit sheet or
+                    // Settings.
+                    onOpenAccountSheet = onOpenAccountSheet,
+                    onLink = { provider -> onLinkTracker?.invoke(provider) },
+                )
             }
 
             if (recentLogs.isNotEmpty()) {

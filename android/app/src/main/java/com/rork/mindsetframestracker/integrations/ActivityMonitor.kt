@@ -22,6 +22,9 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
+// HabitTrackerLinks / TrackerProvider / withCanonicalActivityType live in this
+// same package, so they need no import.
+
 /**
  * Real activity capture for the **sports habits** \u2014 walking, running, cycling and
  * the rest of the movement set.
@@ -230,7 +233,7 @@ object ActivityMonitor {
             calories = calories?.toInt(),
             endedAtMs = session?.endTime?.toEpochMilli(),
             activityName = session?.title?.takeIf { it.isNotBlank() },
-        )
+        ).withCanonicalActivityType(habitId)
 
         // Persistence is CHECKED, not assumed. saveActivityRecord catches its own
         // failure and returns null — so the runCatching this used to be wrapped in

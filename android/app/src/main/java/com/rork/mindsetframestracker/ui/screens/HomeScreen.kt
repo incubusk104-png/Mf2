@@ -123,7 +123,13 @@ import com.rork.mindsetframestracker.data.trackingTargetCountOrDefault
 import com.rork.mindsetframestracker.data.trackingTargetSecondsOrDefault
 import com.rork.mindsetframestracker.data.trackingUnitOrDefault
 import com.rork.mindsetframestracker.notifications.TimerController
+import com.rork.mindsetframestracker.integrations.HabitTrackerLinks
+import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.TrackerProvider
+import com.rork.mindsetframestracker.integrations.TrackerStatus
+import com.rork.mindsetframestracker.integrations.candidateSourcesFor
 import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
+import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.BadgeTier
 import com.rork.mindsetframestracker.data.completedCountOn
@@ -234,6 +240,35 @@ fun HomeScreen(
             // entry. `of` returns null only if the habit vanished mid-frame.
             alarmSlots = HabitAlarmHistory.daySlots(data, trackingHabit.id),
             alarmSetup = HabitAlarmSetup.of(trackingHabit),
+            // ── Tracker links for THIS habit ─────────────────────────
+            // The same per-habit connect the ring path offers, so opening a
+            // habit from Home and opening it from a ringing alarm show the same
+            // action. Passed as data because the rows belong in the sheet's own
+            // layout, not beside this call.
+            trackerHabit = trackingHabit,
+            allHabits = data.habits,
+            trackerStatuses = TrackerConnections.statuses(
+                context = context,
+                settings = data.settings,
+                tier = data.settings.subscriptionTier(),
+                habits = data.habits,
+            ),
+            onLinkTracker = { provider ->
+                // Toggled to match the row's own label, which already told the
+                // user whether this tap links or unlinks.
+                if (HabitTrackerLinks.of(data.habits).allows(trackingHabit.id, provider)) {
+                    viewModel.unlinkTrackerForHabit(trackingHabit.id, provider)
+                } else {
+                    viewModel.linkTrackerForHabit(trackingHabit.id, provider)
+                }
+            },
+            // Null deliberately: the account-level connect flow carries its
+            // privacy-consent sheet and lives on the Habits screen, and routing
+            // to it from a habit's completion dialog would close the sheet the
+            // user was filling in. The per-habit LINK action below is what this
+            // screen owes them; an unconnected provider renders as a status line
+            // rather than a button that would do nothing.
+            onOpenAccountSheet = null,
             onRecord = { title, note, durationSeconds, count ->
                 // One write path for every mode: the record's shape is decided
                 // by the habit's mode inside the ViewModel, and the check-in is
