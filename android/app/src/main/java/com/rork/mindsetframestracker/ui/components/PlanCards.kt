@@ -1,5 +1,7 @@
 package com.rork.mindsetframestracker.ui.components
 
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -398,4 +400,4 @@ private fun SecondaryPlanButton(
 }
 
 /** Huawei brand red, shared by the plan buttons and the sheet header. */
-internal val HUAWEI_RED = Color(0xFFC7000B)
+internal val HUAWEI_RED = Mf2Palette.HuaweiRed

@@ -33,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,12 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.mindsetframestracker.data.HabitIcon
 import com.rork.mindsetframestracker.data.HabitIconCatalog
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 
 /**
  * Habit picker grid — clean 2-column layout inspired by premium habit apps.
  *
  * Design language (modelled after the reference screenshot):
- *  - Soft, distinct pastel background per icon (not murky dark shades)
+ *  - One of six Mf2 reference card fills per habit (not a tint per icon)
  *  - Large centred artwork that dominates the card
  *  - Compact habit name at top-left, small alarm time underneath
  *  - Generous 16 dp rounded corners, 14 dp gaps
@@ -138,12 +138,12 @@ private fun HabitCardTile(
     onSetupAlarmClick: () -> Unit = {},
     onRemoveClick: () -> Unit = {},
 ) {
-    val tileBg = cardBackground(icon, isDark)
-    val textColor = cardTextColor(icon, isDark)
-    val subtitleColor = textColor.copy(alpha = 0.65f)
+    val tileBg = Mf2Palette.habitCardBackground(icon.colorHex, isDark)
+    val textColor = Mf2Palette.habitCardTitleColor(isDark)
+    val subtitleColor = Mf2Palette.habitCardMutedColor(isDark)
     // "Set up alarm" needs to stand out as something needing attention,
     // not just another muted subtitle line.
-    val warningColor = Color(0xFFFF9800)
+    val warningColor = Mf2Palette.AttentionStrong
 
     Box(
         modifier = Modifier
@@ -242,7 +242,7 @@ private fun HabitCardTile(
                     .padding(10.dp)
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF4CAF50))
+                    .background(Mf2Palette.SuccessFill)
                     // Independently clickable — consumes the tap so it never
                     // falls through to the card's own onClick (which now
                     // opens the alarm editor for selected habits).
@@ -252,7 +252,7 @@ private fun HabitCardTile(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "Added — tap to remove",
-                    tint = Color.White,
+                    tint = Mf2Palette.OnBrandInk,
                     modifier = Modifier.size(14.dp),
                 )
             }
@@ -260,7 +260,7 @@ private fun HabitCardTile(
     }
 }
 
-// ── Alarm time formatting ───────────────────────────────────────────────────
+// ── Alarm time formatting ────────────────────────────────────────────────────
 
 private fun formatTime(minutesFromMidnight: Int): String {
     val h = minutesFromMidnight / 60
@@ -274,48 +274,19 @@ private fun formatTime(minutesFromMidnight: Int): String {
     return "$h12:${m.toString().padStart(2, '0')} $period"
 }
 
-// ── Per-icon colour palette ─────────────────────────────────────────────────
+// ── Per-icon colour palette ──────────────────────────────────────────────────
 //
-// Each icon has its own colorHex in HabitIconCatalog. We derive a soft pastel
-// card background from that unique colour, so every card looks distinct —
-// like the reference app (lavender-blue for Meditate, peach-pink for Running,
-// warm tan for Journal, etc.) rather than repeating the same category colour.
+// Card colour comes from `Mf2Palette`: `habitColorForSeed(icon.colorHex)` buckets
+// the icon's seed colour into one of the six reference habit hues (OLIVE, SLATE,
+// FOREST, INDIGO, TEAL, CHOCOLATE) and `habitCardBackground` resolves that bucket
+// for the current theme. The six dark fills are the exact samples from the
+// reference screenshot; the light fills are the same seeds over cream.
 //
-// Light mode: a very soft tint over white (alpha 0.35 blend).
-// Dark mode:  a deeper but still distinct tint over near-black (alpha 0.25).
-
-private fun cardBackground(icon: HabitIcon, isDark: Boolean): Color {
-    val accent = Color(icon.colorHex)
-    return if (isDark) {
-        accent.copy(alpha = 0.25f).compositeOver(Color(0xFF1A1A1C))
-    } else {
-        accent.copy(alpha = 0.35f).compositeOver(Color(0xFFFAFAFA))
-    }
-}
-
-/**
- * Text colour that sits well on the pastel background.
- * Light mode: a darkened hue of the accent colour.
- * Dark mode:  a lightened version of the accent.
- */
-private fun cardTextColor(icon: HabitIcon, isDark: Boolean): Color {
-    val accent = Color(icon.colorHex)
-    return if (isDark) {
-        // Lighten: blend accent toward white
-        accent.copy(alpha = 0.65f).compositeOver(Color.White)
-    } else {
-        // Darken: blend accent toward near-black
-        accent.copy(alpha = 0.55f).compositeOver(Color(0xFF1A1A1A))
-    }
-}
-
-/** Alpha-composites [this] colour over [bg]. */
-private fun Color.compositeOver(bg: Color): Color {
-    val a = this.alpha
-    return Color(
-        red = this.red * a + bg.red * (1 - a),
-        green = this.green * a + bg.green * (1 - a),
-        blue = this.blue * a + bg.blue * (1 - a),
-        alpha = 1f,
-    )
-}
+// This replaced a per-icon tint that alpha-blended 60+ distinct seed colours over
+// the surface, which produced muddy, hard-to-tell-apart cards and text that could
+// not hold a fixed contrast ratio. A fixed six-colour set lets the card text use
+// flat tokens (ivory / ivory-muted) with measured contrast instead of a
+// per-icon lighten/darken blend.
+//
+// The token definitions live in `ui/theme/Palette.kt` — the only file in the app
+// allowed to contain colour literals.

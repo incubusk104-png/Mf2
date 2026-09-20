@@ -1,5 +1,7 @@
 package com.rork.mindsetframestracker.ui.components
 
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -127,9 +129,9 @@ fun BadgeUnlockOverlay(
                             colors = listOf(
                                 moodTheme.gradient.first(),
                                 moodTheme.gradient.last(),
-                                Color(0xFFE9B44C),
-                                Color(0xFF9CAF88),
-                                Color(0xFFC7724F),
+                                Mf2Palette.BrandGold,
+                                Mf2Palette.BrandSage,
+                                Mf2Palette.BrandTerracotta,
                             ),
                             modifier = Modifier.size(240.dp),
                         )
@@ -171,7 +173,7 @@ fun BadgeUnlockOverlay(
                         Icon(
                             imageVector = Icons.Outlined.EmojiEvents,
                             contentDescription = null,
-                            tint = androidx.compose.ui.graphics.Color(0xFFFFFCF5),
+                            tint = Mf2Palette.OnBrandInk,
                             modifier = Modifier.size(44.dp),
                         )
                     }

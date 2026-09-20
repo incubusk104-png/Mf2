@@ -1,5 +1,7 @@
 package com.rork.mindsetframestracker.ui.components
 
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
@@ -34,7 +36,7 @@ fun HuaweiSignInButton(
     label: String = "Sign in with HUAWEI ID",
 ) {
     // hwid_auth_button_color_red from the Account Kit SDK resources.
-    val huaweiRed = Color(0xFFEF484B)
+    val huaweiRed = Mf2Palette.HuaweiRedBright
 
     Button(
         onClick = onClick,

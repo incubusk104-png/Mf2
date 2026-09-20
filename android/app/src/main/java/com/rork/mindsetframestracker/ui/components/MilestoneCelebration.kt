@@ -1,5 +1,7 @@
 package com.rork.mindsetframestracker.ui.components
 
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -76,7 +78,7 @@ fun MilestoneCelebration(
     val density = LocalDensity.current
     val particles = remember(trigger) {
         val random = Random(trigger * 31 + 7)
-        val palette = accentColors.ifEmpty { listOf(Color(0xFF006876)) }
+        val palette = accentColors.ifEmpty { listOf(Mf2Palette.BrandTeal) }
         List(90) {
             val angle = random.nextFloat() * 2f * PI.toFloat()
             val speed = 350f + random.nextFloat() * 650f
