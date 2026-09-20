@@ -6,10 +6,11 @@ import com.rork.mindsetframestracker.data.BadgeTier
 import com.rork.mindsetframestracker.data.CompanionTask
 import com.rork.mindsetframestracker.data.CompanionTaskType
 import com.rork.mindsetframestracker.data.isMet
+import com.rork.mindsetframestracker.ui.theme.Mf2Artwork
 
 /**
  * Circular background frame styles. Each is drawn procedurally in
- * [drawFrameBackground] — no bundled image assets, so the catalog stays
+ * [drawFrameBackground] - no bundled image assets, so the catalog stays
  * lightweight and every frame renders crisply at any size.
  */
 sealed interface FrameStyle {
@@ -43,7 +44,7 @@ fun AvatarFrame.isUnlocked(earned: Set<BadgeTier>): Boolean =
 
 /**
  * Clothing silhouettes the outfit renderer knows how to draw. Each design is
- * real garment artwork (collars, hoods, lapels, straps…) — not just a color
+ * real garment artwork (collars, hoods, lapels, straps...) - not just a color
  * swap.
  */
 enum class OutfitDesign {
@@ -84,7 +85,7 @@ data class ExpressionSpec(
 )
 
 /**
- * The full companion customization catalog — all drawn procedurally.
+ * The full companion customization catalog - all drawn procedurally.
  * Gender models, outfit designs, expression presets, and shoulder pets;
  * exclusive items unlock through [CompanionTask] daily goals.
  */
@@ -93,68 +94,56 @@ object AvatarCatalog {
     /** 0 = female, 1 = male. Same core art style, different build. */
     const val GENDER_COUNT = 2
 
-    val skinTones: List<Color> = listOf(
-        Color(0xFFFFE4D0), Color(0xFFFAD7B8), Color(0xFFF2C49B),
-        Color(0xFFE8B088), Color(0xFFD99C6B), Color(0xFFC98850),
-        Color(0xFFB57544), Color(0xFF9C5F35), Color(0xFF84492A),
-        Color(0xFF6B3A22), Color(0xFF54301E), Color(0xFF3E2418),
-    )
+    val skinTones: List<Color> = Mf2Artwork.skinTones
 
     const val FACE_COUNT = 6
     const val EYES_COUNT = 12
     const val MOUTH_COUNT = 10
     const val HAIR_COUNT = 14
 
-    val hairColors: List<Color> = listOf(
-        Color(0xFF2B2118), Color(0xFF4A3220), Color(0xFF6B4A2B),
-        Color(0xFF8B5E3C), Color(0xFFB5854E), Color(0xFFE0C068),
-        Color(0xFFEDE3D0), Color(0xFFA84E32), Color(0xFF7A7A85),
-        Color(0xFFC98BC0),
-    )
+    val hairColors: List<Color> = Mf2Artwork.hairColors
 
     /**
      * Outfits: 12 free designs (first 12 keep the legacy palette so old
      * saved indices still look familiar) + 6 task-locked exclusives.
      */
     val outfits: List<OutfitSpec> = listOf(
-        OutfitSpec("tee", OutfitDesign.TEE, Color(0xFF5D8A66), Color(0xFFEFE5D2)),
-        OutfitSpec("hoodie", OutfitDesign.HOODIE, Color(0xFFC7724F), Color(0xFFA85A3B)),
-        OutfitSpec("shirt", OutfitDesign.SHIRT, Color(0xFF33655A), Color(0xFFF6F1E4)),
-        OutfitSpec("sailor", OutfitDesign.SAILOR, Color(0xFF93B5C6), Color(0xFF2E4A5B)),
-        OutfitSpec("turtleneck", OutfitDesign.TURTLENECK, Color(0xFF9C8FCB), Color(0xFF6C5F9E)),
-        OutfitSpec("stripes", OutfitDesign.STRIPES, Color(0xFFB0567A), Color(0xFFF3E8D7)),
-        OutfitSpec("overalls", OutfitDesign.OVERALLS, Color(0xFFE0A25E), Color(0xFFF6EBD7)),
-        OutfitSpec("blazer", OutfitDesign.BLAZER, Color(0xFF4C463C), Color(0xFFF6F1E4)),
-        OutfitSpec("vest", OutfitDesign.VEST, Color(0xFF2E5B6B), Color(0xFFEFE5D2)),
-        OutfitSpec("scarf", OutfitDesign.SCARF, Color(0xFFCE5A6D), Color(0xFF8F3448)),
-        OutfitSpec("varsity", OutfitDesign.VARSITY, Color(0xFF7A7466), Color(0xFFEFE5D2)),
-        OutfitSpec("linen", OutfitDesign.TEE, Color(0xFFEFE5D2), Color(0xFF9CAF88)),
-        // ── Task-locked exclusives ───────────────────────────────
-        OutfitSpec(
-            "sunset", OutfitDesign.SUNSET, Color(0xFFF6E7CB), Color(0xFFE2794A),
-            CompanionTask(CompanionTaskType.CHECKIN_STREAK, 5),
-        ),
-        OutfitSpec(
-            "gardener", OutfitDesign.OVERALLS, Color(0xFF6B9873), Color(0xFFF6EBD7),
-            CompanionTask(CompanionTaskType.REFLECTIONS_WRITTEN, 7),
-        ),
-        OutfitSpec(
-            "galaxy", OutfitDesign.GALAXY, Color(0xFF2B3160), Color(0xFFAAB6F0),
-            CompanionTask(CompanionTaskType.TOTAL_CHECKINS, 25),
-        ),
-        OutfitSpec(
-            "champion", OutfitDesign.VARSITY, Color(0xFFE2B33C), Color(0xFF4C3A1E),
-            CompanionTask(CompanionTaskType.FULL_STREAK, 7),
-        ),
-        OutfitSpec(
-            "moodweaver", OutfitDesign.GRADIENT, Color(0xFF9CAF88), Color(0xFFE9B44C),
-            CompanionTask(CompanionTaskType.MOODS_LOGGED, 10),
-        ),
-        OutfitSpec(
-            "cape", OutfitDesign.CAPE, Color(0xFF3E4E6B), Color(0xFFC94F4F),
-            CompanionTask(CompanionTaskType.FULL_STREAK, 14),
-        ),
+        outfit("tee", OutfitDesign.TEE),
+        outfit("hoodie", OutfitDesign.HOODIE),
+        outfit("shirt", OutfitDesign.SHIRT),
+        outfit("sailor", OutfitDesign.SAILOR),
+        outfit("turtleneck", OutfitDesign.TURTLENECK),
+        outfit("stripes", OutfitDesign.STRIPES),
+        outfit("overalls", OutfitDesign.OVERALLS),
+        outfit("blazer", OutfitDesign.BLAZER),
+        outfit("vest", OutfitDesign.VEST),
+        outfit("scarf", OutfitDesign.SCARF),
+        outfit("varsity", OutfitDesign.VARSITY),
+        // Same TEE design as "tee", different fabric.
+        outfit("linen", OutfitDesign.TEE),
+        // -- Task-locked exclusives --
+        outfit("sunset", OutfitDesign.SUNSET, CompanionTask(CompanionTaskType.CHECKIN_STREAK, 5)),
+        outfit("gardener", OutfitDesign.OVERALLS, CompanionTask(CompanionTaskType.REFLECTIONS_WRITTEN, 7)),
+        outfit("galaxy", OutfitDesign.GALAXY, CompanionTask(CompanionTaskType.TOTAL_CHECKINS, 25)),
+        outfit("champion", OutfitDesign.VARSITY, CompanionTask(CompanionTaskType.FULL_STREAK, 7)),
+        outfit("moodweaver", OutfitDesign.GRADIENT, CompanionTask(CompanionTaskType.MOODS_LOGGED, 10)),
+        outfit("cape", OutfitDesign.CAPE, CompanionTask(CompanionTaskType.FULL_STREAK, 14)),
     )
+
+    /**
+     * Builds an [OutfitSpec] from the fabric tokens in [Mf2Artwork].
+     *
+     * [id] doubles as the key into that palette, so an outfit's design and its
+     * colours are declared together on one line and can never drift apart.
+     */
+    private fun outfit(
+        id: String,
+        design: OutfitDesign,
+        task: CompanionTask? = null,
+    ): OutfitSpec {
+        val colors = Mf2Artwork.outfitColors(id)
+        return OutfitSpec(id, design, colors.base, colors.accent, task)
+    }
 
     /**
      * Shoulder pets. The first 10 (incl. "none") keep the legacy order so
@@ -162,30 +151,30 @@ object AvatarCatalog {
      */
     val pets: List<PetSpec> = listOf(
         PetSpec("none", ""),
-        PetSpec("cat", "🐱"),
-        PetSpec("dog", "🐶"),
-        PetSpec("rabbit", "🐰"),
-        PetSpec("fox", "🦊"),
-        PetSpec("parrot", "🦜"),
-        PetSpec("butterfly", "🦋"),
-        PetSpec("turtle", "🐢"),
-        PetSpec("plant", "🪴"),
-        PetSpec("star", "⭐"),
-        // ── Task-locked exclusives ───────────────────────────────
-        PetSpec("bee", "🐝", CompanionTask(CompanionTaskType.COMPLETE_ALL_TODAY, 1)),
-        PetSpec("hamster", "🐹", CompanionTask(CompanionTaskType.TOTAL_CHECKINS, 10)),
-        PetSpec("owl", "🦉", CompanionTask(CompanionTaskType.REFLECTIONS_WRITTEN, 3)),
-        PetSpec("penguin", "🐧", CompanionTask(CompanionTaskType.CHECKIN_STREAK, 3)),
-        PetSpec("koala", "🐨", CompanionTask(CompanionTaskType.MOODS_LOGGED, 7)),
-        PetSpec("whale", "🐳", CompanionTask(CompanionTaskType.CHECKIN_STREAK, 7)),
-        PetSpec("panda", "🐼", CompanionTask(CompanionTaskType.TOTAL_CHECKINS, 30)),
-        PetSpec("dragon", "🐉", CompanionTask(CompanionTaskType.FULL_STREAK, 7)),
-        PetSpec("unicorn", "🦄", CompanionTask(CompanionTaskType.FULL_STREAK, 14)),
+        PetSpec("cat", "\uD83D\uDC31"),
+        PetSpec("dog", "\uD83D\uDC36"),
+        PetSpec("rabbit", "\uD83D\uDC30"),
+        PetSpec("fox", "\uD83E\uDD8A"),
+        PetSpec("parrot", "\uD83E\uDD9C"),
+        PetSpec("butterfly", "\uD83E\uDD8B"),
+        PetSpec("turtle", "\uD83D\uDC22"),
+        PetSpec("plant", "\uD83E\uDEB4"),
+        PetSpec("star", "\u2B50"),
+        // -- Task-locked exclusives --
+        PetSpec("bee", "\uD83D\uDC1D", CompanionTask(CompanionTaskType.COMPLETE_ALL_TODAY, 1)),
+        PetSpec("hamster", "\uD83D\uDC39", CompanionTask(CompanionTaskType.TOTAL_CHECKINS, 10)),
+        PetSpec("owl", "\uD83E\uDD89", CompanionTask(CompanionTaskType.REFLECTIONS_WRITTEN, 3)),
+        PetSpec("penguin", "\uD83D\uDC27", CompanionTask(CompanionTaskType.CHECKIN_STREAK, 3)),
+        PetSpec("koala", "\uD83D\uDC28", CompanionTask(CompanionTaskType.MOODS_LOGGED, 7)),
+        PetSpec("whale", "\uD83D\uDC33", CompanionTask(CompanionTaskType.CHECKIN_STREAK, 7)),
+        PetSpec("panda", "\uD83D\uDC3C", CompanionTask(CompanionTaskType.TOTAL_CHECKINS, 30)),
+        PetSpec("dragon", "\uD83D\uDC09", CompanionTask(CompanionTaskType.FULL_STREAK, 7)),
+        PetSpec("unicorn", "\uD83E\uDD84", CompanionTask(CompanionTaskType.FULL_STREAK, 14)),
     )
 
     /**
      * Expression presets. Index 0 = "custom" (user's own eyes + mouth);
-     * 1–5 are free presets; the rest are task-locked exclusives.
+     * 1-5 are free presets; the rest are task-locked exclusives.
      */
     val expressions: List<ExpressionSpec> = listOf(
         ExpressionSpec("custom"),
@@ -194,7 +183,7 @@ object AvatarCatalog {
         ExpressionSpec("neutral"),
         ExpressionSpec("focused"),
         ExpressionSpec("cheerful"),
-        // ── Task-locked exclusives ───────────────────────────────
+        // -- Task-locked exclusives --
         ExpressionSpec("sleepy", CompanionTask(CompanionTaskType.MOODS_LOGGED, 3)),
         ExpressionSpec("starstruck", CompanionTask(CompanionTaskType.COMPLETE_ALL_TODAY, 1)),
         ExpressionSpec("determined", CompanionTask(CompanionTaskType.CHECKIN_STREAK, 5)),
@@ -224,41 +213,41 @@ object AvatarCatalog {
      * Member exclusive. Earned, never sold.
      */
     val frames: List<AvatarFrame> = listOf(
-        // ── Free starters ────────────────────────────────────────
-        AvatarFrame("sage", FrameStyle.Solid(Color(0xFF9CAF88))),
-        AvatarFrame("cream", FrameStyle.Solid(Color(0xFFF3E8D7))),
-        AvatarFrame("terracotta", FrameStyle.Solid(Color(0xFFD08B6A))),
-        AvatarFrame("dustyBlue", FrameStyle.Solid(Color(0xFF93B5C6))),
-        AvatarFrame("blush", FrameStyle.Solid(Color(0xFFE8B4B8))),
-        AvatarFrame("charcoal", FrameStyle.Solid(Color(0xFF4C463C))),
-        AvatarFrame("meadow", FrameStyle.Gradient(listOf(Color(0xFFA8C686), Color(0xFF6B9873)))),
-        AvatarFrame("dawn", FrameStyle.Gradient(listOf(Color(0xFFF6D8AE), Color(0xFFE8A87C)))),
-        AvatarFrame("mist", FrameStyle.Gradient(listOf(Color(0xFFCFE0E8), Color(0xFF93B5C6)))),
-        AvatarFrame("lilac", FrameStyle.Gradient(listOf(Color(0xFFD7CDE8), Color(0xFF9C8FCB)))),
-        // ── 3-day streak ─────────────────────────────────────────
-        AvatarFrame("sunrise", FrameStyle.Gradient(listOf(Color(0xFFF2B880), Color(0xFFD96C4F))), BadgeTier.THREE_DAYS),
-        AvatarFrame("ocean", FrameStyle.Gradient(listOf(Color(0xFF8ED4E8), Color(0xFF2A7C97))), BadgeTier.THREE_DAYS),
-        AvatarFrame("dotsSage", FrameStyle.Dots(Color(0xFFF7F0E1), Color(0xFF9CAF88)), BadgeTier.THREE_DAYS),
-        AvatarFrame("stripesSand", FrameStyle.Stripes(Color(0xFFF6E7CB), Color(0xFFE2A25E)), BadgeTier.THREE_DAYS),
-        AvatarFrame("rose", FrameStyle.Gradient(listOf(Color(0xFFF4AFC6), Color(0xFFB0567A))), BadgeTier.THREE_DAYS),
-        // ── 7-day streak ─────────────────────────────────────────
-        AvatarFrame("raysHoney", FrameStyle.Rays(Color(0xFFF7E7B2), Color(0xFFEFC26B)), BadgeTier.SEVEN_DAYS),
-        AvatarFrame("waves", FrameStyle.Waves(Color(0xFFCDEAF0), Color(0xFF4EA8C2), Color(0xFFFFFFFF)), BadgeTier.SEVEN_DAYS),
-        AvatarFrame("dotsNight", FrameStyle.Dots(Color(0xFF3B4368), Color(0xFFAAB6F0)), BadgeTier.SEVEN_DAYS),
-        AvatarFrame("stripesSage", FrameStyle.Stripes(Color(0xFFE3EDE0), Color(0xFF5D8A66)), BadgeTier.SEVEN_DAYS),
-        AvatarFrame("confetti", FrameStyle.Confetti(Color(0xFFFDF6E9), listOf(Color(0xFF9CAF88), Color(0xFFC7724F), Color(0xFFE9B44C), Color(0xFF6D82C4))), BadgeTier.SEVEN_DAYS),
-        // ── 14-day streak ────────────────────────────────────────
-        AvatarFrame("hills", FrameStyle.Hills(Color(0xFFFBE8C9), Color(0xFFA8C686), Color(0xFF6B9873)), BadgeTier.FOURTEEN_DAYS),
-        AvatarFrame("mountain", FrameStyle.Mountain(Color(0xFFFCE3C8), Color(0xFF8A6650), Color(0xFFE9B44C)), BadgeTier.FOURTEEN_DAYS),
-        AvatarFrame("nightSky", FrameStyle.NightSky(Color(0xFF2B3160), Color(0xFF141830), Color(0xFFF8F1E2)), BadgeTier.FOURTEEN_DAYS),
-        AvatarFrame("wavesDusk", FrameStyle.Waves(Color(0xFFF4C7A1), Color(0xFFC2643A), Color(0xFFFFF3E0)), BadgeTier.FOURTEEN_DAYS),
-        AvatarFrame("hillsEvening", FrameStyle.Hills(Color(0xFFD7CDE8), Color(0xFF9C8FCB), Color(0xFF6C5F9E)), BadgeTier.FOURTEEN_DAYS),
-        // ── 30-day streak ────────────────────────────────────────
-        AvatarFrame("aurora", FrameStyle.Gradient(listOf(Color(0xFF7BE0AD), Color(0xFF5AA9E6), Color(0xFF9C8FCB))), BadgeTier.THIRTY_DAYS),
-        AvatarFrame("galaxy", FrameStyle.NightSky(Color(0xFF1B1035), Color(0xFF3D2B6B), Color(0xFFFFD9F2)), BadgeTier.THIRTY_DAYS),
-        AvatarFrame("raysGold", FrameStyle.Rays(Color(0xFFF9EDD2), Color(0xFFE2B33C)), BadgeTier.THIRTY_DAYS),
-        AvatarFrame("champion", FrameStyle.Confetti(Color(0xFFFFF7E6), listOf(Color(0xFFE2B33C), Color(0xFFC7724F), Color(0xFF9CAF88), Color(0xFFCE5A6D))), BadgeTier.THIRTY_DAYS),
-        // ── Founding Member exclusive ────────────────────────────
-        AvatarFrame("foundingGlow", FrameStyle.Rays(Color(0xFFFDEBD2), Color(0xFFD98A2B)), foundingOnly = true),
+        // -- Free starters --
+        AvatarFrame("sage", FrameStyle.Solid(Mf2Artwork.FrameSage)),
+        AvatarFrame("cream", FrameStyle.Solid(Mf2Artwork.FrameCream)),
+        AvatarFrame("terracotta", FrameStyle.Solid(Mf2Artwork.FrameTerracotta)),
+        AvatarFrame("dustyBlue", FrameStyle.Solid(Mf2Artwork.FrameDustyBlue)),
+        AvatarFrame("blush", FrameStyle.Solid(Mf2Artwork.FrameBlush)),
+        AvatarFrame("charcoal", FrameStyle.Solid(Mf2Artwork.FrameCharcoal)),
+        AvatarFrame("meadow", FrameStyle.Gradient(listOf(Mf2Artwork.FrameMeadowOuter, Mf2Artwork.FrameMeadowInner))),
+        AvatarFrame("dawn", FrameStyle.Gradient(listOf(Mf2Artwork.FrameDawnOuter, Mf2Artwork.FrameDawnInner))),
+        AvatarFrame("mist", FrameStyle.Gradient(listOf(Mf2Artwork.FrameMistOuter, Mf2Artwork.FrameMistInner))),
+        AvatarFrame("lilac", FrameStyle.Gradient(listOf(Mf2Artwork.FrameLilacOuter, Mf2Artwork.FrameLilacInner))),
+        // -- 3-day streak --
+        AvatarFrame("sunrise", FrameStyle.Gradient(listOf(Mf2Artwork.FrameSunriseOuter, Mf2Artwork.FrameSunriseInner)), BadgeTier.THREE_DAYS),
+        AvatarFrame("ocean", FrameStyle.Gradient(listOf(Mf2Artwork.FrameOceanOuter, Mf2Artwork.FrameOceanInner)), BadgeTier.THREE_DAYS),
+        AvatarFrame("dotsSage", FrameStyle.Dots(Mf2Artwork.FrameDotsSageBg, Mf2Artwork.FrameDotsSageDot), BadgeTier.THREE_DAYS),
+        AvatarFrame("stripesSand", FrameStyle.Stripes(Mf2Artwork.FrameStripesSandBg, Mf2Artwork.FrameStripesSandStripe), BadgeTier.THREE_DAYS),
+        AvatarFrame("rose", FrameStyle.Gradient(listOf(Mf2Artwork.FrameRoseOuter, Mf2Artwork.FrameRoseInner)), BadgeTier.THREE_DAYS),
+        // -- 7-day streak --
+        AvatarFrame("raysHoney", FrameStyle.Rays(Mf2Artwork.FrameRaysHoneyBg, Mf2Artwork.FrameRaysHoneyRay), BadgeTier.SEVEN_DAYS),
+        AvatarFrame("waves", FrameStyle.Waves(Mf2Artwork.FrameWavesSky, Mf2Artwork.FrameWavesSea, Mf2Artwork.FrameFoam), BadgeTier.SEVEN_DAYS),
+        AvatarFrame("dotsNight", FrameStyle.Dots(Mf2Artwork.FrameDotsNightBg, Mf2Artwork.FrameDotsNightDot), BadgeTier.SEVEN_DAYS),
+        AvatarFrame("stripesSage", FrameStyle.Stripes(Mf2Artwork.FrameStripesSageBg, Mf2Artwork.FrameStripesSageStripe), BadgeTier.SEVEN_DAYS),
+        AvatarFrame("confetti", FrameStyle.Confetti(Mf2Artwork.FrameConfettiBg, Mf2Artwork.ConfettiPieces), BadgeTier.SEVEN_DAYS),
+        // -- 14-day streak --
+        AvatarFrame("hills", FrameStyle.Hills(Mf2Artwork.FrameHillsSky, Mf2Artwork.FrameHillsFar, Mf2Artwork.FrameHillsNear), BadgeTier.FOURTEEN_DAYS),
+        AvatarFrame("mountain", FrameStyle.Mountain(Mf2Artwork.FrameMountainSky, Mf2Artwork.FrameMountainPeak, Mf2Artwork.FrameMountainSun), BadgeTier.FOURTEEN_DAYS),
+        AvatarFrame("nightSky", FrameStyle.NightSky(Mf2Artwork.FrameNightSkyTop, Mf2Artwork.FrameNightSkyBottom, Mf2Artwork.FrameNightSkyStar), BadgeTier.FOURTEEN_DAYS),
+        AvatarFrame("wavesDusk", FrameStyle.Waves(Mf2Artwork.FrameWavesDuskSky, Mf2Artwork.FrameWavesDuskSea, Mf2Artwork.FrameWavesDuskFoam), BadgeTier.FOURTEEN_DAYS),
+        AvatarFrame("hillsEvening", FrameStyle.Hills(Mf2Artwork.FrameHillsEveningSky, Mf2Artwork.FrameHillsEveningFar, Mf2Artwork.FrameHillsEveningNear), BadgeTier.FOURTEEN_DAYS),
+        // -- 30-day streak --
+        AvatarFrame("aurora", FrameStyle.Gradient(listOf(Mf2Artwork.FrameAuroraGreen, Mf2Artwork.FrameAuroraBlue, Mf2Artwork.FrameAuroraViolet)), BadgeTier.THIRTY_DAYS),
+        AvatarFrame("galaxy", FrameStyle.NightSky(Mf2Artwork.FrameGalaxyTop, Mf2Artwork.FrameGalaxyBottom, Mf2Artwork.FrameGalaxyStar), BadgeTier.THIRTY_DAYS),
+        AvatarFrame("raysGold", FrameStyle.Rays(Mf2Artwork.FrameRaysGoldBg, Mf2Artwork.FrameRaysGoldRay), BadgeTier.THIRTY_DAYS),
+        AvatarFrame("champion", FrameStyle.Confetti(Mf2Artwork.FrameChampionBg, Mf2Artwork.FrameChampionPieces), BadgeTier.THIRTY_DAYS),
+        // -- Founding Member exclusive --
+        AvatarFrame("foundingGlow", FrameStyle.Rays(Mf2Artwork.FrameFoundingGlowBg, Mf2Artwork.FrameFoundingGlowRay), foundingOnly = true),
     )
 }

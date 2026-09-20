@@ -1,5 +1,7 @@
 package com.rork.mindsetframestracker.ui.components
 
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -8,13 +10,13 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Official social brand marks as tintable vectors, built from Simple Icons
- * path data (CC0 — free for commercial use, no attribution required).
+ * path data (CC0 - free for commercial use, no attribution required).
  * Material's icon set ships no Reddit glyph, and store-ready branding should
  * show the real logos, so the raw paths are bundled here instead.
  */
 object BrandLogos {
 
-    /** Official Facebook logo — the "f" knocked out of a full-bleed circle. */
+    /** Official Facebook logo - the "f" knocked out of a full-bleed circle. */
     val facebook: ImageVector by lazy {
         brandLogo(
             name = "Brand.Facebook",
@@ -22,7 +24,7 @@ object BrandLogos {
         )
     }
 
-    /** Official Reddit logo — the Snoo face knocked out of the speech-bubble circle. */
+    /** Official Reddit logo - the Snoo face knocked out of the speech-bubble circle. */
     val reddit: ImageVector by lazy {
         brandLogo(
             name = "Brand.Reddit",
@@ -30,7 +32,7 @@ object BrandLogos {
         )
     }
 
-    /** Official Instagram glyph — camera outline with lens and dot. */
+    /** Official Instagram glyph - camera outline with lens and dot. */
     val instagram: ImageVector by lazy {
         brandLogo(
             name = "Brand.Instagram",
@@ -38,7 +40,7 @@ object BrandLogos {
         )
     }
 
-    /** Official TikTok logo — the musical note glyph. */
+    /** Official TikTok logo - the musical note glyph. */
     val tiktok: ImageVector by lazy {
         brandLogo(
             name = "Brand.TikTok",
@@ -46,11 +48,11 @@ object BrandLogos {
         )
     }
 
-    /** Official brand colors — used as the logo tint in the follow row. */
-    val facebookBlue: Color = Color(0xFF1877F2)
-    val redditOrange: Color = Color(0xFFFF4500)
-    val instagramPink: Color = Color(0xFFE4405F)
-    val tiktokRed: Color = Color(0xFFFE2C55)
+    /** Official brand colors - used as the logo tint in the follow row. */
+    val facebookBlue: Color = Mf2Palette.FacebookBlue
+    val redditOrange: Color = Mf2Palette.RedditOrange
+    val instagramPink: Color = Mf2Palette.InstagramPink
+    val tiktokRed: Color = Mf2Palette.TikTokRed
 
     private fun brandLogo(name: String, pathData: String): ImageVector =
         ImageVector.Builder(
