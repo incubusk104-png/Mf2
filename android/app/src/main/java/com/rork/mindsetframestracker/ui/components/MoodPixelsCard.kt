@@ -1,5 +1,7 @@
 package com.rork.mindsetframestracker.ui.components
 
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -50,14 +52,14 @@ import java.util.Locale
 
 /** Print-friendly pixel color per mood (matches the share-card palette). */
 private fun moodPixelColor(mode: MoodMode): Color = when (mode) {
-    MoodMode.CALM -> Color(0xFF5D8A66)
-    MoodMode.FOCUSED -> Color(0xFF33655A)
-    MoodMode.MOTIVATED -> Color(0xFFC2643A)
-    MoodMode.OVERWHELMED -> Color(0xFF8A8273)
+    MoodMode.CALM -> Mf2Palette.MoodPixelCalm
+    MoodMode.FOCUSED -> Mf2Palette.MoodPixelFocused
+    MoodMode.MOTIVATED -> Mf2Palette.MoodPixelMotivated
+    MoodMode.OVERWHELMED -> Mf2Palette.MoodPixelOverwhelmed
 }
 
 /**
- * "Month in Pixels" — a 7-column calendar where every day is a small square
+ * "Month in Pixels" - a 7-column calendar where every day is a small square
  * tinted by that day's mood check-in. Swipe through past months with the
  * chevrons; days without a logged mood stay neutral, future days stay faint.
  */
@@ -166,7 +168,7 @@ fun MoodPixelsCard(
                                 Text(
                                     text = day.dayOfMonth.toString(),
                                     fontSize = 9.sp,
-                                    color = if (mood != null) Color(0xFFFFFCF5).copy(alpha = 0.9f)
+                                    color = if (mood != null) Mf2Palette.MoodPixelInk.copy(alpha = 0.9f)
                                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(
                                         alpha = if (isFuture) 0.4f else 0.8f,
                                     ),
