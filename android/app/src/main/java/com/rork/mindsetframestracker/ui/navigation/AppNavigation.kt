@@ -91,9 +91,14 @@ import com.rork.mindsetframestracker.ui.screens.OnboardingScreen
 import com.rork.mindsetframestracker.ui.screens.SettingsScreen
 import com.rork.mindsetframestracker.ui.screens.SplashScreen
 import com.rork.mindsetframestracker.ui.screens.TimerScreen
-import com.rork.mindsetframestracker.ui.components.HabitTrackingSheet
+import com.rork.mindsetframestracker.ui.components.AlarmActionDialog
 import com.rork.mindsetframestracker.ui.components.HabitTrackerConnectHost
+import com.rork.mindsetframestracker.ui.components.stravaActivityTypeFor
 import com.rork.mindsetframestracker.integrations.TrackerConnections
+import com.rork.mindsetframestracker.integrations.TrackerProvider
+import com.rork.mindsetframestracker.data.AlarmConnectPrompt
+import com.rork.mindsetframestracker.data.AlarmDialogs
+import com.rork.mindsetframestracker.data.AlarmRingGate
 import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
@@ -177,9 +182,9 @@ private fun ConnectivityStatusIcon(
 }
 
 /**
- * Root-level owner of the **timer / stopwatch popup for a ringing habit alarm**.
+ * Root-level owner of the dialog a **ringing habit alarm** raises.
  *
- * ## Why the popup is hosted here and not in the ringing screen
+ * ## Why the dialog is hosted here and not in the ringing screen
  *
  * [com.rork.mindsetframestracker.notifications.AlarmRingingActivity] is launched
  * through the reminder's *full-screen intent*. From Android 14 (API 34)
@@ -192,18 +197,29 @@ private fun ConnectivityStatusIcon(
  *
  * Hosting the choice inside that screen therefore made it silently depend on a
  * grant the user had no reason to have given — the alarm rang, the
- * notification appeared, and the timer/stopwatch popup never came up. Hosted
- * here on the app root, it appears on its own at the moment the alarm rings
- * whenever the app is in the foreground, and the one-shot request it reads
- * survives a ring that happens while the app is in the background — so the
- * user still gets it the moment they next open the app.
+ * notification appeared, and the dialog never came up. Hosted here on the app
+ * root, it appears on its own at the moment the alarm rings whenever the app is
+ * in the foreground, and the one-shot request it reads survives a ring that
+ * happens while the app is in the background — so the user still gets it the
+ * moment they next open the app.
+ *
+ * ## The connect-fitness offer, decided once per ring
+ *
+ * This host no longer sends the user off to a separate "connect a tracker" step.
+ * The offer is made **inside** [AlarmActionDialog], and only when a fitness app
+ * can actually supply this habit — see [AlarmRingGate.shouldOfferConnect]. A
+ * habit no fitness app can record (a journal entry, a vitamin) simply never gets
+ * the offer, which is the request: *show the alarm, not the connect option*.
+ * Deciding it costs no I/O on the ring path: the provider states come from the
+ * already-loaded snapshot and the asked-before record is one SharedPreferences
+ * lookup.
  *
  * ## Appearing exactly once per ring
  *
  * The request is written to disk when the ring happens (see
- * [HabitTimerRequests]) and **consumed here the instant the sheet is shown**,
+ * [HabitTimerRequests]) and **consumed here the instant the dialog is shown**,
  * so recomposition, resume, navigation, rotation and reboot all find nothing.
- * The sheet keeps rendering from the value already read, so this ring still
+ * The dialog keeps rendering from the value already read, so this ring still
  * shows it exactly once.
  */
 @Composable
@@ -240,14 +256,14 @@ private fun HabitTimerOptionsHost(
     //
     // So the pending record is re-read on a short tick. This is not a poll of
     // anything expensive: SharedPreferences is an in-memory map after the first
-    // read, so each pass is a map lookup — and it makes "the popup appears when
+    // read, so each pass is a map lookup — and it makes "the dialog appears when
     // the alarm rings" independent of which screen the user is on, whether the
     // app was backgrounded, and whether the full-screen grant exists.
     LaunchedEffect(Unit) {
         while (true) {
             val pending = HabitTimerRequests.peek(context)
             if (pending != null && pending.habitId != request?.habitId) {
-                // Consumed in the same step it is detected, before the sheet is
+                // Consumed in the same step it is detected, before the dialog is
                 // even handed the value, so this ring shows it exactly once and
                 // no later tick can resurrect it.
                 HabitTimerRequests.consume(context)
@@ -259,9 +275,9 @@ private fun HabitTimerOptionsHost(
 
     val pending = request ?: return
 
-    // Everything the ring sheet needs about the habit, resolved off the main
+    // Everything the ring dialog needs about the habit, resolved off the main
     // thread: decoding the app blob synchronously in composition is exactly the
-    // main-thread stall that has to stay off the ring path. The sheet renders
+    // main-thread stall that has to stay off the ring path. The dialog renders
     // its generic glyph for the first frame and fills in when this lands.
     var habit by remember(pending.habitId) {
         mutableStateOf<com.rork.mindsetframestracker.data.Habit?>(null)
@@ -278,29 +294,24 @@ private fun HabitTimerOptionsHost(
     // The habit's OWN tool. Recorded at ring time by HabitReminderReceiver and
     // authoritative; the fallbacks only cover a ring whose habit has since been
     // edited away. One-tap habits never reach this host at all — the receiver
-    // does not raise a request for them — so this sheet is only ever shown for
+    // does not raise a request for them — so this dialog is only ever shown for
     // a habit that genuinely needs an input.
     val mode = habit?.trackingModeOrDefault ?: pending.mode ?: HabitTrackingMode.CHECK
     val name = habit?.name?.takeIf { it.isNotBlank() } ?: pending.habitName.ifBlank { "Habit" }
 
-    // The habit's own data, so the sheet shows what is already inside it
+    // The habit's own data, so the dialog shows what is already inside it
     // rather than asking the user to add blind: "3 of 8 glasses today" for
     // water, this week's entries for a journal. Read from the already-loaded
     // in-memory state rather than the repository, because this must not add
-    // I/O to the ring path — the sheet's own recent-logs section renders it.
+    // I/O to the ring path — the dialog's own recent-logs section renders it.
     val appData by viewModel.state.collectAsStateWithLifecycle()
 
-    // ── The connect-fitness flow, hosted here too ───────────────────────
-    // This is the dialog the user lands on right after the alarm notifies them,
-    // so the connection belongs here as much as in the alarm editor: the ring
-    // says "go for your walk" and this is where they can connect Strava or
-    // Health Connect so the walk records itself. Leaving it out of this sheet
-    // is what made the connect control feel like a separate feature.
-    //
-    // The host layers ABOVE this sheet rather than replacing it, so dismissing
-    // the connect flow returns the user to the ring dialog they came from —
-    // which is where they now want to be, since connecting was in service of
-    // recording the habit that just rang.
+    // ── The connect-fitness offer, decided once per ring ──────────────────
+    // The offer is made INSIDE the dialog the alarm raises, only when a fitness
+    // app can actually supply this habit. Everything the decision needs is
+    // already in memory — the loaded snapshot for the provider states, one
+    // SharedPreferences lookup for the asked-before record — so deciding it adds
+    // no I/O to the ring path.
     var showTrackerConnect by remember { mutableStateOf(false) }
     val settings = appData.settings
     val trackerStatuses = remember(
@@ -308,10 +319,29 @@ private fun HabitTimerOptionsHost(
         settings.polarAccessToken,
         settings.stravaRefreshToken,
     ) { TrackerConnections.statuses(context, settings, settings.subscriptionTier()) }
+    val ringIconId = habit?.iconId ?: pending.iconId
+    // The providers that can supply THIS habit — the habit's own rule for what it
+    // may be offered, so a journal entry is never shown Strava.
+    val trackerProviders = remember(ringIconId) { TrackerConnections.sourcesFor(ringIconId) }
+    val connectOffer = remember(pending.habitId, ringIconId, trackerStatuses) {
+        AlarmRingGate.shouldOfferConnect(
+            sources = trackerProviders,
+            statuses = trackerStatuses,
+            alreadyAsked = AlarmConnectPrompt.hasAsked(context, pending.habitId),
+        )
+    }
+    // Recorded the moment the offer is raised, not when it is answered: the offer
+    // is a one-time choice, so connecting, tapping "Not now" and dismissing the
+    // dialog all count as having been asked. Written in an effect rather than
+    // during composition so the ring path never writes to disk on a mere
+    // recomposition — only when the offer actually appears.
+    LaunchedEffect(connectOffer, pending.habitId) {
+        if (connectOffer) AlarmConnectPrompt.markAsked(context, pending.habitId)
+    }
 
-    HabitTrackingSheet(
+    AlarmActionDialog(
         habitName = name,
-        habitIconId = habit?.iconId ?: pending.iconId,
+        habitIconId = ringIconId,
         trackingMode = mode,
         targetSeconds = habit?.trackingTargetSeconds ?: 0,
         targetCount = habit?.trackingTargetCount ?: 0,
@@ -324,12 +354,45 @@ private fun HabitTimerOptionsHost(
         // configuration to describe.
         alarmSlots = HabitAlarmHistory.daySlots(appData, pending.habitId),
         alarmSetup = habit?.let { HabitAlarmSetup.of(it) },
-        // The habit's relevant tracker connections, reachable from the dialog the
-        // alarm just sent the user to. Always non-null here: this sheet only
-        // exists while `request` is set, so there is no "already dismissed" state
-        // to guard against.
-        onOpenTracker = { showTrackerConnect = true },
+        // The habit's own wording, so the dialog is written for THIS habit rather
+        // than generically. `sourceNames` is what lets a trackable habit say
+        // "Connect Strava and this walk records itself" while a journal entry gets
+        // wording that never mentions a fitness app.
+        copy = remember(name, ringIconId, mode, trackerProviders) {
+            AlarmDialogs.forHabit(
+                habitName = name,
+                iconId = ringIconId,
+                mode = mode,
+                unit = habit?.trackingUnit.orEmpty(),
+                sourceNames = trackerProviders.map { it.label },
+            )
+        },
+        // False for a habit no fitness app can supply, one already connected, or
+        // one already offered — see [AlarmRingGate].
+        connectOffer = connectOffer,
+        trackerProviders = trackerProviders,
         trackerStatuses = trackerStatuses,
+        // Opens the full connect flow; it owns the consent gate and the tier
+        // upsell, so the ring does not re-implement either.
+        onOpenConnect = { showTrackerConnect = true },
+        // A tracker that just became connected FROM this dialog is the case the
+        // offer exists for: the user connected Strava because the walk alarm just
+        // told them to walk, so today's activity is pulled in immediately rather
+        // than left for a sync they would have to remember. Mirrors the branch the
+        // habits screen uses on resume, so both paths import identically.
+        onActivityCaptured = { captured ->
+            val activityType = ringIconId?.let { stravaActivityTypeFor(it) }.orEmpty()
+            captured.forEach { provider ->
+                when (provider) {
+                    TrackerProvider.STRAVA ->
+                        viewModel.syncStravaActivities(pending.habitId, activityType)
+                    TrackerProvider.HEALTH_CONNECT ->
+                        viewModel.syncHealthConnectToHabit(pending.habitId, activityType)
+                    TrackerProvider.POLAR ->
+                        viewModel.syncPolarToHabit(pending.habitId, activityType)
+                }
+            }
+        },
         onRecord = { title, note, durationSeconds, count ->
             // Recorded through the single tracking entry point, so the ring
             // writes the same payload (and the same [HabitLogEntry]) the
@@ -343,14 +406,14 @@ private fun HabitTimerOptionsHost(
                 durationSeconds = durationSeconds,
                 count = count,
                 unit = habit?.trackingUnit,
-                // Attributed to the alarm time that raised this sheet, so the
+                // Attributed to the alarm time that raised this dialog, so the
                 // record answers *this* occurrence. Without it a second ring of
                 // the day would be indistinguishable from the first, and the
                 // per-occurrence history the user asked for would collapse.
                 alarmMinutes = pending.alarmMinutes,
             )
             // Recorded, so nothing is left waiting: the minimized copy (if any)
-            // is cleared BEFORE the sheet closes, so the chip cannot outlive
+            // is cleared BEFORE the dialog closes, so the chip cannot outlive
             // the record it belonged to.
             HabitTimerRequests.clearMinimized(context)
             request = null
@@ -368,12 +431,12 @@ private fun HabitTimerOptionsHost(
         },
         onDismiss = {
             // Dismissing for real clears any minimized copy, so a later tick in
-            // the poll loop cannot resurrect a sheet the user explicitly closed.
+            // the poll loop cannot resurrect a dialog the user explicitly closed.
             HabitTimerRequests.clearMinimized(context)
             request = null
         },
         onMinimize = {
-            // Keep the sheet reachable under the minimized chip. The request is
+            // Keep the dialog reachable under the minimized chip. The request is
             // COPIED to the minimized slot first, because the poll loop/consume
             // discipline means the one-shot record is already gone by now.
             HabitTimerRequests.minimize(context, pending)
@@ -441,20 +504,6 @@ private const val POPUP_POLL_MILLIS = 1_000L
  * instant the event can no longer be produced, no matter how often this
  * composable recomposes, how many times the Activity resumes, how the user
  * navigates, or whether the phone is rebooted mid-session.
- *
- * Concretely, each of the usual ways a Compose popup "comes back" is closed
- * off:
- *
- *  - **Recomposition / re-render** — nothing here is keyed on a value that a
- *    recomposition can re-arm; the pending record is read once per resume and
- *    cleared as soon as the dialog appears.
- *  - **App resume / `ON_RESUME`** — the resume handler *reloads* the pending
- *    event (which is how a completion that fired while backgrounded still
- *    surfaces) but the ledger makes a second resume find nothing.
- *  - **Navigation** — the host sits above the nav graph, so returning to a
- *    screen does not re-create it with a stale event.
- *  - **Rotation / process death** — the ledger is in SharedPreferences, so
- *    even a kill between the alarm and the tap cannot double-fire.
  */
 @Composable
 private fun TimerCompletionHost(
@@ -528,7 +577,7 @@ fun AppNavigation(viewModel: AppViewModel) {
     val context = LocalContext.current
 
 
-    // ── Health Connect permission launcher ─────────────────────────────
+    // ── Health Connect permission launcher ────────────────────────────
     // Registered here (top of the composable, before any conditional
     // return) so it lives for the entire Activity lifecycle — a
     // requirement of rememberLauncherForActivityResult. When the
@@ -868,24 +917,14 @@ fun AppNavigation(viewModel: AppViewModel) {
                     .padding(bottom = 10.dp),
             )
 
-            // ── One-time timer completion popup ──────────────────────────
-            // Hosted at the app root, not inside TimerScreen, for two reasons:
-            //
-            // 1. A timer can finish while the user is on ANY tab (or with the app
-            //    backgrounded, if the alarm fired); the popup must appear wherever
-            //    they are, not only if they happened to leave the timer screen open.
-            // 2. Exactly one composable owns the event, so two screens can never
-            //    both decide to show it.
-            //
-            // The dialog is driven purely by the persisted pending record, and
-            // acknowledging it writes the event id into an append-only ledger — so
-            // it shows once per event and never again, across recomposition,
-            // navigation, resume, rotation or a reboot.
-            // ── Timer / stopwatch choice for a ringing habit alarm ───────
-            // Appears on its own the moment a habit's alarm rings — the same
-            // moment its notification shows — and is hosted at the root so it
-            // does not depend on the full-screen-intent grant that
-            // AlarmRingingActivity needs to launch at all.
+            // ── The dialog a ringing habit alarm raises ──────────────────
+            // Hosted at the app root, not inside TimerScreen / the ringing
+            // screen, so it appears on its own the moment the alarm rings
+            // wherever the user is — and so it does not depend on the
+            // full-screen-intent grant AlarmRingingActivity needs to launch.
+            // It carries the habit's own tool AND, when a fitness app can
+            // actually supply that habit, the connect offer inside the same
+            // card — see HabitTimerOptionsHost.
             HabitTimerOptionsHost(
                 viewModel = viewModel,
                 onOpenTimerScreen = {
@@ -893,18 +932,18 @@ fun AppNavigation(viewModel: AppViewModel) {
                 },
             )
 
-            // ── Minimized sessions ─────────────────────────────────────────
+            // ── Minimized sessions ───────────────────────────────────────
             // Hosted at the app root, directly above the bottom bar, so a
-            // running stopwatch or a sheet the user minimized is reachable from
+            // running stopwatch or a dialog the user minimized is reachable from
             // EVERY tab — which is the whole point of "take it anytime".
             // Restoring a minimized sheet drives the same host that the alarm
             // path uses, so there is exactly one component that can put a habit
-            // sheet on screen and no way for two to compete.
+            // dialog on screen and no way for two to compete.
             MinimizedSessionChip(
                 context = context,
                 onResumeSheet = { minimized ->
                     // Stashed where HabitTimerOptionsHost looks, then cleared from
-                    // the minimized slot so the chip and the sheet cannot both
+                    // the minimized slot so the chip and the dialog cannot both
                     // believe they own it.
                     HabitTimerRequests.request(
                         context = context,
