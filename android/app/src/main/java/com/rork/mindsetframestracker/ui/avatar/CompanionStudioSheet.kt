@@ -70,6 +70,7 @@ import com.rork.mindsetframestracker.data.progress
 import com.rork.mindsetframestracker.ui.AppStrings
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.appStrings
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import kotlinx.coroutines.delay
 
 /** Customization categories shown as chips in the Studio. */
@@ -132,7 +133,7 @@ fun CompanionStudioSheet(
     fun showTaskHint(task: CompanionTask) {
         val done = task.progress(data).coerceAtMost(task.target)
         lockedHint = String.format(s.studioTaskLocked, taskLabel(task, s)) +
-            " · " + String.format(s.studioTaskProgress, done, task.target)
+            " \u00b7 " + String.format(s.studioTaskProgress, done, task.target)
     }
 
     Dialog(
@@ -199,8 +200,8 @@ fun CompanionStudioSheet(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         ) {
                             Icon(
-                                imageVector = if (lockedHint?.startsWith("🔒") == false &&
-                                    lockedHint?.contains("✨") == true
+                                imageVector = if (lockedHint?.startsWith("\ud83d\udd12") == false &&
+                                    lockedHint?.contains("\u2728") == true
                                 ) Icons.Filled.Star else Icons.Outlined.Lock,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
@@ -272,7 +273,7 @@ fun CompanionStudioSheet(
     }
 }
 
-// ── Gender ─────────────────────────────────────────────────────────────
+// ── Gender ────────────────────────────────────────────────────────────
 
 @Composable
 private fun GenderPicker(
@@ -325,7 +326,7 @@ private fun GenderPicker(
     }
 }
 
-// ── Pets — expanded horizontal shelf ───────────────────────────────────
+// ── Pets — expanded horizontal shelf ──────────────────────────────────
 
 @Composable
 private fun PetShelf(
@@ -397,7 +398,7 @@ private fun PetShelf(
     }
 }
 
-// ── Grid categories ────────────────────────────────────────────────────
+// ── Grid categories ───────────────────────────────────────────────────
 
 @Composable
 private fun StudioGrid(
@@ -464,7 +465,7 @@ private fun StudioGrid(
                     selected = avatar.frame == index,
                     locked = !unlocked,
                     lockLabel = when {
-                        frame.foundingOnly -> "★"
+                        frame.foundingOnly -> "\u2605"
                         frame.requiredTier != null -> "${frame.requiredTier.daysRequired}d"
                         else -> null
                     },
@@ -542,7 +543,7 @@ private fun StudioGrid(
     }
 }
 
-// ── Shared bits ────────────────────────────────────────────────────────
+// ── Shared bits ───────────────────────────────────────────────────────
 
 private fun categoryLabel(category: StudioCategory, s: AppStrings): String = when (category) {
     StudioCategory.GENDER -> s.studioCatGender
@@ -619,7 +620,7 @@ private fun OptionCell(
                     Icon(
                         imageVector = Icons.Outlined.Lock,
                         contentDescription = null,
-                        tint = Color(0xFFFFFCF5),
+                        tint = Mf2Palette.OnDarkHeading,
                         modifier = Modifier.size(16.dp),
                     )
                     if (lockLabel != null) {
@@ -627,7 +628,7 @@ private fun OptionCell(
                             text = lockLabel,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFFFCF5),
+                            color = Mf2Palette.OnDarkHeading,
                         )
                     }
                 }
@@ -640,13 +641,13 @@ private fun OptionCell(
                     .padding(top = 4.dp, end = 8.dp)
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF4C3A1E).copy(alpha = 0.85f)),
+                    .background(Mf2Palette.DarkSurfaceVariant.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = null,
-                    tint = Color(0xFFF3CB63),
+                    tint = Mf2Palette.Attention,
                     modifier = Modifier.size(11.dp),
                 )
             }
