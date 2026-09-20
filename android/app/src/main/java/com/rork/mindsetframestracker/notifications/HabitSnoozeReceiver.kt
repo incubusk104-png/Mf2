@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.rork.mindsetframestracker.data.AlarmEventOutcome
+import com.rork.mindsetframestracker.data.AlarmRingState
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import java.util.concurrent.TimeUnit
 
@@ -133,6 +134,32 @@ class HabitSnoozeReceiver : BroadcastReceiver() {
             wakeUp = true,
             allowWhileIdle = true,
         )
+
+        // ── And re-arm the habit's NEXT scheduled occurrence ───────────
+        // Snoozing consumes this occurrence (the fired AlarmManager entry is
+        // gone, and the original notification is cancelled), and a snooze
+        // re-fire deliberately does NOT re-arm itself — see
+        // [HabitReminderReceiver.EXTRA_IS_SNOOZE_REFIRE]. So the habit's normal
+        // schedule has to be restored here, or "snooze" would quietly cancel
+        // every future reminder for this time and the alarm would never ring
+        // again on schedule.
+        //
+        // Idempotent per `(habit, time)`: it arms under the same request code
+        // with FLAG_UPDATE_CURRENT, so the original notifier's own re-arm and
+        // this one cannot produce two alarms for one reminder.
+        runCatching {
+            AlarmRingState.clear(context)
+            val firedMinutes = alarmMinutes.takeIf {
+                it != HabitReminderReceiver.NO_ALARM_MINUTES
+            } ?: return@runCatching
+            HabitAlarmScheduler.scheduleNext(
+                context = context,
+                habitId = habitId,
+                habitName = habitName,
+                firedAlarmMinutes = firedMinutes,
+            )
+        }.onFailure { Log.w(TAG, "Could not re-arm the next occurrence for $habitId", it) }
+
         Log.d(TAG, "Snoozed '$habitName' for 5 minutes (precision=$precision)")
     }
 }

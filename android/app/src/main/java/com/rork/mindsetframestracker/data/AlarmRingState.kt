@@ -22,8 +22,8 @@ import android.util.Log
  * rang in the past**, which is the "it did not reset" the user is reporting.
  *
  * So the acknowledgement is persisted separately, under the occurrence it
- * belongs to. The host consults it before raising a note, and a delivered ring
- * can never come back.
+ * belongs to. [HabitTimerRequests.peek] consults it before handing a request
+ * out, so a delivered ring can never come back.
  *
  * ## Why the key is the (day, time) occurrence, and not the habit or the day
  *
@@ -35,8 +35,8 @@ import android.util.Log
  *    alarm rings", which is the other half of the same request.
  *  * **Per day** — same failure, one dialog per habit per day.
  *
- * Keying on `(day, time)` — the same identity [alarmEventKey] and
- * [occurrenceKeyFor] already use for per-occurrence history — gives exactly the
+ * Keying on `(day, time)` — the same identity `alarmEventKey` and
+ * `occurrenceKeyFor` already use for per-occurrence history — gives exactly the
  * wanted behaviour with no extra state: each of the day's alarms is delivered
  * once, a re-delivered ring for the same time is not a second delivery, and
  * tomorrow's 07:00 is a different key, so the gate reopens fully on schedule.

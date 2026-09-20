@@ -7,6 +7,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.rork.mindsetframestracker.data.AlarmEventOutcome
+import com.rork.mindsetframestracker.data.AlarmRingState
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.crossDayOccurrenceMinutes
 import com.rork.mindsetframestracker.data.MindsetRepository
@@ -184,7 +185,7 @@ class AlarmStopReceiver : BroadcastReceiver() {
         }
         runCatching { manager.cancel(ONGOING_NOTIFICATION_ID) }
 
-        // ── 3, 4 & 5. Kill the sound and the vibration ─────────────────────
+        // ── 3, 4 & 5. Kill the sound and the vibration ──────────────────────
         // The service owns the audio, so it must be told to release it; the
         // helper escalates through every mechanism that can reach it and, in
         // the worst case, tears the ring down itself from this process. The
@@ -193,6 +194,38 @@ class AlarmStopReceiver : BroadcastReceiver() {
         // a single background service start that some OEM builds silently
         // refuse.
         AlarmRingService.stop(context)
+
+        // ── Reset the alarm so the NEXT occurrence still rings ────────────────
+        // Stopping an alarm used to leave two things behind, and both made the
+        // habit's alarm "not reset" after it rang:
+        //
+        //  1. The delivery record stayed set, so a re-delivered intent for the
+        //     same time could not raise the dialog again.
+        //  2. The armed AlarmManager entry was cancelled and nothing re-armed it.
+        //     Re-arming normally happens on the notification path
+        //     (HabitCheckInNotifier -> scheduleNext), but the STOP path cancels
+        //     the entry outright — so a habit whose alarm is stopped could end up
+        //     with no next occurrence armed at all, and go permanently silent.
+        //     That is the alarm version of "it rang once and then never again".
+        //
+        // Re-arming is deliberately the same idempotent, per-time call the
+        // notification path uses: it arms `(habit, firedAlarmMinutes)` under the
+        // same request code, refuses for a one-shot ("Once" really does mean
+        // once), and refuses if the time was edited away in the meantime — in
+        // which case the editor's own schedule() already owns the new set.
+        runCatching { AlarmRingState.clear(context) }
+            .onFailure { Log.w(TAG, "Could not reset the ring state", it) }
+
+        if (!habitId.isNullOrBlank() && stoppedAlarmMinutes != null) {
+            runCatching {
+                HabitAlarmScheduler.scheduleNext(
+                    context = context,
+                    habitId = habitId,
+                    habitName = habitName ?: "Habit",
+                    firedAlarmMinutes = stoppedAlarmMinutes,
+                )
+            }.onFailure { Log.w(TAG, "Could not re-arm the next occurrence for $habitId", it) }
+        }
 
         // ── Tell a live ringing screen to close ────────────────────────────
         // The screen is launched by the full-screen intent and may still be up.

@@ -4,9 +4,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.rork.mindsetframestracker.data.HabitAlarmBehavior
+import com.rork.mindsetframestracker.data.AlarmRingState
+import com.rork.mindsetframestracker.data.Dates
+import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.MindsetRepository
-import com.rork.mindsetframestracker.data.alarmBehavior
+import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.data.isSportActivity
 import com.rork.mindsetframestracker.data.trackingModeOrDefault
 
@@ -41,12 +43,20 @@ class HabitReminderReceiver : BroadcastReceiver() {
 
     private fun postReminder(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra(EXTRA_HABIT_ID) ?: return
-        val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: "Habit"
-        val isSnoozeRefire = intent.getBooleanExtra(EXTRA_IS_SNOOZE_REFIRE, false)
         // Which of the habit's alarm times this is. Absent only for a snooze
         // re-fire of a request written by an older build, in which case the
         // record falls back to "the habit's first alarm time".
         val alarmMinutes = intent.getIntExtra(EXTRA_ALARM_MINUTES, NO_ALARM_MINUTES)
+        // ── A new ring, so the gate reopens ─────────────────────────
+        // The alarm is reaching the user, so this occurrence is due to be shown
+        // again. Resetting here — rather than relying on the request record alone
+        // — is what makes the state self-healing across a ring that was written
+        // but never delivered because the process was killed mid-ring. See
+        // [AlarmRingState].
+        runCatching { AlarmRingState.beginRing(context) }
+            .onFailure { Log.w(TAG, "Could not reset the ring state for '$habitId'", it) }
+        val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: "Habit"
+        val isSnoozeRefire = intent.getBooleanExtra(EXTRA_IS_SNOOZE_REFIRE, false)
 
         // showResult() already wraps its own body in runCatching, so this
         // can't throw — but log every non-success case with the real reason
@@ -60,40 +70,48 @@ class HabitReminderReceiver : BroadcastReceiver() {
             reschedule = !isSnoozeRefire,
         )) {
             is HabitCheckInNotifier.NotifyResult.Posted -> {
-                // The alarm actually reached the user, so this is the moment the
-                // habit's own tool becomes due — but ONLY for a habit whose
-                // completion needs a tool.
+                // ── Raise this habit's own dialog ────────────────────────────
+                // The alarm actually reached the user, so this IS the moment the
+                // habit's own tool becomes due.
                 //
-                // Whether a dialog is right at all is the habit's own
-                // [Habit.alarmBehavior]: a CHECK habit ("Take a vitamin") is
-                // answered by the dismissal itself, so raising a timer sheet for
-                // it asked the user to configure a measurement it does not have
-                // and made a one-tap habit cost three taps. A COUNT or JOURNAL
-                // habit does need input, but not a *timer* — its sheet renders
-                // the stepper or the note field, chosen from the mode recorded
-                // here. Only TIMER/STOPWATCH habits actually want the tool.
+                // UNCONDITIONALLY, for every habit that rings. This used to be
+                // gated on `habit.alarmBehavior != ONE_TAP`, which meant a
+                // one-tap habit ("Take a vitamin", "Bedtime") raised no dialog at
+                // all — and since the request is also what the ring host polls
+                // for, the per-habit personal dialog never appeared for those
+                // habits. That is the "the dialog must appear when the alarm
+                // rings" half of the request, and a CHECK habit is exactly the
+                // common case (medicine, sleep, biotin, cholesterol).
                 //
-                // Written HERE, on the notification path, rather than from
-                // AlarmRingingActivity: that screen only launches when
-                // USE_FULL_SCREEN_INTENT is granted (Android 14+ revokes it by
-                // default), so a ring that never reached it used to leave no
-                // request behind and the popup never appeared.
+                // Raising one is correct for every behavior:
+                //
+                //  * ONE_TAP  — the dialog is the confirmation, and its "Done"
+                //    is what writes the record. [HabitAlarmRecords] deliberately
+                //    writes nothing for such a habit at ring time, precisely
+                //    because the dialog owns that record; suppressing the dialog
+                //    left the habit's day unmarkable from the ring at all.
+                //  * MINIMAL_INPUT / TOOL — the dialog is the count/note or the
+                //    timer, which is its whole point.
+                //
+                // Whether the CONNECT OFFER appears inside it is a separate
+                // question, answered per habit by
+                // [com.rork.mindsetframestracker.data.AlarmRingGate.shouldOfferConnect]
+                // in the host — so a non-fitness habit gets its dialog with no
+                // fitness-app offer, which is the requested behaviour.
                 val habit = runCatching {
                     MindsetRepository(context).load().habits.firstOrNull { it.id == habitId }
                 }.getOrNull()
-                if (habit != null && habit.alarmBehavior != HabitAlarmBehavior.ONE_TAP) {
-                    runCatching {
-                        HabitTimerRequests.request(
-                            context = context,
-                            habitId = habitId,
-                            habitName = habitName,
-                            iconId = habit.iconId,
-                            mode = habit.trackingModeOrDefault,
-                            isSport = habit.isSportActivity,
-                            alarmMinutes = alarmMinutes.takeIf { it != NO_ALARM_MINUTES },
-                        )
-                    }.onFailure { Log.w(TAG, "Could not record the timer/stopwatch request", it) }
-                }
+                runCatching {
+                    HabitTimerRequests.request(
+                        context = context,
+                        habitId = habitId,
+                        habitName = habitName,
+                        iconId = habit?.iconId,
+                        mode = habit?.trackingModeOrDefault,
+                        isSport = habit?.isSportActivity == true,
+                        alarmMinutes = alarmMinutes.takeIf { it != NO_ALARM_MINUTES },
+                    )
+                }.onFailure { Log.w(TAG, "Could not record the ring dialog request", it) }
 
                 if (result.doNotDisturbActive) {
                     Log.w(TAG, "Habit reminder for '$habitName' posted, but Do Not Disturb / a Focus mode is active — it may not visibly appear")

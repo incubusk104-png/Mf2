@@ -3,6 +3,7 @@ package com.rork.mindsetframestracker.notifications
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.rork.mindsetframestracker.data.AlarmRingState
 
 /**
  * The one-shot hand-off from a habit's **alarm** to that habit's own
@@ -48,7 +49,7 @@ object HabitTimerRequests {
     private const val NO_ALARM_MINUTES = -1
     private const val KEY_AUTO_SYNC_HABIT_ID = "pending_auto_sync_habit_id"
 
-    // ── The minimized sheet's OWN storage ──────────────────────────────────
+    // ── The minimized sheet's OWN storage ──────────────────────────────
     // Deliberately separate from the one-shot request keys above rather than a
     // boolean flag on them.
     //
@@ -152,12 +153,32 @@ object HabitTimerRequests {
             }
             .getOrDefault(fallback)
 
-    /** The pending request, without clearing it. */
+    /**
+     * The pending request, without clearing it — and **null once this
+     * occurrence has already been delivered**.
+     *
+     * ## The reset gate lives here, not in the caller
+     *
+     * Reading a pending request is also the moment that occurrence is delivered
+     * to the user, so the acknowledgement is written here, on the same read.
+     * A request for an occurrence that is already acknowledged is stale — a ring
+     * that was written but never read because the process died mid-ring — so it
+     * is cleared and reported as nothing rather than handed out.
+     *
+     * Putting the gate here rather than in the ring host means there is exactly
+     * one reader that can hand out a request, and no call site can forget the
+     * check: the two halves of the requirement — the dialog appears for every
+     * ring, and a delivered ring does not come back — are decided together.
+     *
+     * The acknowledgement is per OCCURRENCE (day + time), not per habit: a habit
+     * set for 07:00/12:00/18:00 shows its dialog for each of the three, but never
+     * twice for one of them. See [AlarmRingState].
+     */
     fun peek(context: Context): Request? {
         val p = prefs(context)
         val id = p.getString(KEY_HABIT_ID, null)
         if (id.isNullOrBlank()) return null
-        return Request(
+        val request = Request(
             habitId = id,
             habitName = p.getString(KEY_HABIT_NAME, null).orEmpty(),
             iconId = p.getString(KEY_ICON_ID, null),
@@ -170,6 +191,22 @@ object HabitTimerRequests {
             alarmMinutes = safeInt(p, KEY_ALARM_MINUTES, NO_ALARM_MINUTES)
                 .takeIf { it != NO_ALARM_MINUTES },
         )
+
+        // Already delivered — a request left behind by a ring the user has
+        // already been shown. Drop it so it can never be raised again, and
+        // report nothing. Guarded because this runs on the ring path.
+        if (runCatching { AlarmRingState.isAccepted(context, request.alarmMinutes) }
+                .getOrDefault(false)
+        ) {
+            consume(context)
+            return null
+        }
+
+        // Reaching here IS the delivery, so it is acknowledged now rather than
+        // waiting for the caller to act on it.
+        runCatching { AlarmRingState.markAccepted(context, request.alarmMinutes) }
+            .onFailure { Log.w(TAG, "Could not acknowledge the ring for '${request.habitName}'", it) }
+        return request
     }
 
     /** Clears the pending request. Called the moment the sheet is shown. */
