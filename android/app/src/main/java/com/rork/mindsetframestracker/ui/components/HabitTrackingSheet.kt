@@ -1,7 +1,6 @@
 package com.rork.mindsetframestracker.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,50 +12,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Flag
-import androidx.compose.material.icons.outlined.Remove
-import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rork.mindsetframestracker.data.AlarmDaySlot
 import com.rork.mindsetframestracker.data.HabitAlarmSetup
 import com.rork.mindsetframestracker.data.HabitIconCatalog
 import com.rork.mindsetframestracker.data.HabitLogEntry
 import com.rork.mindsetframestracker.data.HabitTrackingMode
-import com.rork.mindsetframestracker.data.TIMER_PRESET_MINUTES
 import com.rork.mindsetframestracker.data.TimerKind
-import com.rork.mindsetframestracker.data.formatTimerDuration
 import com.rork.mindsetframestracker.integrations.TrackerConnections
 import com.rork.mindsetframestracker.integrations.TrackerStatus
 import com.rork.mindsetframestracker.ui.appStrings
@@ -98,6 +76,14 @@ import com.rork.mindsetframestracker.ui.appStrings
  * left composition. So these two modes start a real run and open the timer
  * screen; the completion then arrives through the normal once-only funnel and is
  * attributed back to this habit by `habitId`.
+ *
+ * ## The inputs themselves live in HabitToolInputs
+ *
+ * The five per-mode controls ([CheckInput], [TimerInput], [StopwatchInput],
+ * [JournalInput], [CountInput]) are declared in `HabitToolInputs.kt` and shared
+ * with the dialog the alarm raises, so "log how many glasses" cannot come to
+ * mean one thing on the ring and another in this sheet. They are in the same
+ * package and keep their names, so the call sites below resolve unchanged.
  *
  * ## Recording
  *
@@ -161,15 +147,6 @@ fun HabitTrackingSheet(
      * — a separate position, which is what the request objected to. It now lives
      * here, in the habit's own dialog, so opening a habit ("walk") offers the
      * connections that can actually supply it.
-     *
-     * ## Why this sheet has to carry it, and not only the alarm editor
-     *
-     * This is the dialog the user lands on **after the alarm fires and notifies
-     * them** — the ring host and the tap-to-track path both open it. If the
-     * connect action existed only in the alarm editor, the one moment the user is
-     * most likely to want it (the alarm just told them to walk) would be the one
-     * moment it was missing. Carrying it here is what makes the alarm flow lead
-     * into the connection rather than merely precede it.
      *
      * Null (the default) leaves the section out entirely, so a caller with no
      * tracker host renders nothing rather than buttons that do nothing.
@@ -275,7 +252,7 @@ fun HabitTrackingSheet(
                 )
             }
 
-            // ── What this habit's alarms are doing today ────────────────
+            // ── What this habit's alarms are doing today ─────────────────
             // The same section the alarm picker renders (see
             // [HabitAlarmOverviewSection]), so a habit cannot be described one
             // way here and another way in the schedule editor. It answers the
@@ -304,7 +281,7 @@ fun HabitTrackingSheet(
                 }
             }
 
-            // ── Connect the fitness apps that can record this habit ───────────
+            // ── Connect the fitness apps that can record this habit ──────
             // Inside the habit's own dialog, and deliberately outside the block
             // above so it is shown even for a habit with no alarm configured —
             // "connect Strava so my walks count" is a thing to do whether or
@@ -332,7 +309,7 @@ fun HabitTrackingSheet(
             }
 
             Spacer(Modifier.height(6.dp))
-            // ── Leave, or come back later ──────────────────────────────────
+            // ── Leave, or come back later ────────────────────────────────
             // "Minimize" and "Cancel" are deliberately different actions and
             // both are named explicitly:
             //
@@ -358,238 +335,6 @@ fun HabitTrackingSheet(
                     Text("Cancel")
                 }
             }
-        }
-    }
-}
-
-/** The one-tap mode: nothing to measure, so nothing to ask. */
-@Composable
-private fun CheckInput(label: String, onConfirm: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Mark $label done for today?",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(Modifier.height(14.dp))
-        Button(onClick = onConfirm, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                imageVector = Icons.Outlined.Check,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Done")
-        }
-    }
-}
-
-/**
- * Timer: commit to a length, and be told when it is up.
- *
- * The presets are the same quick-picks the timer screen offers, so the choice
- * made here is visible and adjustable in exactly the same terms afterwards.
- */
-@Composable
-private fun TimerInput(targetSeconds: Int, onStart: (Int) -> Unit) {
-    // Default to the habit's own target (a 45-minute gym block, a 20-minute
-    // read) rather than a generic value — the habit already knows what it is.
-    val defaultMinutes = (targetSeconds / 60).takeIf { it > 0 } ?: 20
-    var minutes by remember(habitKeyFor(defaultMinutes)) { mutableIntStateOf(defaultMinutes) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "How long?",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(Modifier.height(10.dp))
-
-        // Presets in a simple wrapping row of chips, with the habit's own
-        // target guaranteed to be present even if it is not one of the presets.
-        val options = (TIMER_PRESET_MINUTES + defaultMinutes).distinct().sorted()
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            options.chunked(4).forEach { rowItems ->
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    rowItems.forEach { option ->
-                        FilterChip(
-                            selected = option == minutes,
-                            onClick = { minutes = option },
-                            label = { Text("${option}m") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            ),
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = formatTimerDuration(minutes * 60),
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(14.dp))
-        Button(onClick = { onStart(minutes * 60) }, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                imageVector = Icons.Outlined.Timer,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Start timer")
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "It rings when the time is up, even if the app is closed.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * Stopwatch: the mode for an activity whose length you find out by doing it.
- *
- * One button and no target — that absence is the point. Asking a walker to pick
- * a duration before they walk would be asking them to know the answer in
- * advance, which is exactly what a stopwatch avoids.
- */
-@Composable
-private fun StopwatchInput(onStart: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                imageVector = Icons.Outlined.Flag,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Start stopwatch")
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Counts up until you stop it — no target, so nothing to set up front.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * Journal: the output is text, so the input asks for text.
- *
- * Both fields are offered but only the note is required — a title alone is a
- * legitimate entry, and demanding a body would make a two-line gratitude note
- * feel like homework. The title is deliberately separate from the body rather
- * than a first line of it: it is what the user scans back through later.
- */
-@Composable
-private fun JournalInput(onSave: (title: String?, note: String?) -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            label = { Text("Title") },
-            placeholder = { Text("Morning pages") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
-            value = note,
-            onValueChange = { note = it },
-            label = { Text("What's on your mind?") },
-            minLines = 3,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(14.dp))
-        Button(
-            // Enabled only once there is something to save, so an empty entry
-            // can never be recorded as a completed journal habit.
-            enabled = title.isNotBlank() || note.isNotBlank(),
-            onClick = { onSave(title, note) },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Edit,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Save entry")
-        }
-    }
-}
-
-/**
- * Count: a quantity against a goal ("8 glasses"), so the input is a stepper.
- *
- * Starts at 1 rather than 0 — a tap that opens this sheet already means "I did
- * some of it", and making the user press + before the button is enabled would be
- * a pointless extra step.
- */
-@Composable
-private fun CountInput(targetCount: Int, unit: String, onSave: (Int) -> Unit) {
-    var amount by remember { mutableIntStateOf(1) }
-    val goal = targetCount.coerceAtLeast(0)
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            IconButton(onClick = { if (amount > 1) amount-- }, enabled = amount > 1) {
-                Icon(
-                    imageVector = Icons.Outlined.Remove,
-                    contentDescription = "Less",
-                )
-            }
-            Text(
-                text = "$amount",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
-            IconButton(onClick = { amount++ }) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = "More",
-                )
-            }
-        }
-
-        Text(
-            text = if (goal > 0) {
-                // Names progress against the habit's own goal, which is the
-                // reason the goal is stored per habit rather than globally.
-                "${valueLabel(amount, unit)} · goal $goal $unit"
-            } else {
-                valueLabel(amount, unit)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-        )
-
-        Spacer(Modifier.height(14.dp))
-        Button(onClick = { onSave(amount) }, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                imageVector = Icons.Outlined.Check,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(if (goal > 0 && amount >= goal) "Goal reached" else "Log it")
         }
     }
 }
@@ -625,51 +370,3 @@ private fun RecentLogsSection(logs: List<HabitLogEntry>) {
         }
     }
 }
-
-/** One-line summary of a recorded entry, in whatever its mode produced. */
-private fun describeLog(entry: HabitLogEntry): String {
-    val when_ = entry.dayKey
-    return when (entry.mode) {
-        HabitTrackingMode.JOURNAL -> {
-            val title = entry.title?.takeIf { it.isNotBlank() }
-            listOfNotNull(title, entry.note?.takeIf { it.isNotBlank() }).joinToString(" — ")
-                .ifBlank { "Journal entry" } + " ($when_)"
-        }
-        HabitTrackingMode.COUNT -> {
-            val amount = entry.count ?: 0
-            val unit = entry.unit.orEmpty()
-            "$amount $unit".trim() + " ($when_)"
-        }
-        else -> {
-            val seconds = entry.durationSeconds ?: 0
-            listOf(formatTimerDuration(seconds), when_).joinToString(" · ")
-        }
-    }
-}
-
-/** Icon that represents what each mode asks for. */
-private fun iconFor(mode: HabitTrackingMode): ImageVector = when (mode) {
-    HabitTrackingMode.CHECK -> Icons.Outlined.Check
-    HabitTrackingMode.TIMER -> Icons.Outlined.Timer
-    HabitTrackingMode.STOPWATCH -> Icons.Outlined.Flag
-    HabitTrackingMode.JOURNAL -> Icons.Outlined.Edit
-    HabitTrackingMode.COUNT -> Icons.Outlined.Add
-}
-
-/** The one-line explanation under the habit's name, per mode. */
-private fun subtitleFor(mode: HabitTrackingMode): String = when (mode) {
-    HabitTrackingMode.CHECK -> "Tick it off when it's done"
-    HabitTrackingMode.TIMER -> "Set the time, and it rings when you're done"
-    HabitTrackingMode.STOPWATCH -> "Time it and stop whenever you're finished"
-    HabitTrackingMode.JOURNAL -> "Write down how it went"
-    HabitTrackingMode.COUNT -> "Log how many you did"
-}
-
-/** "1 glass" / "3 glasses" — a naive plural that reads correctly for our units. */
-private fun valueLabel(amount: Int, unit: String): String {
-    val singular = unit.trimEnd('s')
-    return if (amount == 1) "1 $singular" else "$amount $unit"
-}
-
-/** Stable key for the timer preset state, so it resets per habit not per frame. */
-private fun habitKeyFor(minutes: Int): Int = minutes
