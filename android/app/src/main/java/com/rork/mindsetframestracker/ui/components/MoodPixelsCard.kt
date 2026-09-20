@@ -41,6 +41,7 @@ import com.rork.mindsetframestracker.data.AppData
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.MoodMode
 import com.rork.mindsetframestracker.ui.appStrings
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -50,10 +51,10 @@ import java.util.Locale
 
 /** Print-friendly pixel color per mood (matches the share-card palette). */
 private fun moodPixelColor(mode: MoodMode): Color = when (mode) {
-    MoodMode.CALM -> Color(0xFF5D8A66)
-    MoodMode.FOCUSED -> Color(0xFF33655A)
-    MoodMode.MOTIVATED -> Color(0xFFC2643A)
-    MoodMode.OVERWHELMED -> Color(0xFF8A8273)
+    MoodMode.CALM -> Mf2Palette.Success
+    MoodMode.FOCUSED -> Mf2Palette.AccentMuted
+    MoodMode.MOTIVATED -> Mf2Palette.Error
+    MoodMode.OVERWHELMED -> Mf2Palette.OnDarkMuted
 }
 
 /**
@@ -166,7 +167,7 @@ fun MoodPixelsCard(
                                 Text(
                                     text = day.dayOfMonth.toString(),
                                     fontSize = 9.sp,
-                                    color = if (mood != null) Color(0xFFFFFCF5).copy(alpha = 0.9f)
+                                    color = if (mood != null) Mf2Palette.OnDarkHeading.copy(alpha = 0.9f)
                                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(
                                         alpha = if (isFuture) 0.4f else 0.8f,
                                     ),
