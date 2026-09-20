@@ -103,6 +103,7 @@ import com.rork.mindsetframestracker.data.subscriptionTier
 import com.rork.mindsetframestracker.ui.screens.WeeklyScreen
 import com.rork.mindsetframestracker.util.rememberIsBatteryLow
 import com.rork.mindsetframestracker.util.rememberIsOnline
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -150,9 +151,9 @@ private fun ConnectivityStatusIcon(
 ) {
     val tint by animateColorAsState(
         targetValue = when {
-            isLowPower -> Color(0xFFFFB300)
+            isLowPower -> Mf2Palette.Warning
             isOnline -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-            else -> Color(0xFF9E9E9E)
+            else -> Mf2Palette.OnDarkMuted
         },
         label = "connectivityTint",
     )
@@ -164,7 +165,7 @@ private fun ConnectivityStatusIcon(
             Icon(
                 imageVector = Icons.Filled.BatteryAlert,
                 contentDescription = "Low Power — sync paused below 20% battery to conserve energy",
-                tint = Color(0xFFFFB300),
+                tint = Mf2Palette.Warning,
                 modifier = Modifier.size(14.dp),
             )
         }
