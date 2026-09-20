@@ -164,6 +164,7 @@ import com.rork.mindsetframestracker.ui.theme.DisplayFontFamily
 import com.rork.mindsetframestracker.ui.theme.LocalMoodTheme
 import com.rork.mindsetframestracker.util.StreakShare
 import com.rork.mindsetframestracker.util.ProgressShareImage
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -493,7 +494,7 @@ fun HomeScreen(
         item(key = "prompt") {
             EntranceItem(index = 2) {
                 // Hero prompt card: mood gradient, cream text, soft watermark.
-                val promptInk = Color(0xFFFFFCF5)
+                val promptInk = Mf2Palette.OnDarkHeading
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1597,9 +1598,9 @@ private fun HabitRow(
                                 colors = listOf(
                                     moodTheme.gradient.first(),
                                     moodTheme.gradient.last(),
-                                    Color(0xFFE9B44C),
-                                    Color(0xFF9CAF88),
-                                    Color(0xFFC7724F),
+                                    Mf2Palette.Attention,
+                                    Mf2Palette.AccentMuted,
+                                    Mf2Palette.Error,
                                 ),
                                 particleCount = if (confettiBig) 64 else 26,
                                 modifier = Modifier.requiredSize(if (confettiBig) 220.dp else 130.dp),

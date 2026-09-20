@@ -63,6 +63,7 @@ import com.rork.mindsetframestracker.data.ContentPack
 import com.rork.mindsetframestracker.data.MoodMode
 import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.components.MoodPicker
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import com.rork.mindsetframestracker.ui.theme.moodThemeFor
 import kotlinx.coroutines.launch
 
@@ -338,7 +339,7 @@ private fun MockIconTile(iconRes: Int, label: String, isSelected: Boolean) {
                     modifier = Modifier
                         .size(18.dp)
                         .clip(CircleShape)
-                        .background(androidx.compose.ui.graphics.Color(0xFF4CAF50)),
+                        .background(Mf2Palette.Success),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

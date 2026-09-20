@@ -62,6 +62,7 @@ import com.rork.mindsetframestracker.ui.AppStrings
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.theme.LocalMoodTheme
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -153,7 +154,7 @@ fun GroundingSheet(
     }
 }
 
-// ── Box breathing ──────────────────────────────────────────────────────
+// —— Box breathing ——————————————————————————————————————————————————————
 
 private const val PHASE_SECONDS = 4
 
@@ -244,7 +245,7 @@ private fun BreatheSection(reducedMotion: Boolean, s: AppStrings) {
                 Text(
                     text = secondsLeft.toString(),
                     style = MaterialTheme.typography.displayMedium,
-                    color = Color(0xFFFFFCF5),
+                    color = Mf2Palette.OnDarkHeading,
                 )
             }
         }
@@ -282,7 +283,7 @@ private fun BreatheSection(reducedMotion: Boolean, s: AppStrings) {
     }
 }
 
-// ── 5-4-3-2-1 sensory grounding ────────────────────────────────────────
+// —— 5-4-3-2-1 sensory grounding ————————————————————————————————————————
 
 @Composable
 private fun SensesSection(s: AppStrings) {
@@ -377,7 +378,7 @@ private fun SensesSection(s: AppStrings) {
     }
 }
 
-// ── One-line micro-journal ─────────────────────────────────────────────
+// —— One-line micro-journal —————————————————————————————————————————————
 
 @Composable
 private fun NoteSection(

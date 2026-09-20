@@ -62,6 +62,7 @@ import com.rork.mindsetframestracker.data.Habit
 import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -585,7 +586,7 @@ private fun UsageBar(progress: Float, over: Boolean) {
                 .clip(RoundedCornerShape(4.dp))
                 .background(
                     if (over) MaterialTheme.colorScheme.error
-                    else Color(0xFF4CAF50),
+                    else Mf2Palette.Success,
                 ),
         )
     }
@@ -719,7 +720,7 @@ private fun AppLimitRow(
                 modifier = Modifier
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF4CAF50)),
+                    .background(Mf2Palette.Success),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -885,7 +886,7 @@ private fun EmptyAppsState(modifier: Modifier = Modifier) {
     }
 }
 
-// ── Formatting ────────────────────────────────────────────────────────────
+// ── Formatting ───────────────────────────────────────────────────────
 
 /** "2h" / "1h 30m" / "45m" for a daily limit. */
 internal fun formatLimitLabel(minutes: Int): String = when {

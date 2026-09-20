@@ -70,11 +70,11 @@ data class MoodTheme(
 val LocalMoodTheme = staticCompositionLocalOf {
     MoodTheme(
         mode = MoodMode.CALM,
-        accent = Color(0xFF5D8A66),
-        onAccent = Color(0xFFFFFCF5),
-        accentSoft = Color(0xFFE3EDE0),
-        onAccentSoft = Color(0xFF5D8A66),
-        gradient = listOf(Color(0xFF6B9873), Color(0xFF4E8A7A)),
+        accent = Mf2Palette.AccentMuted,
+        onAccent = Mf2Palette.OnAccent,
+        accentSoft = Mf2Palette.AccentContainerLight,
+        onAccentSoft = Mf2Palette.AccentOnLight,
+        gradient = listOf(Mf2Palette.AccentMuted, Mf2Palette.AccentBright),
         motion = MoodMotion(enabled = true, durationScale = 1.4f, bouncy = false),
     )
 }
@@ -91,8 +91,8 @@ private data class AccentPair(val light: Color, val dark: Color, val gradient: L
 private val accentPacks: Map<String, Map<MoodMode, AccentPair>> = mapOf(
     "classic" to mapOf(
         MoodMode.CALM to AccentPair(
-            Color(0xFF5D8A66), Color(0xFFA9CDAB),
-            listOf(Color(0xFF6B9873), Color(0xFF4E8A7A)),
+            Mf2Palette.AccentOnLight, Mf2Palette.AccentBright,
+            listOf(Mf2Palette.AccentMuted, Mf2Palette.AccentBright),
         ),
         MoodMode.FOCUSED to AccentPair(
             Color(0xFF33655A), Color(0xFF96CCBC),
@@ -372,29 +372,32 @@ private val moodMotions: Map<MoodMode, MoodMotion> = mapOf(
     MoodMode.OVERWHELMED to MoodMotion(enabled = false, durationScale = 1f, bouncy = false),
 )
 
-// Neutral base — warm cream from the brand logo (light) / deep espresso-black
-// with high-contrast ivory text (dark). Never changes per mood.
-private val LightBackground = Color(0xFFFAF3E9)
-private val LightSurface = Color(0xFFFFFDF7)
-private val LightSurfaceVariant = Color(0xFFF0E6D7)
-private val LightOnBackground = Color(0xFF2B241B)
-private val LightOnSurfaceVariant = Color(0xFF5D5546)
-private val LightOutline = Color(0xFF8B8171)
-private val LightOutlineVariant = Color(0xFFDCD3C2)
+// Neutral base — warm cream from the brand logo (light) / warm near-black with
+// high-contrast ivory text (dark). Never changes per mood.
+//
+// ALL of these are aliases into Mf2Palette (Palette.kt) — the single source of
+// truth for the user's original palette. Never re-inline a hex literal here.
+private val LightBackground = Mf2Palette.LightBackground
+private val LightSurface = Mf2Palette.LightSurface
+private val LightSurfaceVariant = Mf2Palette.LightSurfaceVariant
+private val LightOnBackground = Mf2Palette.OnLight
+private val LightOnSurfaceVariant = Mf2Palette.OnLightMuted
+private val LightOutline = Mf2Palette.LightOutline
+private val LightOutlineVariant = Mf2Palette.LightOutlineVariant
 private val LightSurfaceContainerLow = Color(0xFFFBF6EC)
 private val LightSurfaceContainerHigh = Color(0xFFF5EDDF)
 private val LightInverseSurface = Color(0xFF332B20)
 private val LightInverseOnSurface = Color(0xFFF7F0E3)
 
-// Deep, high-contrast dark mode: near-black warm base (great on OLED) with
-// bright ivory foregrounds (~17:1 contrast) and clearly separated layers.
-private val DarkBackground = Color(0xFF0D0A06)
-private val DarkSurface = Color(0xFF1A140B)
-private val DarkSurfaceVariant = Color(0xFF2C2416)
-private val DarkOnBackground = Color(0xFFF8F1E2)
-private val DarkOnSurfaceVariant = Color(0xFFD9CEB9)
-private val DarkOutline = Color(0xFFA99D86)
-private val DarkOutlineVariant = Color(0xFF3B3222)
+// Dark mode — the sampled reference background (#140F09) with ivory
+// foregrounds (~17:1 contrast) and clearly separated card layers.
+private val DarkBackground = Mf2Palette.DarkBackground
+private val DarkSurface = Mf2Palette.DarkSurface
+private val DarkSurfaceVariant = Mf2Palette.DarkSurfaceVariant
+private val DarkOnBackground = Mf2Palette.OnDark
+private val DarkOnSurfaceVariant = Mf2Palette.OnDarkMuted
+private val DarkOutline = Mf2Palette.DarkOutline
+private val DarkOutlineVariant = Mf2Palette.DarkOutlineVariant
 private val DarkSurfaceContainerLow = Color(0xFF140F08)
 private val DarkSurfaceContainerHigh = Color(0xFF251E11)
 private val DarkInverseSurface = Color(0xFFF3EBDC)
@@ -415,7 +418,7 @@ fun moodThemeFor(
     return MoodTheme(
         mode = mode,
         accent = accent,
-        onAccent = if (darkTheme) Color(0xFF1A1309) else Color(0xFFFFFCF5),
+        onAccent = if (darkTheme) Mf2Palette.OnAccent else Color(0xFFFFFCF5),
         accentSoft = soft,
         onAccentSoft = accent,
         gradient = pair.gradient,

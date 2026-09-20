@@ -39,6 +39,7 @@ import kotlin.math.PI
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import kotlin.random.Random
 
 /** Streak milestones that trigger a celebration. */
@@ -76,7 +77,7 @@ fun MilestoneCelebration(
     val density = LocalDensity.current
     val particles = remember(trigger) {
         val random = Random(trigger * 31 + 7)
-        val palette = accentColors.ifEmpty { listOf(Color(0xFF006876)) }
+        val palette = accentColors.ifEmpty { listOf(Mf2Palette.AccentBright) }
         List(90) {
             val angle = random.nextFloat() * 2f * PI.toFloat()
             val speed = 350f + random.nextFloat() * 650f

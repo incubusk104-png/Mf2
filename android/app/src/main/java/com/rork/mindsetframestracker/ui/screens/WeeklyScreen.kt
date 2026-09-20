@@ -74,6 +74,7 @@ import com.rork.mindsetframestracker.ui.components.EntranceItem
 import com.rork.mindsetframestracker.ui.components.PremiumSheet
 import com.rork.mindsetframestracker.ui.theme.LocalMoodTheme
 import com.rork.mindsetframestracker.util.ProgressShareImage
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
@@ -296,7 +297,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             }
         }
 
-        // ── "Your week in numbers" — what the habits' own tools recorded ──
+        // —— "Your week in numbers" — what the habits' own tools recorded ——
         //
         // The two cards above count *check-ins*: they answer "how many days did
         // you do it". They cannot answer "how much did you do", because a
@@ -369,7 +370,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             }
         }
 
-        // ── Sourced activity: Strava / Google Health Connect / Polar ──
+        // —— Sourced activity: Strava / Google Health Connect / Polar ——
         //
         // The sourced activity for the same 7 days, or nothing when no
         // integration recorded anything — so an un-connected user sees no
@@ -479,7 +480,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
             val topHabit = data.habits.maxByOrNull { data.streakFor(it.id) }
 
             // Premium insights on a rich mood-gradient panel.
-            val insightInk = Color(0xFFFFFCF5)
+            val insightInk = Mf2Palette.OnDarkHeading
             EntranceItem(index = 5) {
                 Box(
                     modifier = Modifier
@@ -563,7 +564,7 @@ fun WeeklyScreen(viewModel: AppViewModel) {
         // Shares CTA — renders the stylized weekly habits + moods card and
         // opens the system share sheet (a copy is saved to the gallery too).
         EntranceItem(index = 6) {
-            val shareInk = Color(0xFFFFFCF5)
+            val shareInk = Mf2Palette.OnDarkHeading
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -676,4 +677,3 @@ private fun GreyedInsightRow(label: String, value: String) {
         )
     }
 }
-
