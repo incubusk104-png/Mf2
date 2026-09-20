@@ -1,7 +1,7 @@
 package com.rork.mindsetframestracker.ui.screens
 
 /*
- * ── WHAT CHANGED IN THIS VERSION ─────────────────────────────────────────
+ * ── WHAT CHANGED IN THIS VERSION ──────────────────────────────────────────
  * The three MIUI rows (Autostart / Battery saver / "Display pop-up windows")
  * used to be hardcoded `granted = false` forever, because Android exposes no
  * public API to read those toggles' real state. That meant the warning
@@ -18,7 +18,7 @@ package com.rork.mindsetframestracker.ui.screens
  * Nothing else about wiring changes — see the original header comment below
  * for how to hook this dialog up.
  *
- * ── HOW TO WIRE IT UP ────────────────────────────────────────────────────
+ * ── HOW TO WIRE IT UP ─────────────────────────────────────────────────────
  * 1. Drop this file next to HabitsScreen.kt (replacing the old one).
  * 2. In HabitsScreen.kt, wherever you currently call
  *    `HabitAlarmScheduler.schedule(context, habit)`, add right after it:
@@ -79,6 +79,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.widget.Toast
 import com.rork.mindsetframestracker.notifications.HabitCheckInNotifier
+import com.rork.mindsetframestracker.ui.theme.Mf2Palette
 
 /**
  * Public so the screen that just set an alarm can check "should I show the
@@ -710,7 +711,7 @@ private fun PermissionRow(
             Icon(
                 imageVector = if (granted) Icons.Filled.CheckCircle else Icons.Filled.Warning,
                 contentDescription = null,
-                tint = if (granted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                tint = if (granted) Mf2Palette.Success else MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(end = 10.dp),
             )
             Column {
@@ -760,7 +761,7 @@ private fun ConfirmablePermissionRow(
             Icon(
                 imageVector = if (confirmed) Icons.Filled.CheckCircle else Icons.Filled.Warning,
                 contentDescription = null,
-                tint = if (confirmed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                tint = if (confirmed) Mf2Palette.Success else MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(end = 10.dp),
             )
             Column {
