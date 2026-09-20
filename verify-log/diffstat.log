@@ -1,0 +1,9 @@
+ .../rork/mindsetframestracker/ui/AppViewModel.kt   |  10 +-
+ .../ui/components/ActivityInsightSheet.kt          |   2 +-
+ .../ui/components/HabitTrackerConnectHost.kt       |   8 +-
+ .../ui/components/IntegrationConsentDialog.kt      |   6 +-
+ .../ui/components/TrackerConnectSheet.kt           |  26 +-
+ .../ui/screens/HabitsScreen.kt                     |  14 +-
+ .../ui/screens/SettingsScreen.kt                   | 281 ---------------------
+ .../ui/HabitTrackerConnectPlacementTest.kt         | 116 ++++++++-
+ 8 files changed, 147 insertions(+), 316 deletions(-)

@@ -1,0 +1,3 @@
+ok (dialog path): android/app/src/main/java/com/rork/mindsetframestracker/ui/components/HabitTrackerConnectHost.kt
+ok (dialog path): android/app/src/main/java/com/rork/mindsetframestracker/ui/components/TrackerConnectSheet.kt
+fail=0
