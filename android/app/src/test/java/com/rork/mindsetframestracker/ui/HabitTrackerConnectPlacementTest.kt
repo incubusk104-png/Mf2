@@ -144,25 +144,62 @@ class HabitTrackerConnectPlacementTest {
 
     @Test
     fun `both habit dialog call sites pass the connect action through`() {
-        // The two dialogs a user actually reaches: tap-to-track (Home) and the
-        // dialog the alarm leads to (the ring host). If either omits the action
-        // the section renders as inert text, which is the failure mode this
-        // whole change exists to remove.
+        // The two surfaces a user actually reaches, and they deliberately pass
+        // the action through *different* parameters now:
+        //
+        //  * **tap-to-track** (Home) opens the habit's own sheet, which carries
+        //    the connect section inline as before; and
+        //  * **the alarm** is handled by the ring host, which must NOT route the
+        //    user to a separate connect step — that step was removed at the
+        //    user's request — so it hands `onOpenConnect` to AlarmActionDialog,
+        //    which raises the offer inside the very card the alarm shows.
+        //
+        // Asserting the old shape here (both sites passing `onOpenTracker` to
+        // HabitTrackingSheet) is what keeps the removed step alive in the alarm
+        // flow, which is why this test now names each surface's own mechanism.
         val home = moduleFile("src/main/java/com/rork/mindsetframestracker/ui/screens/HomeScreen.kt").readText()
+        assertTrue(
+            "HomeScreen must hand the connect action to HabitTrackingSheet.",
+            home.contains("onOpenTracker = { showTrackerConnect = true },"),
+        )
+        assertTrue(
+            "HomeScreen must hand the resolved provider statuses to HabitTrackingSheet.",
+            home.contains("trackerStatuses = trackerStatuses,"),
+        )
+
         val nav = moduleFile("src/main/java/com/rork/mindsetframestracker/ui/navigation/AppNavigation.kt").readText()
-        listOf("HomeScreen" to home, "AppNavigation" to nav).forEach { (name, source) ->
-            assertTrue(
-                "$name must hand the connect action to HabitTrackingSheet.",
-                source.contains("onOpenTracker = { showTrackerConnect = true },"),
-            )
-            assertTrue(
-                "$name must hand the resolved provider statuses to HabitTrackingSheet.",
-                source.contains("trackerStatuses = trackerStatuses,"),
-            )
-        }
+        assertTrue(
+            "The alarm-ring host must hand the connect action to AlarmActionDialog, so " +
+                "the offer is raised inside the dialog the alarm itself shows rather " +
+                "than as a step the user is sent to.",
+            nav.contains("onOpenConnect = { showTrackerConnect = true },"),
+        )
+        assertTrue(
+            "The alarm-ring host must hand the resolved provider statuses to the dialog, " +
+                "so its rows describe each provider honestly.",
+            nav.contains("trackerStatuses = trackerStatuses,"),
+        )
     }
 
-    // ── What the sheet must not do: offer a connection that cannot work ──────
+    @Test
+    fun `the alarm flow no longer runs through the habit tracking sheet`() {
+        // The removal itself. The ring host used to render HabitTrackingSheet and
+        // hand the user off to a separate connect step; it must now raise
+        // AlarmActionDialog, which carries the offer inline. If the sheet comes
+        // back to this host, the "step" the user objected to is back with it.
+        val nav = moduleFile("src/main/java/com/rork/mindsetframestracker/ui/navigation/AppNavigation.kt").readText()
+        assertTrue(
+            "The ring host must raise AlarmActionDialog.",
+            nav.contains("AlarmActionDialog("),
+        )
+        assertFalse(
+            "The ring host must not render HabitTrackingSheet any more — that is the " +
+                "separate surface the alarm used to hand the user off to.",
+            nav.contains("HabitTrackingSheet("),
+        )
+    }
+
+    // ── What the sheet must not do: offer a connection that cannot work ──
 
     private fun status(
         provider: TrackerProvider,
@@ -238,7 +275,7 @@ class HabitTrackerConnectPlacementTest {
         )
     }
 
-    // ── The leftovers: no connect surface anywhere but a habit dialog ────────
+    // ── The leftovers: no connect surface anywhere but a habit dialog ──
 
     @Test
     fun `the settings screen offers no fitness tracker entry point`() {
