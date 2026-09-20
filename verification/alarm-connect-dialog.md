@@ -123,6 +123,50 @@ cd android
    its real trackers, a count habit talks in its own unit, and a Strava-derived
    icon is named in prose rather than by its raw id.
 
-Plus: `HabitTrackerConnectPlacementTest` is unchanged and still passes — it pins
-that the global "Connect fitness trackers" control never returns to the habits
-screen header.
+Plus `HabitTrackerConnectPlacementTest`, which pins where the connect control may
+live. One of its cases (`both habit dialog call sites pass the connect action
+through`) asserted the **old** wiring — that the ring host hands `onOpenTracker`
+to `HabitTrackingSheet` — which is precisely the removed step, so it had to change
+with the behaviour rather than be left passing. It now names each surface's own
+mechanism (Home keeps `onOpenTracker` on the sheet; the ring host passes
+`onOpenConnect` to `AlarmActionDialog`), and a new case pins the removal itself:
+the ring host raises `AlarmActionDialog` and no longer renders
+`HabitTrackingSheet`. The remaining cases — no global entry point in the habits
+header or in Settings, the locked row routed to the upsell and never to OAuth, the
+shared tracker row — are unchanged and still pass.
+
+## Results
+
+```
+$ ./gradlew :app:compileDebugKotlin     -> BUILD SUCCESSFUL
+$ ./gradlew :app:testDebugUnitTest      -> BUILD SUCCESSFUL
+  19 suites, 285 tests, 0 failures, 0 errors, 0 skipped
+```
+
+Long-output results are recorded in `verification/v12-test.log` and the run
+metadata in `verification/v12-meta.txt`.
+
+The build is memory-constrained in this environment (the Gradle daemon is killed
+under the default heap), so the suite was run with the heap and worker pools
+pinned:
+
+```
+./gradlew :app:testDebugUnitTest --no-daemon --offline \
+  -Dorg.gradle.jvmargs="-Xmx768m -XX:ActiveProcessorCount=2" \
+  -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.workers.max=1
+```
+
+A note on what the first build caught: removing the now-unused imports from
+`HabitTrackingSheet` also removed `getValue`/`setValue`, but the file still
+declares `var detailSlot by remember { … }`. That is a compile error, and nothing
+short of running the compiler would have found it — which is why the build was
+run rather than inferred.
+
+## Rendered check
+
+`AlarmDialogs.forHabit` was executed standalone across a walk, water, a vitamin
+and a journal entry, and the outputs rendered and inspected. Confirmed
+visually: the walk's dialog carries the connect block naming Strava and Google
+Health Connect; water, the vitamin and the journal entry show their own tool and
+**no connect block at all**; all five modes produce distinct tool wording; and a
+`strava_weight_training` icon is spoken as "weight training", never as its raw id.

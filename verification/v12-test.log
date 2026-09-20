@@ -1,135 +1,38 @@
-
-Welcome to Gradle 8.14.1!
-
-Here are the highlights of this release:
- - Java 24 support
- - GraalVM Native Image toolchain selection
- - Enhancements to test reporting
- - Build Authoring improvements
-
-For more details see https://docs.gradle.org/8.14.1/release-notes.html
-
 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
 Daemon will be stopped at the end of the build 
-Calculating task graph as no cached configuration is available for tasks: :app:testDebugUnitTest :app:assembleDebug
-
-> Configure project :app
-Huawei AGC config resolved from local android/app/agconnect-services.json (app_id=118642709, cp_id=30063000033888672)
-Rork config — supabase: resolved, polar: missing
-
+Reusing configuration cache.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
-> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :app:copyAgconnectServices
-> Task :app:generateDebugResValues FROM-CACHE
-> Task :app:generateDebugBuildConfig FROM-CACHE
-> Task :app:generateDebugResources FROM-CACHE
-> Task :app:processDebugNavigationResources FROM-CACHE
-> Task :app:compileDebugNavigationResources FROM-CACHE
-> Task :app:mapDebugSourceSetPaths
-> Task :app:createDebugCompatibleScreenManifests
-> Task :app:extractDeepLinksDebug FROM-CACHE
-> Task :app:checkDebugAarMetadata
-> Task :app:javaPreCompileDebug FROM-CACHE
-> Task :app:preDebugUnitTestBuild UP-TO-DATE
-> Task :app:packageDebugResources FROM-CACHE
-> Task :app:javaPreCompileDebugUnitTest FROM-CACHE
-> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
-> Task :app:parseDebugLocalResources FROM-CACHE
-> Task :app:mergeDebugResources FROM-CACHE
-> Task :app:processDebugMainManifest FROM-CACHE
-> Task :app:processDebugManifest FROM-CACHE
-> Task :app:processDebugManifestForPackage FROM-CACHE
-> Task :app:mergeDebugShaders
-> Task :app:compileDebugShaders NO-SOURCE
-> Task :app:generateDebugAssets UP-TO-DATE
-> Task :app:checkDebugDuplicateClasses
-> Task :app:mergeDebugAssets
-> Task :app:processDebugResources FROM-CACHE
-> Task :app:compressDebugAssets
-> Task :app:mergeLibDexDebug
-> Task :app:mergeDebugJniLibFolders
-> Task :app:desugarDebugFileDependencies
-> Task :app:mergeDebugNativeLibs
-
-> Task :app:stripDebugDebugSymbols
-Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
-
-> Task :app:validateSigningDebug
-> Task :app:writeDebugAppMetadata
-> Task :app:writeDebugSigningConfigVersions
-> Task :app:l8DexDesugarLibDebug
-> Task :app:compileDebugKotlin
-> Task :app:mergeExtDexDebug
-
-> Task :app:compileDebugKotlin
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/MainActivity.kt:218:15 'fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Unit' is deprecated. This method has been deprecated in favor of using the Activity Result API
-      which brings increased type safety via an {@link ActivityResultContract} and the prebuilt
-      contracts for common intents available in
-      {@link androidx.activity.result.contract.ActivityResultContracts}, provides hooks for
-      testing, and allow receiving results in separate, testable classes independent from your
-      activity. Use
-      {@link #registerForActivityResult(ActivityResultContract, ActivityResultCallback)}
-      with the appropriate {@link ActivityResultContract} and handling the result in the
-      {@link ActivityResultCallback#onActivityResult(Object) callback}.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/MainActivity.kt:340:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/auth/HuaweiAppUpdateChecker.kt:39:32 'fun getSerializableExtra(p0: String!): Serializable?' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/auth/HuaweiAppUpdateChecker.kt:39:69 No cast needed.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/auth/HuaweiServicesConfig.kt:153:13 Redundant creation of Json format. Creating instances for each usage can be slow.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/data/HabitDataExport.kt:238:43 Unnecessary safe call on a non-null receiver of type 'ExportRange'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/data/HabitDataExport.kt:239:41 Unnecessary safe call on a non-null receiver of type 'ExportRange'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/data/HabitDataExport.kt:240:39 Unnecessary safe call on a non-null receiver of type 'ExportRange'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/data/HabitDataExport.kt:244:45 Unnecessary safe call on a non-null receiver of type 'ExportRange'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/data/SupabaseSync.kt:1106:39 Unnecessary safe call on a non-null receiver of type 'HabitTrackingMode'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:121:27 'fun unsafeCheckOpNoThrow(p0: String, p1: Int, p2: String): Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:426:39 'static field MOVE_TO_FOREGROUND: Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:438:39 'static field MOVE_TO_BACKGROUND: Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:476:35 'static field MOVE_TO_FOREGROUND: Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:480:35 'static field MOVE_TO_BACKGROUND: Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:531:35 'static field MOVE_TO_FOREGROUND: Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/integrations/ScreenTimeMonitor.kt:535:35 'static field MOVE_TO_BACKGROUND: Int' is deprecated. Deprecated in Java.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:510:21 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:643:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:644:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:947:21 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:948:21 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:949:21 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:950:21 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1107:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1108:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1200:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1202:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1207:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/avatar/CompanionAvatar.kt:1209:17 'fun quadraticBezierTo(x1: Float, y1: Float, x2: Float, y2: Float): Unit' is deprecated. Use quadraticTo() for consistency with cubicTo().
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/ActivitySourcePicker.kt:299:67 'val Icons.Filled.DirectionsRun: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.DirectionsRun.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/AuthPromptSheet.kt:537:57 'val LocalClipboardManager: ProvidableCompositionLocal<ClipboardManager>' is deprecated. Use LocalClipboard instead which supports suspend functions.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/MinimizedHabitChip.kt:129:59 Unnecessary safe call on a non-null receiver of type 'ActiveTimer'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/MinimizedHabitChip.kt:184:33 Condition is always 'true'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/ScreenTimeHabitSheet.kt:561:46 Unnecessary safe call on a non-null receiver of type 'ScreenTimeMonitor.LimitStatus'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/ScreenTimeHabitSheet.kt:701:67 Unnecessary non-null assertion (!!) on a non-null receiver of type 'Int'.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/components/ShareHabitsSheet.kt:174:34 Redundant creation of Json format. Creating instances for each usage can be slow.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/AlarmPermissionPrompt.kt:410:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/HomeScreen.kt:705:36 'fun rememberSwipeToDismissBoxState(initialValue: SwipeToDismissBoxValue = ..., confirmValueChange: (SwipeToDismissBoxValue) -> Boolean = ..., positionalThreshold: (Float) -> Float = ...): SwipeToDismissBoxState' is deprecated. confirmValueChange is deprecated without replacement. Rather than relying on a callback to veto state changes, the anchor set should not include disallowed anchors. See androidx.compose.foundation.samples.AnchoredDraggableDynamicAnchorsSample for an example of using dynamic anchors over confirmValueChange.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt:2037:42 'val Icons.Outlined.Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Logout.
-w: file:///home/runner/work/Mf2/Mf2/android/app/src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt:2106:50 'val Icons.Outlined.Logout: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Logout.
-
-> Task :app:processDebugJavaRes
-> Task :app:compileDebugJavaWithJavac
-> Task :app:bundleDebugClassesToRuntimeJar
-> Task :app:bundleDebugClassesToCompileJar
-> Task :app:mergeDebugJavaResource
-> Task :app:dexBuilderDebug
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:bundleDebugClassesToRuntimeJar UP-TO-DATE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
 > Task :app:compileDebugUnitTestKotlin
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
 > Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
-> Task :app:processDebugUnitTestJavaRes
-> Task :app:mergeProjectDexDebug
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
 > Task :app:testDebugUnitTest
-> Task :app:packageDebug
-> Task :app:assembleDebug
-> Task :app:createDebugApkListingFileRedirect
 
-BUILD SUCCESSFUL in 3m 8s
-46 actionable tasks: 31 executed, 15 from cache
-Configuration cache entry stored.
-gradle_exit=0
-TOTALS tests=260 failures=0 errors=0 skipped=0
+BUILD SUCCESSFUL in 51s
+26 actionable tasks: 2 executed, 24 up-to-date
+Configuration cache entry reused.
