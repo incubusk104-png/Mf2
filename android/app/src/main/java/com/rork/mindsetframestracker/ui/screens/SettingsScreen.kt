@@ -41,7 +41,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.outlined.Animation
-import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteForever
@@ -60,7 +59,6 @@ import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Insights
-import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.SelfImprovement
@@ -73,9 +71,6 @@ import androidx.compose.material.icons.outlined.Restore
 import com.rork.mindsetframestracker.BuildConfig
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -148,8 +143,6 @@ import com.rork.mindsetframestracker.ui.appStrings
 import com.rork.mindsetframestracker.ui.stringsFor
 import com.rork.mindsetframestracker.ui.components.AuthMessageBanner
 import com.rork.mindsetframestracker.ui.components.BrandLogos
-import com.rork.mindsetframestracker.ui.components.IntegrationConsent
-import com.rork.mindsetframestracker.ui.components.IntegrationConsentDialog
 import com.rork.mindsetframestracker.ui.components.PremiumSheet
 import com.rork.mindsetframestracker.ui.components.PasswordField
 import java.time.Instant
@@ -253,8 +246,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
     // Privacy consent gate: every integration Connect shows this dialog
     // FIRST; the OAuth/permission flow launches only after "Agree & connect".
-    var pendingConsent by remember { mutableStateOf<IntegrationConsent?>(null) }
-    var pendingConsentAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val hasAccess = settings.hasFeatureAccess()
 
     val view = LocalView.current
@@ -434,111 +425,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 actionLabel = null,
                 onClick = null,
                 modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-
-        // ── Activity integrations ─────────────────────────────────────
-        SettingsCard(title = "Activity sync", animateSize = !settings.reducedMotion) {
-            Text(
-                text = "Connect fitness services to automatically complete activity habits from your real workouts.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-
-            // ── Google Health Connect ──
-            val hcConnected = settings.healthConnectConnected
-            IntegrationConnectorRow(
-                icon = Icons.Outlined.MonitorHeart,
-                title = "Google Health Connect",
-                connected = hcConnected,
-                lastSyncMs = settings.healthConnectLastSyncMs,
-                autoSync = settings.healthConnectAutoSync,
-                onAutoSyncChange = { viewModel.setHealthConnectAutoSync(it) },
-                freeLabel = "Free",
-                description = if (hcConnected) {
-                    "Steps and sleep sync from your phone & wearables."
-                } else {
-                    "Sync steps from your phone and connected wearables. Free for everyone."
-                },
-                onConnect = {
-                    // Privacy consent first; only then launch the Health
-                    // Connect permission flow (AppNavigation observes the
-                    // pending-permission flag and fires the launcher).
-                    pendingConsent = IntegrationConsent.HEALTH_CONNECT
-                    pendingConsentAction = { viewModel.requestHealthConnectPermissions() }
-                },
-                onDisconnect = { viewModel.disconnectHealthConnect() },
-            )
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
-            // ── Polar ──
-            val polarConnected = viewModel.isPolarConnected()
-            IntegrationConnectorRow(
-                icon = Icons.Outlined.FavoriteBorder,
-                title = "Polar",
-                connected = polarConnected,
-                lastSyncMs = settings.polarLastSyncMs,
-                autoSync = settings.polarAutoSync,
-                onAutoSyncChange = { viewModel.setPolarAutoSync(it) },
-                freeLabel = "Free",
-                description = if (polarConnected) {
-                    "Steps and activity data sync from your Polar account."
-                } else {
-                    "Link your Polar account to import activity data. Free for everyone."
-                },
-                onConnect = {
-                    if (!PolarClient.canAttemptConnect) {
-                        viewModel.onStravaConnectFailed("Polar isn't configured for this build yet.")
-                    } else {
-                        // Privacy consent first; connectPolar() resolves the
-                        // public client id at runtime when the build has none.
-                        pendingConsent = IntegrationConsent.POLAR
-                        pendingConsentAction = { viewModel.connectPolar() }
-                    }
-                },
-                onDisconnect = { viewModel.disconnectPolar() },
-            )
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
-            // ── Strava ──
-            val stravaConnected = viewModel.isStravaConnected()
-            val stravaEntitled = Entitlements.hasAccess(settings.subscriptionTier(), Feature.STRAVA)
-            IntegrationConnectorRow(
-                icon = Icons.AutoMirrored.Outlined.DirectionsRun,
-                title = "Strava",
-                connected = stravaConnected,
-                lastSyncMs = settings.stravaLastSyncMs,
-                autoSync = settings.stravaAutoSync,
-                onAutoSyncChange = { viewModel.setStravaAutoSync(it) },
-                freeLabel = if (!stravaEntitled) "Premium" else null,
-                description = when {
-                    stravaConnected -> "Runs, rides, and walks auto-import to your habits."
-                    stravaEntitled -> "Link your Strava account to import runs, rides, and walks."
-                    else -> "Included with Premium — link Strava to import runs, rides, and walks."
-                },
-                onConnect = {
-                    when {
-                        stravaEntitled && !StravaAuthClient.canAttemptConnect ->
-                            viewModel.onStravaConnectFailed("Strava isn't configured for this build yet.")
-                        stravaEntitled -> {
-                            // Privacy consent first; connectStrava() resolves
-                            // the public client id at runtime if needed.
-                            pendingConsent = IntegrationConsent.STRAVA
-                            pendingConsentAction = { viewModel.connectStrava() }
-                        }
-                        else -> showPremiumSheet = true
-                    }
-                },
-                onDisconnect = { viewModel.disconnectStrava() },
             )
         }
 
@@ -1284,23 +1170,6 @@ fun SettingsScreen(viewModel: AppViewModel) {
         }
     }
 
-    // ── Privacy consent dialog — shown before EVERY integration connect ──
-    if (pendingConsent != null) {
-        IntegrationConsentDialog(
-            consent = pendingConsent!!,
-            onAgree = {
-                val action = pendingConsentAction
-                pendingConsent = null
-                pendingConsentAction = null
-                action?.invoke()
-            },
-            onDismiss = {
-                pendingConsent = null
-                pendingConsentAction = null
-            },
-        )
-    }
-
     if (showPremiumSheet) {
         PremiumSheet(
             onDismiss = { showPremiumSheet = false },
@@ -1739,156 +1608,6 @@ private fun WellbeingRow(
             TextButton(onClick = onClick) { Text(actionLabel) }
         }
     }
-}
-
-/**
- * Rich connector row for fitness integrations: shows status badge,
- * last-sync time, auto-sync toggle, and connect/disconnect button.
- */
-@Composable
-private fun IntegrationConnectorRow(
-    icon: ImageVector,
-    title: String,
-    connected: Boolean,
-    lastSyncMs: Long,
-    autoSync: Boolean,
-    onAutoSyncChange: (Boolean) -> Unit,
-    freeLabel: String?,
-    description: String,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (connected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
-            Column(modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    if (connected) {
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(start = 8.dp),
-                        ) {
-                            Text(
-                                text = "Connected",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                    if (freeLabel != null && !connected) {
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(start = 8.dp),
-                        ) {
-                            Text(
-                                text = freeLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-        if (connected) {
-            // Last sync time
-            if (lastSyncMs > 0L) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 34.dp, top = 6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AccessTime,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Text(
-                        text = "Last sync: ${formatIntegrationSyncTime(lastSyncMs)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
-                }
-            }
-            // Auto-sync toggle
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(start = 34.dp, top = 4.dp)
-                    .fillMaxWidth(),
-            ) {
-                Text(
-                    text = "Auto-sync on app open",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = autoSync,
-                    onCheckedChange = onAutoSyncChange,
-                )
-            }
-            // Disconnect button
-            TextButton(
-                onClick = onDisconnect,
-                modifier = Modifier.padding(start = 22.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Block,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(16.dp),
-                )
-                Text(
-                    text = "Disconnect",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(start = 4.dp),
-                )
-            }
-        } else {
-            // Connect button
-            OutlinedButton(
-                onClick = onConnect,
-                modifier = Modifier
-                    .padding(start = 34.dp, top = 8.dp)
-                    .defaultMinSize(minHeight = 40.dp),
-            ) {
-                Text("Connect")
-            }
-        }
-    }
-}
-
-private fun formatIntegrationSyncTime(lastSyncAtMs: Long): String {
-    val elapsed = System.currentTimeMillis() - lastSyncAtMs
-    return if (elapsed < 60_000L) "Just now"
-    else DateUtils.getRelativeTimeSpanString(lastSyncAtMs).toString()
 }
 
 private fun formatBackupTime(lastSyncAtMs: Long): String {

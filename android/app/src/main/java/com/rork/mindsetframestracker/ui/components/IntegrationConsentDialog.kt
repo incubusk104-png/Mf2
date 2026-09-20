@@ -47,7 +47,7 @@ enum class IntegrationConsent(
         dataRead = "Steps and sleep sessions recorded by your phone and connected wearables.",
         whereItGoes = "Read on this device only, to auto-complete your activity habits. " +
             "Raw health data is never uploaded to our servers or shared with anyone.",
-        revokeHint = "You can revoke access anytime in Settings > Activity sync > Disconnect, " +
+        revokeHint = "You can revoke access anytime in the habit's dialog > Disconnect, " +
             "or in the Health Connect app's permission manager.",
     ),
     POLAR(
@@ -56,7 +56,7 @@ enum class IntegrationConsent(
             "Polar AccessLink, after you approve access on Polar's own consent page.",
         whereItGoes = "The access token is stored only on this device. Activity data is " +
             "used locally to complete your habits — it is never sold or shared.",
-        revokeHint = "Revoke anytime in Settings > Activity sync > Disconnect, or at " +
+        revokeHint = "Revoke anytime in the habit's dialog > Disconnect, or at " +
             "flow.polar.com under your account's authorized apps.",
     ),
     STRAVA(
@@ -66,7 +66,7 @@ enum class IntegrationConsent(
         whereItGoes = "Tokens are stored only on this device; the token exchange runs " +
             "through our secure server so no app secret ships in this app. Activity data " +
             "is used locally to complete your habits — never sold or shared.",
-        revokeHint = "Revoke anytime in Settings > Activity sync > Disconnect, or at " +
+        revokeHint = "Revoke anytime in the habit's dialog > Disconnect, or at " +
             "strava.com > Settings > My Apps.",
     ),
     SCREEN_TIME(

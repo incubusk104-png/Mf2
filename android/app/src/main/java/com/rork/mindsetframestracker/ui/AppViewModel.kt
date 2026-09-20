@@ -376,7 +376,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             StravaAuthClient.exchangeCodeForToken(code)
                 .onSuccess { tokens ->
                     saveStravaTokens(tokens)
-                    _stravaMessage.value = "Strava account authenticated and connected. You can enable auto-sync in Settings > Activity sync."
+                    _stravaMessage.value = "Strava account authenticated and connected. Open a habit and tap its Strava row to turn on auto-sync."
                 }
                 .onFailure {
                     _stravaMessage.value = "Strava connection failed. Please try again."
@@ -538,7 +538,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 polarUserId = tokens.userId ?: 0,
             ))
         }
-        _stravaMessage.value = "Polar account authenticated and connected. You can enable auto-sync in Settings > Activity sync."
+        _stravaMessage.value = "Polar account authenticated and connected. Open a habit and tap its Polar row to turn on auto-sync."
     }
 
     /** Syncs today's Polar steps onto [habitId]. */
@@ -546,14 +546,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val settings = _state.value.settings
         val token = settings.polarAccessToken
         if (token.isNullOrBlank()) {
-            _stravaMessage.value = "Connect Polar first (Settings > Activity sync)."
+            _stravaMessage.value = "Connect Polar first (open a habit and tap its Polar row)."
             return
         }
         if (settings.polarUserId == 0L) {
             // Legacy connection made before the user id was captured — the
             // transaction endpoints need it, so ask for a quick reconnect.
             _stravaMessage.value =
-                "Please reconnect Polar (Settings > Activity sync) to finish upgrading the integration."
+                "Please reconnect Polar (open a habit and tap its Polar row) to finish upgrading the integration."
             return
         }
         viewModelScope.launch {
@@ -850,7 +850,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Syncs today's Health Connect steps onto [habitId]. */
     fun syncHealthConnectToHabit(habitId: String, activityType: String) {
         if (!_state.value.settings.healthConnectConnected) {
-            _stravaMessage.value = "Connect Health Connect first (Settings > Activity sync)."
+            _stravaMessage.value = "Connect Health Connect first (open a habit and tap its Health Connect row)."
             return
         }
         viewModelScope.launch {

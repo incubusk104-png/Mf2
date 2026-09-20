@@ -64,12 +64,10 @@ fun HabitTrackerConnectHost(
     statuses: List<TrackerStatus>,
     /**
      * The habit this flow was opened *for*, so the sheet can say whose
-     * connection it is setting up.
-     *
-     * Null renders the generic wording — used when there is no single habit in
-     * context — rather than naming a habit the user is not looking at.
+     * connection it is setting up. Required, not optional: there is no longer
+     * any global position that opens this flow, so a caller always has a habit.
      */
-    habitLabel: String? = null,
+    habitLabel: String,
     onDismiss: () -> Unit,
 ) {
     /** The provider mid-connect, so its row shows progress instead of looking ignored. */

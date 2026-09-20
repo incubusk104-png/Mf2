@@ -166,10 +166,12 @@ fun HabitsScreen(
     /**
      * The habit whose dialog opened the connect sheet, so the sheet can name it.
      *
-     * Null while no dialog has opened it, which is also the honest label for a
-     * connect flow that is not scoped to one habit.
+     * Non-null by construction: the only way to open the sheet is a habit
+     * dialog's `onOpenTracker`, which always sets this first. Empty means no
+     * dialog has opened it *yet* — never a deliberate "global" mode, because
+     * there is no global entry point left to reach.
      */
-    var trackerSheetHabitLabel by remember { mutableStateOf<String?>(null) }
+    var trackerSheetHabitLabel by remember { mutableStateOf("") }
 
     // Screen-time habit flow: privacy consent → app + limit picker → add.
     var showScreenTimeConsent by remember { mutableStateOf(false) }
@@ -645,8 +647,8 @@ fun HabitsScreen(
             },
             onDismiss = {
                 // User dismissed without choosing — that's fine, habit is
-                // already added with its alarm. They can connect later via
-                // Settings > Activity sync.
+                // already added with its alarm. They can connect later from the
+                // habit's own dialog (its tracker rows).
                 activityPickerHabitId = null
                 activityPickerIconId = null
             },
@@ -666,7 +668,7 @@ fun HabitsScreen(
             habitLabel = trackerSheetHabitLabel,
             onDismiss = {
                 showTrackerSheet = false
-                trackerSheetHabitLabel = null
+                trackerSheetHabitLabel = ""
             },
         )
     }

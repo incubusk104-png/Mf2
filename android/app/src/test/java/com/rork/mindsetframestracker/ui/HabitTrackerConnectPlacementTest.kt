@@ -57,6 +57,25 @@ class HabitTrackerConnectPlacementTest {
     private val trackingSheet = { moduleFile("src/main/java/com/rork/mindsetframestracker/ui/components/HabitTrackingSheet.kt").readText() }
     private val toolsRow = { moduleFile("src/main/java/com/rork/mindsetframestracker/ui/components/HabitActivityToolsRow.kt").readText() }
     private val connectSheet = { moduleFile("src/main/java/com/rork/mindsetframestracker/ui/components/TrackerConnectSheet.kt").readText() }
+    private val settingsScreen = { moduleFile("src/main/java/com/rork/mindsetframestracker/ui/screens/SettingsScreen.kt").readText() }
+
+    /**
+     * Every Kotlin source file in the app's main source set.
+     *
+     * Used to enumerate *all* host sites rather than spot-check the files that
+     * happened to have one. A spot-check cannot fail when someone adds a NEW
+     * global entry point somewhere else, which is exactly the regression these
+     * tests exist to catch.
+     */
+    private fun mainSourceFiles(): List<java.io.File> {
+        val roots = listOf(
+            java.io.File("src/main/java"),
+            java.io.File("app/src/main/java"),
+        )
+        val root = roots.firstOrNull { it.isDirectory }
+            ?: error("Could not locate src/main/java from ${java.io.File(".").absolutePath}.")
+        return root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+    }
 
     // ── The move: gone from the global position ──────────────────────────────
 
@@ -195,11 +214,11 @@ class HabitTrackerConnectPlacementTest {
         val source = connectSheet()
         assertTrue(
             "TrackerConnectSheet must accept the habit label.",
-            source.contains("habitLabel: String? = null"),
+            source.contains("habitLabel: String,"),
         )
         assertTrue(
             "The label must actually reach the heading.",
-            source.contains("\"Connect fitness trackers for \$habitLabel\""),
+            source.contains(" + habitLabel,"),
         )
     }
 
@@ -217,5 +236,98 @@ class HabitTrackerConnectPlacementTest {
             "HabitActivityToolsRow must render providers through that shared row.",
             source.contains("TrackerToolRow("),
         )
+    }
+
+    // ── The leftovers: no connect surface anywhere but a habit dialog ────────
+
+    @Test
+    fun `the settings screen offers no fitness tracker entry point`() {
+        // The user's report, verbatim: "Why still not remove connect finis[h]?".
+        // Settings was the surviving global position — an "Activity sync" card
+        // with one connector row per provider, all with their own Connect button.
+        // Nothing about a tracker connection is app-wide, so no part of that
+        // card may come back.
+        val source = settingsScreen()
+        listOf(
+            "\"Connect fitness trackers\"" to "the global connect row",
+            "IntegrationConnectorRow(" to "the per-provider connector row",
+            "Connect fitness services" to "the Activity sync card description",
+        ).forEach { (needle, what) ->
+            assertFalse(
+                "SettingsScreen still contains $what ($needle). Connecting a tracker " +
+                    "happens inside a habit's dialog, so no standalone entry point " +
+                    "may remain here.",
+                source.contains(needle),
+            )
+        }
+        assertFalse(
+            "The Activity sync card must be gone entirely.",
+            source.contains("SettingsCard(title = \"Activity sync\""),
+        )
+    }
+
+    @Test
+    fun `only a habit dialog can host the tracker connect flow`() {
+        // Enumerates every host site in the whole main source set, so a NEW
+        // standalone entry point added anywhere fails here rather than shipping.
+        // The allow-list is exactly: the habit dialog on each screen, plus the
+        // root host that the alarm ring opens.
+        val allowed = setOf("HabitsScreen.kt", "HomeScreen.kt", "AppNavigation.kt")
+        // The flow's own file *declares* the composable, so it matches the same
+        // marker. It is the implementation, not a host site — including it would
+        // make this test demand an allow-list entry for the thing it is testing.
+        val hosts = mainSourceFiles().filter {
+            it.name != "HabitTrackerConnectHost.kt" &&
+                it.readText().contains("HabitTrackerConnectHost(")
+        }
+        assertTrue(
+            "The connect flow must be hosted somewhere — if nothing hosts it the " +
+                "feature is gone rather than moved.",
+            hosts.isNotEmpty(),
+        )
+        hosts.forEach { file ->
+            assertTrue(
+                "${file.name} hosts the connect flow but is not a habit dialog. The " +
+                    "control belongs inside a habit's dialog (or the alarm-ring host), " +
+                    "never in a standalone position.",
+                file.name in allowed,
+            )
+        }
+    }
+
+    @Test
+    fun `every connect-flow host names the habit it is for`() {
+        // A host with no habit is a global surface by definition, so every call
+        // site must name one — and none may pass null.
+        mainSourceFiles().forEach { file ->
+            val source = file.readText()
+            if (!source.contains("HabitTrackerConnectHost(")) return@forEach
+            assertTrue(
+                "${file.name} must name the habit the flow is opened for.",
+                source.contains("habitLabel = "),
+            )
+            assertFalse(
+                "${file.name} must not pass a null habit label — that renders the " +
+                    "standalone wording again.",
+                source.contains("habitLabel = null"),
+            )
+        }
+    }
+
+    @Test
+    fun `no file outside the connect flow opens the tracker sheet directly`() {
+        // The other way back to a global surface: some screen flipping the sheet
+        // open itself. Only the habit-dialog call sites and the flow's own host
+        // may do that.
+        val allowed = setOf("HabitsScreen.kt", "HomeScreen.kt", "AppNavigation.kt")
+        mainSourceFiles().forEach { file ->
+            val source = file.readText()
+            if (!source.contains("showTrackerConnect = true")) return@forEach
+            assertTrue(
+                "${file.name} opens the connect flow directly; only a habit dialog's " +
+                    "onOpenTracker may.",
+                file.name in allowed,
+            )
+        }
     }
 }

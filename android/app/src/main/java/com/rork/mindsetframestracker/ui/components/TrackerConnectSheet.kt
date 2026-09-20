@@ -73,13 +73,13 @@ fun TrackerConnectSheet(
     /**
      * The habit this connection is being set up for, so the sheet names it.
      *
-     * Null or blank keeps the generic wording. Passed in rather than read from
-     * some global "current habit" because a tracker link is only meaningful
-     * *relative to a habit*: the sheet is opened from a habit's own dialog, and
-     * naming that habit is what stops "Connect fitness trackers" from reading as
-     * a separate feature the user wandered into by accident.
+     * Required, not optional: a tracker link is meaningless except *relative to
+     * a habit*, and the sheet is reachable only from a habit's own dialog. Making
+     * it non-null is what removes the last way for this sheet to render as a
+     * standalone "Connect fitness trackers" surface.
      */
-    habitLabel: String? = null,
+    habitLabel: String,
+    /** Whether new activity from a connected provider auto-checks the habit off. */
     autoTrack: Boolean,
     /** The provider currently mid-connect, so its row can show progress. */
     busyProvider: TrackerProvider? = null,
@@ -102,13 +102,13 @@ fun TrackerConnectSheet(
                 .verticalScroll(rememberScrollState()),
         ) {
             Text(
-                // Scoped to the habit whose dialog opened this, so the sheet reads
-                // as that habit's connection rather than a global setting.
-                text = if (habitLabel.isNullOrBlank()) {
-                    "Connect fitness trackers"
-                } else {
-                    "Connect fitness trackers for $habitLabel"
-                },
+                // Scoped to the habit whose dialog opened this. There is
+                // deliberately NO generic fallback: the sheet is only ever
+                // reachable from a habit's own dialog, so a label-less render is
+                // a caller bug, not a state to design for. Keeping a generic
+                // "Connect fitness trackers" branch is exactly how the global
+                // control grew back last time.
+                text = "Connect fitness trackers for " + habitLabel,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium,
             )

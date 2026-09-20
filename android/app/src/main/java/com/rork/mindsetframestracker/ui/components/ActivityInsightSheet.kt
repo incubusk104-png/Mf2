@@ -241,7 +241,7 @@ private fun EmptyReportCard() {
                 modifier = Modifier.padding(top = 12.dp),
             )
             Text(
-                text = "Connect Polar, Health Connect, or Strava in Settings to start syncing your workouts.",
+                text = "Connect Polar, Health Connect, or Strava from inside a habit to start syncing your workouts.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
