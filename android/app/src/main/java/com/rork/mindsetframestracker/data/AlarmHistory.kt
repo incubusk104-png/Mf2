@@ -11,7 +11,7 @@ import java.util.UUID
  *
  * ## Why this is separate from [HabitLogEntry]
  *
- * [HabitLogEntry] answers *"what did I actually do"* \u2014 and deliberately only
+ * [HabitLogEntry] answers *"what did I actually do"* — and deliberately only
  * exists when the user supplied the content (a duration, a count, a journal
  * sentence). It is written by the tracking sheet and by the timer, and
  * `HabitAlarmRecords` refuses to invent one for a habit whose input only the
@@ -21,13 +21,13 @@ import java.util.UUID
  * at 07:00, 12:00 and 18:00 produces three events a day whether or not the user
  * answers any of them, and before this type existed there was nowhere in the app
  * that recorded the ring at all. The dialog could say "done today" but not
- * *which of the three* went off, at what time, saying what \u2014 or that the 12:00
+ * *which of the three* went off, at what time, saying what — or that the 12:00
  * one was missed entirely, which is exactly the thing a user reviewing their day
  * wants to see.
  *
  * ## Every event is its own record
  *
- * The identity of an event is `(habitId, dayKey, scheduledMinutes)` \u2014 see
+ * The identity of an event is `(habitId, dayKey, scheduledMinutes)` — see
  * [alarmEventKey]. It is deliberately **not** keyed on `habitId` alone, and not
  * on `(habitId, dayKey)` either: collapsing any of those would make the day's
  * three alarms indistinguishable from one, which is the bug this feature exists
@@ -40,16 +40,17 @@ import java.util.UUID
  * An alarm fires and is *then* answered, and those are two facts about the same
  * occurrence rather than two occurrences. So the outcome is a field that gets
  * **refined in place** ([HabitAlarmHistory.record] upserts on the key):
-
+ *
  * | outcome        | meaning                                                     |
  * |----------------|-------------------------------------------------------------|
  * | [FIRED]        | it rang; nothing recorded about what the user did yet        |
  * | [ACKNOWLEDGED] | the user completed the habit from the ring (ONE_TAP dismiss)  |
  * | [DISMISSED]    | the user stopped the alarm without completing it              |
  * | [SNOOZED]      | the user snoozed it; it will ring again                       |
+ * | [MISSED]       | it rang and the occurrence elapsed with no answer             |
  *
  * A snooze that re-fires updates the **same** event rather than adding a second
- * row, because the user's model is "the 07:00 alarm" \u2014 not "the 07:00 alarm,
+ * row, because the user's model is "the 07:00 alarm" — not "the 07:00 alarm,
  * three times".
  */
 @Serializable
@@ -57,10 +58,38 @@ enum class AlarmEventOutcome {
     FIRED,
     ACKNOWLEDGED,
     DISMISSED,
-    SNOOZED;
+    SNOOZED,
 
-    /** True once the user has done something about the ring. */
-    val isAnswered: Boolean get() = this != FIRED
+    /**
+     * The alarm rang and its occurrence elapsed with **no answer recorded**.
+     *
+     * ## Why this is persisted and not just derived
+     *
+     * [AlarmSlotState.MISSED] can already be worked out on the fly for the day
+     * being viewed — it is what a scheduled time whose moment has passed with no
+     * event at all resolves to. Persisting the outcome adds the two things the
+     * derivation cannot do:
+     *
+     *  * **It survives the schedule.** An alarm the user edited away after it
+     *    went unanswered would drop out of the derived slots entirely and its
+     *    evidence would be gone. Written down, the miss is still a fact the app
+     *    has tomorrow — which is what "log missed alarms" asks for.
+     *  * **It is per occurrence.** A 07:00/12:00/18:00 habit can have missed its
+     *    07:00 while the other two are still to come; a per-day notion of
+     *    "missed" cannot express that, and the whole history is keyed per
+     *    occurrence for exactly this reason.
+     */
+    MISSED;
+
+    /**
+     * True once the user has done something about the ring.
+     *
+     * A [MISSED] is explicitly **not** an answer. It is the record left when
+     * there was none, so counting it as one would make the day's
+     * `answeredToday` summary claim the user dealt with an alarm they never saw.
+     */
+    val isAnswered: Boolean
+        get() = this == ACKNOWLEDGED || this == DISMISSED || this == SNOOZED
 }
 
 /**
@@ -69,7 +98,7 @@ enum class AlarmEventOutcome {
  *
  * Defaults are chosen so a decoder reading a blob written by a previous build
  * (`ignoreUnknownKeys` + absent field) produces a usable value rather than a
- * crash \u2014 the same forward/backward-compatibility rule [AppData] relies on.
+ * crash — the same forward/backward-compatibility rule [AppData] relies on.
  */
 @Serializable
 data class HabitAlarmEvent(
@@ -95,10 +124,10 @@ data class HabitAlarmEvent(
      */
     val message: String? = null,
 ) {
-    /** The occurrence key \u2014 see [alarmEventKey]. Not serialized. */
+    /** The occurrence key — see [alarmEventKey]. Not serialized. */
     val eventKey: String get() = alarmEventKey(dayKey, scheduledMinutes)
 
-    /** "07:00" \u2014 always 24-hour, like every other alarm time in the app. */
+    /** "07:00" — always 24-hour, like every other alarm time in the app. */
     val clockLabel: String get() = alarmClockLabel(scheduledMinutes)
 }
 
@@ -120,7 +149,7 @@ fun AppData.alarmEventsFor(habitId: String): List<HabitAlarmEvent> =
 fun AppData.alarmEventsOn(habitId: String, dayKey: String): List<HabitAlarmEvent> =
     alarmEventsFor(habitId).filter { it.dayKey == dayKey }
 
-/** The event for exactly this occurrence, or null \u2014 the uniqueness test. */
+/** The event for exactly this occurrence, or null — the uniqueness test. */
 fun AppData.alarmEventFor(habitId: String, dayKey: String, scheduledMinutes: Int): HabitAlarmEvent? {
     val key = alarmEventKey(dayKey, scheduledMinutes)
     return alarmEvents.firstOrNull { it.habitId == habitId && it.eventKey == key }
@@ -132,7 +161,7 @@ fun AppData.alarmEventFor(habitId: String, dayKey: String, scheduledMinutes: Int
  * [MISSED] and [PENDING] are *derived*, not stored: an alarm that never fired
  * has no event, so its state comes from comparing its scheduled time with the
  * day being viewed and the current clock. That is why this is a separate enum
- * from [AlarmEventOutcome] \u2014 the outcome is a fact that was recorded, the slot
+ * from [AlarmEventOutcome] — the outcome is a fact that was recorded, the slot
  * state is what the UI should say right now.
  */
 enum class AlarmSlotState {
@@ -155,7 +184,7 @@ enum class AlarmSlotState {
  * events behind it.
  *
  * A slot exists for **every** time in the habit's schedule, whether or not it
- * fired \u2014 that is what lets the dialog show the honest whole day ("07:00 done,
+ * fired — that is what lets the dialog show the honest whole day ("07:00 done,
  * 12:00 missed, 18:00 still to come") rather than only the alarms that happened
  * to leave a trace.
  */
@@ -164,7 +193,7 @@ data class AlarmDaySlot(
     val state: AlarmSlotState,
     val events: List<HabitAlarmEvent> = emptyList(),
 ) {
-    /** "07:00" \u2014 24-hour, matching every other alarm label in the app. */
+    /** "07:00" — 24-hour, matching every other alarm label in the app. */
     val clockLabel: String get() = alarmClockLabel(scheduledMinutes)
 
     /** The most recent event for this time, if any. */
@@ -183,7 +212,7 @@ data class AlarmDaySlot(
 /**
  * The recorder/reader for per-occurrence alarm history.
  *
- * Reads and writes the list on [AppData] directly \u2014 there is no separate store,
+ * Reads and writes the list on [AppData] directly — there is no separate store,
  * for the same reason [Habit.alarmMessage] lives on the habit: the history
  * belongs to the habit, is deleted with it, and travels with the single
  * persisted blob that [MindsetRepository] already owns.
@@ -197,14 +226,14 @@ data class AlarmDaySlot(
  *  * **A re-delivered intent is not a second ring.** The alarm firing twice for
  *    07:00 (a re-arm, a duplicate broadcast) updates one row.
  *  * **Answering refines, never duplicates.** The DISMISSED that follows a
- *    FIRED is the same occurrence being answered \u2014 not a second alarm.
+ *    FIRED is the same occurrence being answered — not a second alarm.
  *  * **Different times are different rows.** An 18:00 ring is a different key
  *    from the 07:00 one, so it always writes its own event.
  *
  * ## Never throws
  *
- * Every entry point here is reachable from a `BroadcastReceiver` \u2014 the boot
- * re-arm, the ring notifier, the snooze and stop receivers \u2014 where an escaping
+ * Every entry point here is reachable from a `BroadcastReceiver` — the boot
+ * re-arm, the ring notifier, the snooze and stop receivers — where an escaping
  * exception kills the process at the exact moment the user's alarm should be
  * dealing with them. Failures are logged and returned as null; the alarm itself
  * is never affected by a history write failing.
@@ -243,9 +272,13 @@ object HabitAlarmHistory {
                 dayKey = dayKey,
                 scheduledMinutes = scheduledMinutes,
                 outcome = outcome,
-                // An event first seen as an answer has no known ring time; the
-                // answer's own clock is the only timestamp that exists.
-                firedAtEpochMs = if (outcome == AlarmEventOutcome.FIRED) atEpochMs else 0L,
+                // FIRED and MISSED both mean the alarm genuinely rang, so both
+                // carry a ring time; an event first seen as an ANSWER has no known
+                // ring time, and the answer's own clock is the only timestamp that
+                // exists.
+                firedAtEpochMs = if (
+                    outcome == AlarmEventOutcome.FIRED || outcome == AlarmEventOutcome.MISSED
+                ) atEpochMs else 0L,
                 respondedAtEpochMs = if (outcome.isAnswered) atEpochMs else null,
                 message = cleanMessage,
             )
@@ -254,9 +287,13 @@ object HabitAlarmHistory {
                 // A FIRED arriving for an event that already has a real outcome
                 // must not un-answer it: the ring and the answer can be delivered
                 // out of order, and the answer is the more informative fact.
-                outcome = if (outcome == AlarmEventOutcome.FIRED) existing.outcome else outcome,
+                outcome = if (
+                    outcome == AlarmEventOutcome.FIRED || outcome == AlarmEventOutcome.MISSED
+                ) existing.outcome else outcome,
                 firedAtEpochMs = existing.firedAtEpochMs.takeIf { it > 0L }
-                    ?: atEpochMs.takeIf { outcome == AlarmEventOutcome.FIRED }
+                    ?: atEpochMs.takeIf {
+                        outcome == AlarmEventOutcome.FIRED || outcome == AlarmEventOutcome.MISSED
+                    }
                     ?: 0L,
                 respondedAtEpochMs = if (outcome.isAnswered) atEpochMs else existing.respondedAtEpochMs,
                 // The first snapshot wins: it is the line the user actually heard.
@@ -310,7 +347,65 @@ object HabitAlarmHistory {
         .getOrNull()
 
     /**
-     * The day's alarms for [habitId] in chronological order \u2014 **one slot per
+     * Writes a [AlarmEventOutcome.MISSED] for every scheduled time today that the
+     * alarm rang at with **nothing recorded** — the Change B "log missed alarms"
+     * step.
+     *
+     * ## The trigger, and why it is this one
+     *
+     * Called when a *later* occurrence of the same habit is being handled. That is
+     * the first moment the app can honestly say the earlier one went unanswered: a
+     * miss cannot be written at ring time (the user may still answer it), and no
+     * receiver runs when someone simply ignores their phone. A later ring is the
+     * only event that reliably arrives afterwards, so it is the moment the earlier
+     * slot can be judged.
+     *
+     * [beforeMinutes] bounds the sweep to times strictly earlier than the
+     * occurrence being handled — the one in hand is answered by its own path, and
+     * a time that has not come round yet is not missed.
+     *
+     * ## What it deliberately does not do
+     *
+     * It only writes for slots with **no event at all**. A ring already recorded as
+     * FIRED, ACKNOWLEDGED, SNOOZED or DISMISSED is left exactly as it is: a miss is
+     * the absence of a record, never an overwrite of one. Returns the times it
+     * logged, which is what makes the sweep assertable in a plain JVM test.
+     */
+    fun logMissedOccurrences(
+        context: Context,
+        habitId: String,
+        beforeMinutes: Int?,
+        dayKey: String = Dates.todayKey(),
+        nowMinutes: Int = Dates.nowMinutes(),
+        atEpochMs: Long = System.currentTimeMillis(),
+    ): List<Int> = runCatching {
+        if (habitId.isBlank()) return emptyList()
+
+        val data = MindsetRepository(context).load()
+        val missed = daySlots(data, habitId, dayKey, nowMinutes)
+            .filter { slot ->
+                slot.events.isEmpty() &&
+                    slot.state == AlarmSlotState.MISSED &&
+                    (beforeMinutes == null || slot.scheduledMinutes < beforeMinutes)
+            }
+            .map { it.scheduledMinutes }
+
+        missed.forEach { minutes ->
+            record(
+                context = context,
+                habitId = habitId,
+                dayKey = dayKey,
+                scheduledMinutes = minutes,
+                outcome = AlarmEventOutcome.MISSED,
+                atEpochMs = atEpochMs,
+            )
+        }
+        missed
+    }.onFailure { Log.w(TAG, "Could not log missed occurrences for $habitId", it) }
+        .getOrDefault(emptyList())
+
+    /**
+     * The day's alarms for [habitId] in chronological order — **one slot per
      * scheduled time**, plus any time that fired but is no longer in the
      * schedule (an alarm edited away after it went off still really happened).
      *
@@ -344,7 +439,7 @@ object HabitAlarmHistory {
 
     /**
      * How many of [habitId]'s alarms on [dayKey] the user answered, and how many
-     * the habit is scheduled to ring \u2014 the "2 of 3 answered today" summary.
+     * the habit is scheduled to ring — the "2 of 3 answered today" summary.
      */
     fun answeredToday(
         data: AppData,
@@ -377,6 +472,7 @@ object HabitAlarmHistory {
             AlarmEventOutcome.ACKNOWLEDGED -> return AlarmSlotState.ACKNOWLEDGED
             AlarmEventOutcome.DISMISSED -> return AlarmSlotState.DISMISSED
             AlarmEventOutcome.SNOOZED -> return AlarmSlotState.SNOOZED
+            AlarmEventOutcome.MISSED -> return AlarmSlotState.MISSED
             null -> Unit
         }
         return if (isToday && minutes > nowMinutes) AlarmSlotState.PENDING else AlarmSlotState.MISSED
@@ -389,7 +485,7 @@ object HabitAlarmHistory {
 }
 
 /**
- * "07:00" for a stored epoch millis \u2014 the wall-clock label for a timestamp in
+ * "07:00" for a stored epoch millis — the wall-clock label for a timestamp in
  * the alarm detail view.
  *
  * Local time on purpose (the alarm is a local appointment), 24-hour like every
