@@ -247,6 +247,22 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.MindsetFrames" />
 
+        <!-- The per-habit alarm dialog (Done / Snooze / Skip) raised over the
+             lock screen by a habit reminder's full-screen intent. `exported` is
+             false on purpose: the only thing that may start it is our own
+             notification's PendingIntent, so no other app can put a fake habit
+             alarm in front of the user. singleInstance + excludeFromRecents
+             match the ringing screen: one alarm surface at a time, never in the
+             recents stack. -->
+        <activity
+            android:name=".notifications.HabitAlarmDialogActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.MindsetFrames" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -312,6 +328,22 @@
             android:exported="false"
             android:enabled="true" />
 
+        <!-- Turns the lock-screen habit dialog's Done / Snooze / Skip answers
+             into state. NOT exported and matched by an explicit action: the
+             answer buttons address it directly by class, and an exported
+             receiver here would let any other app mark the user's habits done,
+             snooze their alarms or dismiss them. -->
+        <receiver
+            android:name=".notifications.AlarmRingActionReceiver"
+            android:exported="false"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.rork.mindsetframestracker.action.HABIT_DONE" />
+                <action android:name="com.rork.mindsetframestracker.action.HABIT_SNOOZE" />
+                <action android:name="com.rork.mindsetframestracker.action.HABIT_SKIP" />
+            </intent-filter>
+        </receiver>
+
         <!-- Handles the manual "Stop alarm" action on a ringing alarm's
              notification (and on the ongoing "Alarm ringing" notification).
              A broadcast rather than a service start on purpose: a notification
@@ -324,7 +356,7 @@
             android:exported="false"
             android:enabled="true" />
 
-        <!-- ── Timer / stopwatch ───────────────────────────────────────────────────
+        <!-- ── Timer / stopwatch ───────────────────────────────────────────────
              The service keeps a running timer visible (ongoing notification with
              the live remaining time) and is the in-process safety net that rings
              the completion alert if the AlarmManager path is blocked by an OEM
@@ -339,7 +371,7 @@
                 android:value="Keeps a user-started timer or stopwatch running and shows its remaining time until the user stops it." />
         </service>
 
-        <!-- ── The alarm sound ────────────────────────────────────────
+        <!-- ── The alarm sound ────────────────────────────────────────────────
              Owns the actual RING (MediaPlayer on the ALARM stream + looping
              vibration) for every alarm in the app. Started from the
              notification path — HabitCheckInNotifier / TimerNotifier — so the

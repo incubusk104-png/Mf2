@@ -21,6 +21,7 @@ import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.alarmMinutes
+import com.rork.mindsetframestracker.data.isHabitDoneOn
 import com.rork.mindsetframestracker.ui.AppStrings
 
 object HabitCheckInNotifier {
@@ -267,9 +268,31 @@ object HabitCheckInNotifier {
             // notification identity and the re-arm all refer to the same
             // occurrence. Without it every one of the day's alarms was
             // indistinguishable from the others.
-            val ringingIntent = Intent(context, AlarmRingingActivity::class.java).apply {
-                putExtra("habitId", habitId)
-                putExtra("habitName", habitName)
+            // ── Which screen answers this ring ────────────────────────────────
+            // A habit that is not yet done gets the per-habit dialog
+            // (Done / Snooze / Skip) over the lock screen. A habit already
+            // completed today is deliberately NOT asked about again, so its ring
+            // keeps the generic ringing screen — whose Stop/Snooze pair is the
+            // right question for an alarm that is only a nudge.
+            //
+            // Resolved HERE, before the full-screen intent is attached, because
+            // this is the one place that both holds the habit id and runs at ring
+            // time; the dialog's own screen could only discover it after the
+            // system had already woken the device for a question with no answer.
+            // Guarded and defaulting to "not done", i.e. to showing the dialog:
+            // an unreadable repository must not turn a habit alarm into a silent
+            // nudge, which is the failure the dialog exists to remove.
+            val habitAlreadyDoneToday = runCatching {
+                MindsetRepository(context).load().isHabitDoneOn(habitId, Dates.todayKey())
+            }.getOrDefault(false)
+            val ringTarget = if (habitAlreadyDoneToday) {
+                AlarmRingingActivity::class.java
+            } else {
+                HabitAlarmDialogActivity::class.java
+            }
+            val ringingIntent = Intent(context, ringTarget).apply {
+                putExtra(HabitReminderReceiver.EXTRA_HABIT_ID, habitId)
+                putExtra(HabitReminderReceiver.EXTRA_HABIT_NAME, habitName)
                 alarmMinutes?.let { putExtra(HabitReminderReceiver.EXTRA_ALARM_MINUTES, it) }
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -356,7 +379,7 @@ object HabitCheckInNotifier {
 
             manager.notify(notificationId(habitId), notification)
 
-            // ── Ring ─────────────────────────────────────────────────────
+            // ── Ring ─────────────────────────────────────────────────────────
             // The alarm sound is started from here, the notification path, and
             // NOT from AlarmRingingActivity. That distinction is the whole fix:
             // the full-screen intent below is only attached when
@@ -376,7 +399,7 @@ object HabitCheckInNotifier {
             // Record whether the OS will actually DELIVER it. notify() returns
             // normally even when the notification is silently dropped (app
             // notifications off, or the channel set to NONE), so a clean call
-            // here is not evidence the user saw or heard anything \u2014 this
+            // here is not evidence the user saw or heard anything — this
             // line is what makes the difference visible in a bug report
             // instead of leaving "I set it and nothing happened".
             if (habitId != DIAGNOSTIC_HABIT_ID) {
