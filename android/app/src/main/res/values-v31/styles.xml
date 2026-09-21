@@ -1,22 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  API 31+ (S) overrides for the base theme in values/themes.xml.
+  Intentionally EMPTY of definitions.
 
-  Splash-screen support: on Android 12+ the system paints a splash screen from
-  `windowSplashScreenBackground` / `windowSplashScreenAnimatedIcon` before the
-  app draws anything, and these attributes only exist as of API 31 — which is why
-  they live in a `values-v31` resource rather than in the base theme, where they
-  would fail to resolve on API 24..30 (this app's minSdk is 24).
+  This file was created while fixing the app's missing styles, on the assumption
+  that the API-31-plus folder was the right home for the `AppTheme` alias the
+  manifest points at. It is not: `AppTheme` is the theme of the whole app and
+  lives in the default values/themes.xml, so that API 24 (the app's minSdk) is
+  themed as well. Defining it only here would have left every device below API 31
+  with no theme at all.
 
-  No `windowSplashScreenBackground` value is asserted beyond the theme's own
-  background: the app has no dedicated splash artwork, and inventing a colour here
-  would be a second source of truth for the launch background. `AppTheme`
-  itself stays the single definition — see values/themes.xml.
+  It is kept rather than deleted, because removing a tracked file is a change
+  someone else should agree to, and it documents why nothing belongs here. The
+  genuinely API-31-specific theme work already has its own file:
+  values-v31/themes.xml, which overrides `Theme.MindsetFrames` to add the Android
+  12 splash-screen items. `AppTheme` inherits from that one, so it picks those up
+  automatically on API 31+ without a copy being kept here.
 -->
-<resources>
-    <style name="AppTheme" parent="Theme.MindsetFrames">
-        <!-- Keeps the API 31+ splash in step with the app's own background so the
-             hand-off from splash to first frame has no visible flash. -->
-        <item name="windowSplashScreenBackground">@color/theme_background</item>
-    </style>
-</resources>
+<resources />
