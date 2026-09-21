@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The application label.
+
+  Referenced by AndroidManifest.xml (`android:label="@string/app_name"`) and was
+  missing from the project entirely, so no build could link: AAPT failed with
+  "resource string/app_name not found". Nothing else changes — this is the name
+  the launcher and the app-info screen show, matching the brand used across the
+  app (MindsetFrames).
+-->
+<resources>
+    <string name="app_name">MindsetFrames</string>
+</resources>

@@ -21,6 +21,7 @@ import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.HabitAlarmHistory
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.alarmMinutes
+import com.rork.mindsetframestracker.data.isHabitDoneOn
 import com.rork.mindsetframestracker.ui.AppStrings
 
 object HabitCheckInNotifier {
@@ -194,7 +195,7 @@ object HabitCheckInNotifier {
             )
             val occurrenceLabel = HabitReminderText.subtitleFor(context, habitId, alarmMinutes)
 
-            // ── Past the point of no return: this ring IS happening ────────
+            // ── Past the point of no return: this ring IS happening ─────────
             // The alarm has cleared every gate above — permission held, channel
             // enabled, notification postable — so it is about to reach the user.
             // THAT is the moment to write it into the alarm history.
@@ -267,9 +268,45 @@ object HabitCheckInNotifier {
             // notification identity and the re-arm all refer to the same
             // occurrence. Without it every one of the day's alarms was
             // indistinguishable from the others.
-            val ringingIntent = Intent(context, AlarmRingingActivity::class.java).apply {
-                putExtra("habitId", habitId)
-                putExtra("habitName", habitName)
+            // ── Which screen answers this ring ──────────────────────────────
+            // A habit that is not yet done gets the per-habit dialog
+            // (Done / Snooze / Skip) over the lock screen. A habit already
+            // completed today is deliberately NOT asked about again, so its ring
+            // keeps the generic ringing screen — whose Stop/Snooze pair is the
+            // right question for an alarm that is only a nudge.
+            //
+            // Resolved HERE, before the full-screen intent is attached, because
+            // this is the one place that both holds the habit id and runs at ring
+            // time; the dialog's own screen could only discover it after the
+            // system had already woken the device for a question with no answer.
+            // Guarded and defaulting to "not done", i.e. to showing the dialog:
+            // an unreadable repository must not turn a habit alarm into a silent
+            // nudge, which is the failure the dialog exists to remove.
+            val habitAlreadyDoneToday = runCatching {
+                MindsetRepository(context).load().isHabitDoneOn(habitId, Dates.todayKey())
+            }.getOrDefault(false)
+            // BUG FIX (security review, blocking): the diagnostic test id is not a
+            // habit and not a UUID. If it were given the per-habit Done/Snooze/Skip
+            // dialog, tapping "Done" would write a "diagnostic_test" key into the
+            // checkIns map — and SupabaseSync.pushSnapshot() would then hand a
+            // non-uuid habit_id to `checkins` (a uuid column), failing every sync
+            // from that point on, permanently (see DIAGNOSTIC_HABIT_ID above).
+            //
+            // So the diagnostic id never gets the stateful dialog. It keeps the
+            // generic ringing screen, whose Stop routes to AlarmStopReceiver — a
+            // path that writes no check-in at all. The test button exists to prove
+            // the NOTIFICATION path works and has no habit to record against.
+            // [AlarmRingActionReceiver] carries the same guard as a second line of
+            // defence, in case a dialog is ever raised for this id another way.
+            val isDiagnosticTest = habitId == DIAGNOSTIC_HABIT_ID
+            val ringTarget = if (habitAlreadyDoneToday || isDiagnosticTest) {
+                AlarmRingingActivity::class.java
+            } else {
+                HabitAlarmDialogActivity::class.java
+            }
+            val ringingIntent = Intent(context, ringTarget).apply {
+                putExtra(HabitReminderReceiver.EXTRA_HABIT_ID, habitId)
+                putExtra(HabitReminderReceiver.EXTRA_HABIT_NAME, habitName)
                 alarmMinutes?.let { putExtra(HabitReminderReceiver.EXTRA_ALARM_MINUTES, it) }
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -356,7 +393,7 @@ object HabitCheckInNotifier {
 
             manager.notify(notificationId(habitId), notification)
 
-            // ── Ring ─────────────────────────────────────────────────────
+            // ── Ring ─────────────────────────────────────────────────────────
             // The alarm sound is started from here, the notification path, and
             // NOT from AlarmRingingActivity. That distinction is the whole fix:
             // the full-screen intent below is only attached when
@@ -376,7 +413,7 @@ object HabitCheckInNotifier {
             // Record whether the OS will actually DELIVER it. notify() returns
             // normally even when the notification is silently dropped (app
             // notifications off, or the channel set to NONE), so a clean call
-            // here is not evidence the user saw or heard anything \u2014 this
+            // here is not evidence the user saw or heard anything — this
             // line is what makes the difference visible in a bug report
             // instead of leaving "I set it and nothing happened".
             if (habitId != DIAGNOSTIC_HABIT_ID) {
@@ -396,7 +433,7 @@ object HabitCheckInNotifier {
                 }
             }
 
-            // ── Record the occurrence that just rang ───────────────────────
+            // ── Record the occurrence that just rang ────────────────────────
             // Previously this marked the day done unconditionally, which was
             // wrong twice over:
             //
@@ -427,7 +464,7 @@ object HabitCheckInNotifier {
                 }.onFailure { Log.w(TAG, "Failed to record the occurrence for '$habitName'", it) }
             }
 
-            // ── Re-arm ONLY this time ──────────────────────────────────────
+            // ── Re-arm ONLY this time ────────────────────────────────────────
             // Per-time, not per-habit: when the 07:00 alarm fires, the 12:00 and
             // 18:00 alarms are separate live entries and must be left alone.
             // Re-arming the whole habit here would push the later ones a day

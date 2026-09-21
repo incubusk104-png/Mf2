@@ -103,6 +103,16 @@ object HabitStore {
             name = name,
             createdAt = habitJson.optLong("createdAt", 0L),
             isPinned = habitJson.optBoolean("isPinned", false),
+            // Read here for the same reason every other field is: this object is
+            // the ONE place the serialized habit field names are known. The boot
+            // re-arm path reconstructs a habit from this reader, so a habit whose
+            // archived flag had been dropped would come back looking active — and
+            // a user who archived a habit to free a free-tier slot would silently
+            // be over the cap again after a reboot, with nothing to show why.
+            // Absent (every habit stored before the flag existed) reads as active,
+            // which is what keeps an update from locking anyone out of their own
+            // habit.
+            isArchived = habitJson.optBoolean("isArchived", false),
             reminderMinutes = reminderMinutes,
             // Shared with the sync layer and the scheduler, so all three
             // readers agree on what a legacy habit's schedule is.

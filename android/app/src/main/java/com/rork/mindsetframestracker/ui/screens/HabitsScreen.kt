@@ -31,10 +31,8 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -80,7 +78,6 @@ import com.rork.mindsetframestracker.data.withAlarmMessage
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.MotivationalMessages
 import com.rork.mindsetframestracker.data.HabitIcon
-import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.REPEAT_DAILY
 import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import com.rork.mindsetframestracker.data.REPEAT_WEEKDAYS
@@ -98,6 +95,8 @@ import com.rork.mindsetframestracker.notifications.HabitTimerRequests
 import com.rork.mindsetframestracker.ui.AppStrings
 import com.rork.mindsetframestracker.ui.AppViewModel
 import com.rork.mindsetframestracker.ui.MAX_HABIT_NAME_LENGTH
+import com.rork.mindsetframestracker.ui.components.ActiveHabitIndicator
+import com.rork.mindsetframestracker.ui.components.LimitReachedPaywallState
 import com.rork.mindsetframestracker.ui.components.ActivitySource
 import com.rork.mindsetframestracker.ui.components.ActivitySourcePickerSheet
 import com.rork.mindsetframestracker.ui.components.HabitTrackerConnectHost
@@ -153,6 +152,31 @@ fun HabitsScreen(
 
     var showTodoDialog by remember { mutableStateOf(false) }
     var showPremiumSheet by remember { mutableStateOf(false) }
+
+    /**
+     * Raised when a sixth active habit is attempted on the free plan.
+     *
+     * Separate from [showPremiumSheet] because the two answer different
+     * questions: this one explains *why* the creation was refused (and that the
+     * habits already there are safe), while the premium sheet is the offer. A
+     * blocked tap goes through here first, then through the sheet if the user
+     * accepts — so the refusal can never be mistaken for the sales pitch.
+     */
+    var showLimitReachedState by remember { mutableStateOf(false) }
+
+    /** The habit the user was creating when the limit refused it, if named. */
+    var pendingLimitHabitName by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * The habits that occupy a free-tier slot.
+     *
+     * Phase 1's rule counts **active** habits: archived ones are excluded and
+     * paused ones still count. Until the model exposes `isArchived` this is every
+     * stored habit — deliberately the same set `canAddHabit()` counts, so the
+     * indicator can never report a different number from the one the limit
+     * actually enforces.
+     */
+    val activeHabitCount = data.habits.size
 
     // ── Tracker connect pop-up ────────────────────────────────────────────────
     // "add a pop-up that lets the user connect external fitness trackers —
@@ -334,12 +358,20 @@ fun HabitsScreen(
                         text = "Your habits",
                         style = MaterialTheme.typography.headlineMedium,
                     )
-                    Text(
-                        text = if (hasAccess) "${data.habits.size} habits"
-                        else "${data.habits.size} of $MAX_FREE_HABITS free habits",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
+                    // ── The "x of 5" active-habit indicator ───────────────────
+                    // The plan's own readout, in one shared phrasing (see
+                    // [habitLimitCaption]) so the header and the limit state can
+                    // never disagree about the number. It is a plain counter while
+                    // there is room and only becomes an upgrade affordance once
+                    // the tier is actually full.
+                    ActiveHabitIndicator(
+                        activeCount = activeHabitCount,
+                        unlocked = hasAccess,
+                        onUpgrade = {
+                            pendingLimitHabitName = null
+                            showLimitReachedState = true
+                        },
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
             },
@@ -361,14 +393,12 @@ fun HabitsScreen(
                         alarmPickerIcon = icon
                     }
                 } else {
-                    scope.launch {
-                        val result = snackbarHostState.showSnackbar(
-                            message = "Free limit is $MAX_FREE_HABITS habits — remove one or go Premium.",
-                            actionLabel = "Premium",
-                            duration = SnackbarDuration.Long,
-                        )
-                        if (result == SnackbarResult.ActionPerformed) showPremiumSheet = true
-                    }
+                    // Blocked at creation, and answered by the full limit state
+                    // rather than a snackbar: the prompt has to explain that
+                    // nothing already added is being taken away, which does not
+                    // fit in a transient strip.
+                    pendingLimitHabitName = icon.label
+                    showLimitReachedState = true
                 }
             },
             onHabitRemoved = { iconId ->
@@ -380,7 +410,10 @@ fun HabitsScreen(
             },
             onTodoListTapped = {
                 if (viewModel.canAddHabit()) showTodoDialog = true
-                else showPremiumSheet = true
+                else {
+                    pendingLimitHabitName = null
+                    showLimitReachedState = true
+                }
             },
             reminderMinutesByIconId = reminderMinutesByIconId,
             onSetupAlarmTapped = { icon ->
@@ -393,7 +426,7 @@ fun HabitsScreen(
         )
     }
 
-    // ── Alarm time picker for any habit icon ───────────────────────────
+    // ── Alarm time picker for any habit icon ────────────────────────────────
     // Shown when the user taps any non-TodoList icon. Pre-filled with the
     // icon's default alarm time so they can customise it before adding.
     if (alarmPickerIcon != null) {
@@ -412,7 +445,7 @@ fun HabitsScreen(
             // yet" and "a habit that currently has no alarm" — states those
             // three split values collapse into the same defaults.
             existingHabit = existingForIcon,
-            // ── Today's alarm history ────────────────────────────────────
+            // ── Today's alarm history ────────────────────────────────────────
             // Derived from the persisted events, one slot per scheduled time, so
             // a habit ringing at 07:00, 12:00 and 18:00 shows all three rather
             // than one collapsed entry. Empty for a habit that does not exist yet
@@ -533,7 +566,7 @@ fun HabitsScreen(
         )
     }
 
-    // ── Remove-habit confirmation ───────────────────────────────────────
+    // ── Remove-habit confirmation ───────────────────────────────────────────
     // Deleting a habit also wipes its check-in history and (via
     // queueHabitDeletion) removes it from the cloud — a destructive,
     // unrecoverable action, so it now always requires an explicit tap on
@@ -564,14 +597,14 @@ fun HabitsScreen(
         )
     }
 
-    // ── Automatic alarm-permission prompt ───────────────────────────────
+    // ── Automatic alarm-permission prompt ──────────────────────────────────
     // Pops up right after an alarm is set, only if something's missing —
     // replaces the old standalone Settings card entirely.
     if (showAlarmPermissionPrompt) {
         AlarmPermissionPromptDialog(onDismiss = { showAlarmPermissionPrompt = false })
     }
 
-    // ── Activity Source Picker ──────────────────────────────────────────
+    // ── Activity Source Picker ────────────────────────────────────────────
     // Shown after the user taps an activity-trackable icon (running, gym,
     // strava_yoga, strava_swim, etc.). Lets them pick Polar,
     // Health Connect, or Strava to auto-track activity data for that habit.
@@ -655,7 +688,7 @@ fun HabitsScreen(
         )
     }
 
-    // ── Tracker connect pop-up ─────────────────────────────────────────────
+    // ── Tracker connect pop-up ────────────────────────────────────────────────
     // The flow itself — consent gate, tier gate, in-flight spinner, provider
     // rows — lives in [HabitTrackerConnectHost] so every habit dialog opens the
     // same one. Re-implementing that ordering per caller is how the flow's
@@ -786,6 +819,27 @@ fun HabitsScreen(
                     showPremiumSheet = true
                 }
                 showTodoDialog = false
+            },
+        )
+    }
+
+    // ── The limit-reached paywall state ────────────────────────────────────
+    // Raised when a sixth active habit is attempted on the free plan. It names
+    // the habit that was being created when the user named it, and states the
+    // no-data-loss promise in the same breath as the ask — the moment a user is
+    // most likely to fear for the habits they already have.
+    if (showLimitReachedState) {
+        LimitReachedPaywallState(
+            activeCount = activeHabitCount,
+            habitName = pendingLimitHabitName,
+            onUpgrade = {
+                showLimitReachedState = false
+                pendingLimitHabitName = null
+                showPremiumSheet = true
+            },
+            onDismiss = {
+                showLimitReachedState = false
+                pendingLimitHabitName = null
             },
         )
     }
@@ -1016,7 +1070,7 @@ private fun AlarmPickerDialog(
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
 
-                // ── The schedule so far ────────────────────────────────
+                // ── The schedule so far ──
                 // Stacked rather than a scrolling row: with three or four times
                 // a wrapped column is easier to read than a horizontal scroller,
                 // and each chip is its own removable target the user can hit
@@ -1118,7 +1172,7 @@ private fun AlarmPickerDialog(
                     onOpenTracker = onOpenTracker,
                     onSelect = { detailSlot = it },
                 )
-                // ── The habit's activity tools ────────────────────────────────
+                // ── The habit's activity tools ──
                 // A walk measured by a stopwatch, or kept up by Strava / Health
                 // Connect. Rendered inside the alarm editor because this dialog
                 // IS the habit's dialog — tapping an added habit opens it — so
@@ -1164,11 +1218,11 @@ private fun AlarmPickerDialog(
                     text = when {
                         times.isEmpty() -> "No alarm"
                         nextRingAt == null ->
-                            "Alarm ${formatAlarmTimes(times)} \u00b7 ${formatRepeat(repeatMask)} \u2014 " +
+                            "Alarm ${formatAlarmTimes(times)} · ${formatRepeat(repeatMask)} — " +
                                 "its time has already passed, so it won't ring"
                         else ->
-                            "Alarm ${formatAlarmTimes(times)} \u00b7 ${formatRepeat(repeatMask)} " +
-                                "\u00b7 next ${formatNextRing(nextRingAt)}"
+                            "Alarm ${formatAlarmTimes(times)} · ${formatRepeat(repeatMask)} " +
+                                "· next ${formatNextRing(nextRingAt)}"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
@@ -1207,7 +1261,7 @@ private fun AlarmPickerDialog(
         },
     )
 
-    // ── One alarm's detail ──────────────────────────────────────────────
+    // ── One alarm's detail ──
     // A second dialog layered over this one rather than a navigation route: the
     // editor stays exactly as the user left it (their unsaved schedule and
     // message included), which is what "tapping an entry shows the alarm detail"
@@ -1415,7 +1469,7 @@ private fun RepeatSelector(mask: Int, onMaskChange: (Int) -> Unit) {
         if (lastDayRefused) {
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Keep at least one day selected \u2014 use \u201cOnce\u201d for a single alarm.",
+                text = "Keep at least one day selected — use “Once” for a single alarm.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )

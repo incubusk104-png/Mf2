@@ -18,11 +18,20 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { HABIT_LIMIT_CODE, MAX_FREE_HABITS } from "../_shared/freeTier.ts";
 
-// ── Constants ───────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_HABIT_NAME_LENGTH = 60;
-const MAX_FREE_HABITS = 5;
+
+// MAX_FREE_HABITS is deliberately NOT declared here. It is imported from
+// `_shared/freeTier.ts` — the one place in the repository the number is written
+// (fed from `freeHabitsMax` in android/gradle/libs.versions.toml, which the
+// Android client builds its own copy from too). It used to be redeclared here as
+// a private `const MAX_FREE_HABITS = 5` that was then never used at all, which is
+// how the client came to show "5 of 5 active habits" while POST /habits and
+// POST /habits/sync accepted unlimited creates. There is no local copy left to
+// fall out of step.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +40,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
 };
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface HabitPayload {
   id?: string;
@@ -40,6 +49,8 @@ interface HabitPayload {
   reminder_minutes?: number | null;
   is_pinned?: boolean;
   duration_seconds?: number | null;
+  /** Archived habits are excluded from the free-tier active count. */
+  is_archived?: boolean;
   created_at_ms?: number;
 }
 
@@ -47,7 +58,7 @@ interface SyncPayload {
   habits: HabitPayload[];
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function adminClient() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -99,7 +110,114 @@ function sanitizeReminderMinutes(raw: unknown): number | null {
   return n;
 }
 
-// ── Route handlers ──────────────────────────────────────────────────────────
+// ── Free-tier habit cap ──────────────────────────────────────────────────────
+
+/**
+ * The `403` a blocked habit write answers with.
+ *
+ * `code: "habit_limit"` is the part the client acts on: SupabaseSync matches it
+ * and raises the existing LimitReachedPaywallState, so the refusal reaches the
+ * user as the upgrade prompt they already have rather than as a generic sync
+ * error they can do nothing about.
+ */
+function habitLimitError(activeCount: number, blocked: string[] = []) {
+  return json(
+    {
+      error:
+        `The free plan includes ${MAX_FREE_HABITS} active habits ` +
+        `(${activeCount} in use). Nothing already saved was removed.`,
+      code: HABIT_LIMIT_CODE,
+      limit: MAX_FREE_HABITS,
+      active_count: activeCount,
+      blocked,
+    },
+    403,
+  );
+}
+
+/**
+ * How many **active** habits this user has in the database.
+ *
+ * Archived rows (`is_archived = true`) are excluded and paused ones are counted —
+ * Phase 1's rule, and the same set the client's "x of 5" indicator counts. A
+ * project whose `habits` table has no `is_archived` column reports `undefined`,
+ * which reads as active: an un-migrated deployment therefore counts every row,
+ * which is the conservative direction — it can never let a client past the cap.
+ */
+async function countActiveHabits(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+): Promise<number> {
+  const { data, error: dbErr } = await supabase
+    .from("habits")
+    .select("id,is_archived")
+    .eq("user_id", userId);
+  if (dbErr) throw dbErr;
+  return (data ?? []).filter(
+    (row: { is_archived?: boolean | null }) => row.is_archived !== true,
+  ).length;
+}
+
+/**
+ * Whether this user is entitled to unlimited habits — derived **server-side**.
+ *
+ * ## Why it is derived here and not taken from the client
+ *
+ * The client is not a trustworthy source for its own entitlement: an edited APK
+ * can answer "premium" and then create unlimited habits. The server has to reach
+ * its own conclusion, so this reads evidence the server already holds rather than
+ * a flag the caller supplies. There is deliberately **no request parameter** that
+ * can set it.
+ *
+ * ## What the verdict is based on
+ *
+ *  * `founding_member_claims` — a claim exists only for a purchase Huawei's Order
+ *    Service verified (`verified = true`), the strongest evidence in the DB.
+ *  * `tip_purchases` — checked as well because the client's own tier mapping
+ *    treats an active subscription product as UNLIMITED_HABITS, so a paying user
+ *    must not be capped here.
+ *
+ * ## Which way it fails
+ *
+ * It fails **closed**: if the lookup errors, the user is treated as free. Failing
+ * open would hand unlimited habits to anyone who could make one query error, and
+ * this is a product limit rather than a safety one — a wrongly-capped free user
+ * keeps every habit they already have (the cap gates creation only) and reaches
+ * support, whereas a wrongly-unlimited account is a permanent revenue hole.
+ *
+ * ## The known gap, stated plainly
+ *
+ * A lapse in the store's subscription state is not mirrored here, so an existing
+ * entitlement row keeps the cap lifted. That is the intended direction for Phase
+ * 1: the spec is explicit that existing habits are never taken away, and
+ * re-verifying subscriptions on every habit write is a billing-layer change of
+ * its own. It fails toward the user, never toward data loss.
+ */
+async function hasUnlimitedHabits(userId: string): Promise<boolean> {
+  try {
+    const supabase = adminClient();
+    const [{ data: claims }, { data: tips }] = await Promise.all([
+      supabase
+        .from("founding_member_claims")
+        .select("id")
+        .eq("user_identifier", userId)
+        .eq("verified", true)
+        .limit(1),
+      supabase
+        .from("tip_purchases")
+        .select("id")
+        .eq("user_identifier", userId)
+        .eq("verified", true)
+        .limit(1),
+    ]);
+    return (claims?.length ?? 0) > 0 || (tips?.length ?? 0) > 0;
+  } catch (err) {
+    console.error("Entitlement lookup failed; treating as free tier:", err);
+    return false;
+  }
+}
+
+// ── Route handlers ───────────────────────────────────────────────────────────
 
 /** GET /habits — list all habits for the authenticated user. */
 async function listHabits(userId: string) {
@@ -124,14 +242,17 @@ async function createHabit(userId: string, body: HabitPayload) {
 
   const supabase = adminClient();
 
-  // Free-tier cap check
-  const { count } = await supabase
-    .from("habits")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId);
-  // Note: premium check should be done client-side; server allows up to a
-  // generous hard cap to avoid blocking legitimate premium users.
-  const currentCount = count ?? 0;
+  // ── Free-tier cap, enforced HERE ───────────────────────────────────────────
+  // This is the enforcement point, and the reason the security review's blocking
+  // item existed: the cap was declared and then never applied, so POST /habits
+  // accepted unlimited creates while the client showed "5 of 5 active habits".
+  // A client-side check cannot be the enforcement point precisely because the
+  // client belongs to the user — this one cannot be edited away.
+  const entitled = await hasUnlimitedHabits(userId);
+  const currentCount = await countActiveHabits(supabase, userId);
+  if (!entitled && currentCount >= MAX_FREE_HABITS) {
+    return habitLimitError(currentCount);
+  }
 
   const habitId = body.id ?? crypto.randomUUID();
   const now = body.created_at_ms ?? Date.now();
@@ -146,6 +267,7 @@ async function createHabit(userId: string, body: HabitPayload) {
       icon_id: body.icon_id ?? null,
       reminder_minutes: sanitizeReminderMinutes(body.reminder_minutes),
       is_pinned: body.is_pinned ?? false,
+      is_archived: body.is_archived ?? false,
       duration_seconds: body.duration_seconds ?? null,
     })
     .select()
@@ -241,14 +363,21 @@ async function syncHabits(userId: string, body: SyncPayload) {
 
   const supabase = adminClient();
 
-  // Get existing habits
-  const { data: existing } = await supabase
+  // ── What this user already has ─────────────────────────────────────────────
+  // id + is_archived, so the cap can be applied to the ACTIVE set exactly as
+  // createHabit does. The previous version fetched only `id` and then never used
+  // it at all — which is why sync was a second, completely unbounded way into the
+  // same table.
+  const { data: existingRows } = await supabase
     .from("habits")
-    .select("id")
+    .select("id,is_archived")
     .eq("user_id", userId);
-  const existingIds = new Set((existing ?? []).map((h: { id: string }) => h.id));
+  const existingActive = new Map<string, boolean>();
+  (existingRows ?? []).forEach((h: { id: string; is_archived?: boolean | null }) => {
+    existingActive.set(h.id, h.is_archived !== true);
+  });
 
-  const toUpsert = body.habits
+  const incoming = body.habits
     .filter((h) => sanitizeName(h.name))
     .map((h) => ({
       id: h.id ?? crypto.randomUUID(),
@@ -258,8 +387,38 @@ async function syncHabits(userId: string, body: SyncPayload) {
       icon_id: h.icon_id ?? null,
       reminder_minutes: sanitizeReminderMinutes(h.reminder_minutes),
       is_pinned: h.is_pinned ?? false,
+      is_archived: h.is_archived ?? false,
       duration_seconds: h.duration_seconds ?? null,
     }));
+
+  // ── Bound the sync to the same cap ────────────────────────────────────────
+  // The rule, applied to a whole batch: a row that ALREADY EXISTS is always
+  // accepted (it is an update, and an existing habit is never dropped or
+  // refused), and new ACTIVE rows are capped at the remaining free slots.
+  // Archiving frees a slot, which is what makes "archive one, add one" a real
+  // answer to the cap instead of a dead end.
+  //
+  // A refusal is raised only when something was actually DROPPED. A client whose
+  // habits all already exist — the ordinary "push my device state" call — syncs
+  // untouched even while it is over the cap, so an existing user cannot lose a
+  // habit to this path. That is the same no-data-loss rule the client's
+  // LimitReachedPaywallState promises, enforced on the server side of it.
+  const entitled = await hasUnlimitedHabits(userId);
+  const activeExisting = [...existingActive.values()].filter(Boolean).length;
+  const room = Math.max(0, MAX_FREE_HABITS - activeExisting);
+  const dropped: string[] = [];
+  let kept = 0;
+  const toUpsert = entitled
+    ? incoming
+    : incoming.filter((row) => {
+        if (row.is_archived || existingActive.has(row.id)) return true;
+        if (kept >= room) {
+          dropped.push(row.name);
+          return false;
+        }
+        kept += 1;
+        return true;
+      });
 
   if (toUpsert.length > 0) {
     const { error: dbErr } = await supabase
@@ -268,15 +427,20 @@ async function syncHabits(userId: string, body: SyncPayload) {
     if (dbErr) throw dbErr;
   }
 
-  // Build alarm schedule for all synced habits
-  const alarms = body.habits
+  // Build the alarm schedule from what was ACTUALLY synced, so the alarms the
+  // client is told about match the habits that landed.
+  const alarms = toUpsert
     .filter((h) => h.reminder_minutes != null)
     .map((h) => ({
-      habit_id: h.id ?? "",
-      habit_name: sanitizeName(h.name) ?? "",
-      reminder_minutes: sanitizeReminderMinutes(h.reminder_minutes),
+      habit_id: h.id,
+      habit_name: h.name,
+      reminder_minutes: h.reminder_minutes,
       description: formatAlarmTime(h.reminder_minutes as number),
     }));
+
+  if (dropped.length > 0) {
+    return habitLimitError(activeExisting + kept, dropped);
+  }
 
   return json({
     synced: toUpsert.length,
@@ -303,7 +467,7 @@ async function listAlarms(userId: string) {
   });
 }
 
-// ── Utility ─────────────────────────────────────────────────────────────────
+// ── Utility ──────────────────────────────────────────────────────────────────
 
 function mapHabitRow(row: Record<string, unknown>) {
   return {
@@ -315,6 +479,7 @@ function mapHabitRow(row: Record<string, unknown>) {
     icon_id: row.icon_id ?? null,
     reminder_minutes: row.reminder_minutes ?? null,
     is_pinned: row.is_pinned ?? false,
+    is_archived: row.is_archived ?? false,
     duration_seconds: row.duration_seconds ?? null,
   };
 }
@@ -328,7 +493,7 @@ function formatAlarmTime(minutes: number): string {
   return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
-// ── Router ──────────────────────────────────────────────────────────────────
+// ── Router ───────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
