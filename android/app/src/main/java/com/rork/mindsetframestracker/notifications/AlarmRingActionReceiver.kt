@@ -39,6 +39,16 @@ import com.rork.mindsetframestracker.data.MindsetRepository
  *    "done" and "later", users could not tell the app they did not do it, and
  *    their history would fill with completions that never happened.
  *
+ * ## The diagnostic id is refused before anything is written
+ *
+ * [HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID] is the "Send a test reminder now"
+ * button's id. It is not a habit and not a UUID, and a write under it poisons
+ * check-in syncing for good — see the guard at the top of [handle] and
+ * [DIAGNOSTIC_HABIT_ID]'s own note for the full failure. The guard sits
+ * **before** the notification is cancelled on purpose: the test notification
+ * must still be cleared when the user answers, or tapping Done would leave the
+ * test reminder sitting in the shade forever.
+ *
  * ## Re-arming
  *
  * Done and Skip both re-arm the habit's **next** occurrence. Consuming an
@@ -61,6 +71,26 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
 
     private fun handle(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_ID) ?: return
+
+        // ── The diagnostic id is not a habit — refuse it whole ──────────
+        // BUG FIX (security review, blocking). The "Send a test reminder now"
+        // button in AlarmPermissionPromptDialog rings under
+        // [HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID] ("diagnostic_test"). If that
+        // id could reach recordDone(), it would write a non-uuid key into the
+        // local checkIns map; SupabaseSync.pushSnapshot() then hands it to
+        // Postgres's `checkins.habit_id` — which is type uuid — and every sync
+        // from then on fails on that one row, for good (check-ins, settings, mood
+        // and backup alike, because the push returns on the first failed upsert).
+        //
+        // Placed deliberately BEFORE cancelNotification(): the test reminder is a
+        // real notification the user just answered, so it still has to be cleared
+        // from the shade. Refusing the write must not strand the notification.
+        if (habitId == HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID) {
+            Log.d(TAG, "Ignoring ring action ${intent.action} for the diagnostic test id")
+            cancelNotification(context, habitId)
+            return
+        }
+
         val habitName = intent.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_NAME) ?: habitId
         val alarmMinutes = intent
             .getIntExtra(
@@ -96,6 +126,10 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
      * Idempotence comes from [HabitAlarmRecords.recordOccurrence], which upserts
      * per `(habit, day, alarm time)`: the same answer delivered twice produces
      * one record.
+     *
+     * Never reached for [HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID] — [handle]
+     * returns before dispatch for it, and the dialog is not attached to that id
+     * in the first place (see [HabitCheckInNotifier.showResult]).
      */
     private fun recordDone(context: Context, habitId: String, alarmMinutes: Int?) {
         HabitAlarmRecords.recordOccurrence(

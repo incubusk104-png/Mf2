@@ -12,6 +12,7 @@ import com.rork.mindsetframestracker.data.alarmMinutes
 import com.rork.mindsetframestracker.data.hasAnsweredOccurrence
 import com.rork.mindsetframestracker.data.occurrenceKeyFor
 import com.rork.mindsetframestracker.data.trackingModeOrDefault
+import java.util.UUID
 
 /**
  * The headless half of habit recording — the one place a record is written when
@@ -116,6 +117,23 @@ object HabitAlarmRecords {
         markDone: Boolean = true,
     ): HabitLogEntry? = runCatching {
         if (habitId.isBlank()) return null
+        // Safety net for the "one poisoned key kills every sync" failure mode.
+        //
+        // `checkins.habit_id` is a uuid column and SupabaseSync.pushSnapshot()
+        // abandons the whole push on the first failed upsert — so a single
+        // non-uuid key (historically "diagnostic_test") silently blocks check-in,
+        // settings, mood AND backup syncing, for good. A real habit id is a UUID,
+        // so anything that will not parse as one is refused here, per row, rather
+        // than being allowed to reach pushSnapshot().
+        //
+        // Callers must still guard the diagnostic id themselves (see
+        // [HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID] and
+        // [AlarmRingActionReceiver]); this only contains the blast radius when one
+        // does not.
+        if (uuidOrNull(habitId) == null) {
+            Log.w(TAG, "Refusing to record an occurrence for a non-UUID habit id")
+            return null
+        }
         val repo = MindsetRepository(context)
         val dayKey = Dates.todayKey()
 
@@ -162,4 +180,14 @@ object HabitAlarmRecords {
         val today = Dates.todayKey()
         habit.alarmMinutes.filterNot { data.hasAnsweredOccurrence(habitId, today, it) }
     }.getOrDefault(emptyList())
+
+    /**
+     * [value] as a [UUID], or null when it is not one.
+     *
+     * Parsing with the same grammar Postgres uses for a `uuid` column is
+     * deliberately the only test applied: it accepts exactly what the `checkins`
+     * table will accept, and nothing else.
+     */
+    private fun uuidOrNull(value: String): UUID? =
+        runCatching { UUID.fromString(value) }.getOrNull()
 }
