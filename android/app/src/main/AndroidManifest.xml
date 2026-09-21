@@ -1,299 +1,82 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <!-- androidx.health.connect:connect-client declares minSdk 26 in its own
-         manifest, but this app supports minSdk 24. The override below lets the
-         manifest merge succeed; MindsetHealthConnectClient (integrations/HealthConnectClient.kt)
-         guards every entry point behind Build.VERSION.SDK_INT >= 26, so the
-         library is never actually touched on API 24/25 devices. -->
-    <uses-sdk tools:overrideLibrary="androidx.health.connect.client" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Google Health Connect: the OS-level permission grant screen for a
-         given HealthPermission (StepsRecord / SleepSessionRecord read access)
-         will only show that item — or grant anything at all — if the app has
-         ALSO declared the matching android.permission.health.* manifest
-         permission below. Without these two lines, PermissionController's
-         request activity opens with nothing it's allowed to show and
-         immediately finishes with an empty granted set: that's the
-         "permissions were not granted" result even though the user never
-         actually saw a dialog to approve or deny. -->
-    <uses-permission android:name="android.permission.health.READ_STEPS" />
-    <uses-permission android:name="android.permission.health.READ_SLEEP" />
-    <!-- Real activity monitoring for the sports habits. Without these declared,
-         Health Connect refuses the read even when the user has granted the
-         matching runtime permission in its dialog. -->
-    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
-    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
-    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
-    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Offline detection for cloud backup — lets the app queue syncs instead of failing. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Timer / stopwatch. These are foreground-service permissions for the
-         service that keeps a running timer alive and shows its remaining time.
-         `specialUse` is deliberately the type: Android has no dedicated "timer"
-         foreground-service type, and the alternative `shortService` is capped at
-         3 minutes, which a 20-minute timer (and every preset above 3 minutes)
-         would exceed and get killed by. The subtype property below is the
-         machine-readable justification the store review process asks for. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- AlarmRingService plays the alarm audio on a foreground service so the
-         ring cannot be cut short by the OS the moment the app leaves the
-         foreground. `mediaPlayback` is the accurate type here: the service's
-         whole job is to keep an audio stream alive. It is a normal,
-         auto-granted permission (unlike specialUse, which needs a subtype
-         justification) because the service genuinely plays media. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <!-- Re-schedule the daily reminder alarm after a device reboot. -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Habit reminders fire at an exact time. On Android 12 (API 31/32) this
-         permission is granted automatically, so the alarms are exact there
-         without a prompt. On Android 13+ (API 33+) it is user-controllable; the
-         scheduler checks AlarmManager.canScheduleExactAlarms() at runtime and
-         falls back to an inexact windowed alarm when it isn't granted, so the
-         app never crashes and reminders still fire. -->
+    <!-- Alarms must survive doze + app standby so they fire at the exact minute. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <!-- Lets the app show the one-tap "exempt from battery optimization"
-         dialog. Without this, exact/windowed alarms can still be silently
-         killed on MIUI (Xiaomi), Samsung, Oppo/Vivo, and Honor even with
-         SCHEDULE_EXACT_ALARM granted — this is the most common real-device
-         cause of "the alarm just didn't ring" reports. -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <!-- USE_EXACT_ALARM is auto-granted on API 33+ for alarm/reminder apps.
-         Unlike SCHEDULE_EXACT_ALARM it doesn't require the user to visit
-         Settings > Alarms & Reminders. Both are declared so the scheduler
-         can use whichever is available. -->
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <!-- Vibration for habit reminder notifications. -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Lets a habit reminder launch AlarmRingingActivity full-screen — even
-         over the lock screen and through silent/Do Not Disturb/Bedtime mode —
-         so it behaves like a real alarm instead of a notification a phone
-         can silently swallow while the user is asleep. -->
+    <!-- Re-arm every alarm after a reboot or an app update (BootReceiver). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- So a ringing alarm can wake the screen and show the lock-screen dialog. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- Needed for usage stats tracking features -->
-    <uses-permission
-        android:name="android.permission.PACKAGE_USAGE_STATS"
-        tools:ignore="ProtectedPermissions" />
-    <!-- Needed only on Android 9 and below to save the shared progress image to the gallery.
-         Android 10+ uses scoped MediaStore inserts, which require no permission. -->
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-
-    <!-- Required on targetSdk 30+: Android's package-visibility filtering
-         hides other apps' package info by default. Without declaring HMS
-         Core here, HuaweiApiAvailability.isHuaweiMobileServicesAvailable()
-         can't see HMS Core is installed even when it genuinely is, and
-         always reports SERVICE_MISSING (code 1) — this is what was
-         blocking Huawei sign-in on devices that DO have HMS Core.
-
-         com.huawei.health is the Huawei Health app that Health Kit
-         launches for user authorization (step-read consent screen).
-         Without it here, the Health Kit authorization intent may fail
-         to resolve on Android 11+ devices. -->
-    <queries>
-        <package android:name="com.huawei.hwid" />
-        <package android:name="com.huawei.appmarket" />
-        <package android:name="com.huawei.health" />
-        <intent>
-            <action android:name="com.huawei.hms.core.aidlservice" />
-        </intent>
-
-        <!-- Google Health Connect (Android 14+: platform module; older: standalone APK).
-             Without these entries, HealthConnectClient.getSdkStatus() cannot see the
-             Health Connect provider behind Android 11+ package-visibility filtering
-             and silently returns SDK_UNAVAILABLE — blocking the entire permission
-             flow even when Health Connect IS installed. The intent declaration lets
-             PermissionController.createRequestPermissionResultContract() resolve the
-             Health Connect permissions activity. -->
-        <package android:name="com.google.android.apps.healthdata" />
-        <intent>
-            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
-        </intent>
-    </queries>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Requested but optional: a user who declines still gets every alarm, since
+         AlarmScheduler falls back to setWindow(15 min) when exact alarms are not
+         granted. Asking lets the permission prompt offer the grant in one tap,
+         and keeps canScheduleExactAlarms() meaningful on Android 12+. -->
+    <uses-permission android:name="android.permission.REQUEST_SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".MindsetFramesApplication"
         android:allowBackup="true"
-        tools:replace="android:allowBackup"
-        android:fullBackupContent="@xml/backup_rules"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Mindset Frames"
-        android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MindsetFrames">
-
-        <!-- HMS Core app identity.
-             HMS Core runs in a SEPARATE process, so it cannot see the AGConnect
-             instance built in-process from agconnect-services.json — it
-             identifies the calling app from these meta-data entries. Absent or
-             mismatched, every Huawei IAP call returns
-             ORDER_STATE_IAP_NOT_ACTIVATED (60002) and purchases fail, even
-             though Huawei sign-in (which resolves its app id by another path)
-             keeps working, which is what makes this omission so hard to spot.
-             The AGConnect Gradle plugin would generate these automatically; this
-             project applies no such plugin, so they are declared explicitly.
-             Values come from agconnect-services.json via the "Huawei app
-             identity" block in app/build.gradle.kts, so they can never drift
-             from client.app_id / client.cp_id. -->
-        <meta-data
-            android:name="com.huawei.hms.client.appid"
-            android:value="appid=${huaweiAppId}" />
-
-        <meta-data
-            android:name="com.huawei.hms.client.cpid"
-            android:value="cpid=${huaweiCpId}" />
+        android:theme="@style/AppTheme">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.MindsetFrames">
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Return leg of the email auth web-bridge: mindsetframes.online
-                 forwards Supabase confirmation results to
-                 com.mindsetframes.habittracker://auth-callback. singleTask
-                 reuses the running activity (no duplicate instances or login
-                 loops); MainActivity consumes each link exactly once. The
-                 legacy scheme stays registered for older links. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="com.mindsetframes.habittracker"
-                    android:host="auth-callback" />
-                <data
-                    android:scheme="com.rork.mindsetframestracker"
-                    android:host="auth-callback" />
-            </intent-filter>
-            <!-- Strava OAuth return leg: the browser redirects to
-                 mindsetframes://strava-callback?code=... after the athlete
-                 approves access. StravaAuthClient.REDIRECT_URI must match. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="mindsetframes"
-                    android:host="strava-callback" />
-            </intent-filter>
-
-            <!-- Polar AccessLink OAuth return leg: the browser redirects to
-                 mindsetframes://polar-callback?code=... after the user
-                 authorises activity data access. -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="mindsetframes"
-                    android:host="polar-callback" />
-            </intent-filter>
-
-            <!-- Google Health Connect REQUIREMENT (Android 13 and below):
-                 Health Connect only shows this app in its permission dialog
-                 when the app declares an activity that handles the
-                 privacy-policy rationale intent. WITHOUT this intent-filter
-                 the permission request activity opens and immediately returns
-                 an EMPTY granted set — the exact "Health Connect permissions
-                 were not granted" failure, even though the user never saw a
-                 dialog to approve. MainActivity handles the intent (it simply
-                 opens; the in-app privacy policy is available from Settings). -->
-            <intent-filter>
-                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
-            </intent-filter>
         </activity>
 
-        <!-- Google Health Connect REQUIREMENT (Android 14+, API 34+):
-             on Android 14 the rationale intent moved to the platform action
-             android.intent.action.VIEW_PERMISSION_USAGE with the
-             HEALTH_PERMISSIONS category, delivered through a permission-
-             protected alias. Without this alias, permission requests on
-             Android 14+ devices are silently rejected with an empty grant
-             set — same symptom as above but only on newer phones. -->
-        <activity-alias
-            android:name=".ViewPermissionUsageActivity"
-            android:exported="true"
-            android:targetActivity=".MainActivity"
-            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
-                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
-            </intent-filter>
-        </activity-alias>
-
-        <!-- Full-screen alarm-ringing UI launched from a habit reminder's
-             full-screen intent. showWhenLocked/turnScreenOn are also set in
-             code for API 27+; the manifest flags below cover the same intent
-             on older devices via the deprecated window-flag path. -->
+        <!-- ── Alarm ringing screens ────────────────────────────────────────
+             Two screens, deliberately: the per-habit dialog asks a question
+             (Done / Snooze / Skip) so it needs the answer to be unambiguous,
+             while the generic ringing screen is a plain "this is ringing, stop
+             it" screen used by timers and by habit rings that have already been
+             answered today. Both are hosted from a full-screen intent, so both
+             must be wake-and-show capable; both are excluded from recents so a
+             ringing alarm cannot be re-opened later as a stale dialog. -->
         <activity
             android:name=".notifications.AlarmRingingActivity"
             android:exported="false"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/Theme.MindsetFrames" />
+            android:theme="@style/Theme.MindsetFrames.Alarm" />
 
-        <!-- The per-habit alarm dialog (Done / Snooze / Skip) raised over the
-             lock screen by a habit reminder's full-screen intent. `exported` is
-             false on purpose: the only thing that may start it is our own
-             notification's PendingIntent, so no other app can put a fake habit
-             alarm in front of the user. singleInstance + excludeFromRecents
-             match the ringing screen: one alarm surface at a time, never in the
-             recents stack. -->
         <activity
             android:name=".notifications.HabitAlarmDialogActivity"
             android:exported="false"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/Theme.MindsetFrames" />
+            android:theme="@style/Theme.MindsetFrames.Alarm" />
 
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
+        <!-- ── Notification-scheduled receivers ───────────────────────────── -->
         <receiver
-            android:name=".util.CopySummaryReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".notifications.CheckInReceiver"
+            android:name=".notifications.DailyReminderReceiver"
             android:exported="false"
-            android:enabled="true">
-            <intent-filter>
-                <action android:name="com.rork.mindsetframestracker.DAILY_CHECK_IN" />
-            </intent-filter>
-        </receiver>
+            android:enabled="true" />
 
         <receiver
             android:name=".notifications.StreakAlertReceiver"
             android:exported="false"
-            android:enabled="true">
-            <intent-filter>
-                <action android:name="com.rork.mindsetframestracker.STREAK_ALERT" />
-            </intent-filter>
-        </receiver>
+            android:enabled="true" />
 
         <receiver
             android:name=".notifications.WeeklyRecapReceiver"
@@ -329,20 +112,21 @@
             android:enabled="true" />
 
         <!-- Turns the lock-screen habit dialog's Done / Snooze / Skip answers
-             into state. NOT exported and matched by an explicit action: the
-             answer buttons address it directly by class, and an exported
-             receiver here would let any other app mark the user's habits done,
-             snooze their alarms or dismiss them. -->
+             into state.
+
+             Deliberately has NO <intent-filter>. The answer buttons address the
+             receiver directly by class
+             (`Intent(context, AlarmRingActionReceiver::class.java)`), so the
+             three action constants are the dispatch identity and never need to
+             be advertised. An intent-filter here buys nothing, and it is dead
+             surface that would become a vulnerability the moment anyone flipped
+             exported to "true": an exported receiver matching HABIT_DONE would
+             let any other app mark the user's habits done, snooze their alarms,
+             or dismiss them. Kept exported="false" and explicit-only. -->
         <receiver
             android:name=".notifications.AlarmRingActionReceiver"
             android:exported="false"
-            android:enabled="true">
-            <intent-filter>
-                <action android:name="com.rork.mindsetframestracker.action.HABIT_DONE" />
-                <action android:name="com.rork.mindsetframestracker.action.HABIT_SNOOZE" />
-                <action android:name="com.rork.mindsetframestracker.action.HABIT_SKIP" />
-            </intent-filter>
-        </receiver>
+            android:enabled="true" />
 
         <!-- Handles the manual "Stop alarm" action on a ringing alarm's
              notification (and on the ongoing "Alarm ringing" notification).
@@ -356,7 +140,7 @@
             android:exported="false"
             android:enabled="true" />
 
-        <!-- ── Timer / stopwatch ───────────────────────────────────────────────
+        <!-- ── Timer / stopwatch ────────────────────────────────────────────
              The service keeps a running timer visible (ongoing notification with
              the live remaining time) and is the in-process safety net that rings
              the completion alert if the AlarmManager path is blocked by an OEM
@@ -371,7 +155,7 @@
                 android:value="Keeps a user-started timer or stopwatch running and shows its remaining time until the user stops it." />
         </service>
 
-        <!-- ── The alarm sound ────────────────────────────────────────────────
+        <!-- ── The alarm sound ──────────────────────────────────────────────
              Owns the actual RING (MediaPlayer on the ALARM stream + looping
              vibration) for every alarm in the app. Started from the
              notification path — HabitCheckInNotifier / TimerNotifier — so the
@@ -402,9 +186,24 @@
             android:name=".notifications.BootReceiver"
             android:exported="false"
             android:enabled="true">
+            <!-- BOOT_COMPLETED / MY_PACKAGE_REPLACED: AlarmManager alarms do not
+                 survive either event, so every alarm is re-armed here.
+
+                 TIME_SET / TIMEZONE_CHANGED: every alarm is armed as an ABSOLUTE
+                 RTC_WAKEUP epoch computed from a local wall-clock time, so
+                 changing the clock or moving timezone leaves the stored epoch
+                 pointing at the wrong local time — the reminder fires hours off
+                 or is dropped entirely by HabitRepeat's "already past" check.
+                 Re-arming recomputes each epoch from the new zone (see
+                 BootReceiver).
+
+                 All four are system/protected broadcasts, so exported="false"
+                 keeps the receiver closed to other apps without blocking them. -->
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
     </application>
