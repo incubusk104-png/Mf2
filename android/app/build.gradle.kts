@@ -55,7 +55,7 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // that one `implementation` line), not globally via `configurations.all`.
 // ---------------------------------------------------------------------------
 
-// ── Huawei app identity for HMS Core ─────────────────────────────────────────
+// ── Huawei app identity for HMS Core ──────────────────────────────────────────
 // HMS Core runs in its own process and identifies the calling app from THIS
 // APK's manifest meta-data (`com.huawei.hms.client.appid` — see
 // AndroidManifest.xml), not from the AGConnect instance created in-process in
@@ -79,7 +79,7 @@ fun resolveRorkValue(privateName: String, publicName: String, propertyName: Stri
 // Huawei IAP error 60002. A blank value is the honest answer, and when it is
 // blank this build now says so loudly (see the warning below).
 //
-// ── How agconnect-services.json reaches the build ──────────────────────────
+// ── How agconnect-services.json reaches the build ────────────────────────────
 // The real file carries live credentials (client_secret, api_key) and is
 // gitignored — see SECURITY.md and HUAWEI_SIGNIN_SETUP.md. It is resolved from
 // the first source that supplies one, in this order:
@@ -120,10 +120,10 @@ val agconnectConfigSource = agconnectSource.first
 val agconnectConfigResolved = agconnectSource.second
 
 val agconnectConfigText = agconnectConfigResolved
-val huaweiAgcAppId = Regex("\"app_id\"\\s*:\\s*\"([^\"]+)\"")
-    .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
-val huaweiAgcCpId = Regex("\"cp_id\"\\s*:\\s*\"([^\"]+)\"")
-    .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
+val huaweiAgcAppId = Regex("\"app_id\"\\s*:\\s*\"([^\"]+)\"").find(agconnectConfigText)
+    ?.groupValues?.get(1)?.trim().orEmpty()
+val huaweiAgcCpId = Regex("\"cp_id\"\\s*:\\s*\"([^\"]+)\"").find(agconnectConfigText)
+    ?.groupValues?.get(1)?.trim().orEmpty()
 
 if (huaweiAgcAppId.isBlank()) {
     logger.lifecycle(
@@ -222,7 +222,24 @@ android {
         // the secret shipped inside the APK.)
         val polarClientId = resolveRorkValue("POLAR_CLIENT_ID", "EXPO_PUBLIC_POLAR_CLIENT_ID", "mindset.polarClientId")
 
+        // ── THE free-tier active-habit cap ────────────────────────────────────
+        // Read from `libs.versions.toml`'s `freeHabitsMax`, which is the project's
+        // single declaration of the number. `data/Models.kt` exposes it as
+        // MAX_FREE_HABITS *from here* rather than as a Kotlin literal of its own,
+        // and the habits Edge Function enforces the same value from its
+        // MAX_FREE_HABITS environment variable — so the count the "x of 5"
+        // indicator shows and the count the server blocks on can never drift.
+        //
+        // The Kotlin fallback exists only so a checkout with no version catalog
+        // entry still compiles; it is deliberately the same number rather than a
+        // second configurable constant.
+        val freeHabitsMax = providers.gradleProperty("freeHabitsMax").orNull
+        val freeHabitsMaxValue = libs.versions.freeHabitsMax.get().toIntOrNull()
+            ?: freeHabitsMax?.toIntOrNull()
+            ?: 5
+
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("int", "MAX_FREE_HABITS", freeHabitsMaxValue.toString())
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
         buildConfigField("String", "STRAVA_CLIENT_ID", "\"$stravaClientId\"")
         buildConfigField("String", "POLAR_CLIENT_ID", "\"$polarClientId\"")
@@ -368,7 +385,7 @@ tasks.matching {
     dependsOn(copyAgconnectServices)
 }
 
-// ── Final sanity check on the resolved AGC config ──────────────────────────
+// ── Final sanity check on the resolved AGC config ────────────────────────────
 //
 // The config's `client.package_name` must equal this app's `applicationId`.
 // When it does not, everything still compiles and the APK still bundles the
@@ -383,8 +400,8 @@ tasks.matching {
 // re-downloading the config for the right AGC project — not something a build
 // should refuse to produce.
 afterEvaluate {
-    val configPackageName = Regex("\"package_name\"\\s*:\\s*\"([^\"]+)\"")
-        .find(agconnectConfigText)?.groupValues?.get(1)?.trim().orEmpty()
+    val configPackageName = Regex("\"package_name\"\\s*:\\s*\"([^\"]+)\"").find(agconnectConfigText)
+        ?.groupValues?.get(1)?.trim().orEmpty()
     val appId = android.defaultConfig.applicationId
     if (configPackageName.isNotBlank() && appId != null && configPackageName != appId) {
         logger.lifecycle(

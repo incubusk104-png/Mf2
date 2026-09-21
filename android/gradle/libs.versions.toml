@@ -21,6 +21,17 @@ huaweiUpdate = "6.14.0.300" # Added Huawei App Update SDK version (uses appservi
 healthConnect = "1.1.0-alpha12"
 junit = "4.13.2"
 
+# ── Business configuration ─────────────────────────────────────────────────────
+# THE free-tier active-habit cap. This is the ONE place the number is written.
+#
+# `app/build.gradle.kts` turns it into `BuildConfig.MAX_FREE_HABITS`, which is
+# the only value the Android client uses (see `data/Models.kt`), and the habits
+# Edge Function reads the same number from its `MAX_FREE_HABITS` environment
+# variable, injected from here by the deploy workflow. Editing this line is the
+# entire change — the client's "x of 5" indicator and the server's enforcement
+# move together, so they cannot disagree.
+freeHabitsMax = "5"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntime" }
