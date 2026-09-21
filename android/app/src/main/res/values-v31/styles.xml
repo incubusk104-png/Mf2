@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31+ (S) overrides for the base theme in values/themes.xml.
+
+  Splash-screen support: on Android 12+ the system paints a splash screen from
+  `windowSplashScreenBackground` / `windowSplashScreenAnimatedIcon` before the
+  app draws anything, and these attributes only exist as of API 31 — which is why
+  they live in a `values-v31` resource rather than in the base theme, where they
+  would fail to resolve on API 24..30 (this app's minSdk is 24).
+
+  No `windowSplashScreenBackground` value is asserted beyond the theme's own
+  background: the app has no dedicated splash artwork, and inventing a colour here
+  would be a second source of truth for the launch background. `AppTheme`
+  itself stays the single definition — see values/themes.xml.
+-->
+<resources>
+    <style name="AppTheme" parent="Theme.MindsetFrames">
+        <!-- Keeps the API 31+ splash in step with the app's own background so the
+             hand-off from splash to first frame has no visible flash. -->
+        <item name="windowSplashScreenBackground">@color/theme_background</item>
+    </style>
+</resources>

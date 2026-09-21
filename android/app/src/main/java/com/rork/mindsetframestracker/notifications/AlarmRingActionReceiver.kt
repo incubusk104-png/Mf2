@@ -72,7 +72,33 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
     private fun handle(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_ID) ?: return
 
-        // ── The diagnostic id is not a habit — refuse it whole ──────────
+        val habitName = intent.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_NAME) ?: habitId
+        val alarmMinutes = intent
+            .getIntExtra(
+                HabitReminderReceiver.EXTRA_ALARM_MINUTES,
+                HabitReminderReceiver.NO_ALARM_MINUTES,
+            )
+            .takeIf { it != HabitReminderReceiver.NO_ALARM_MINUTES }
+
+        // ── RE-ARM FIRST: before anything else, on every path ────────────────
+        // Consuming this occurrence removed the AlarmManager entry that produced
+        // it, so the next one exists only if this call succeeds — and everything
+        // below it (the diagnostic refusal, the missed-alarm sweep, clearing the
+        // notification, the answer's own record) can fail. Ordered this way, a
+        // failure further down costs a log line; ordered the other way it would
+        // cost the user their next alarm, silently, which is the worst outcome
+        // the app can produce.
+        //
+        // The answer branches therefore no longer re-arm, and that is safe
+        // because this call is idempotent: `HabitAlarmScheduler.scheduleNext`
+        // addresses the `(habit, time)` pair under FLAG_UPDATE_CURRENT, so
+        // re-arming once, here, replaces rather than duplicates. For the
+        // diagnostic test id there is no stored habit and no alarm time on the
+        // intent, so this is a no-op — exactly right, since a test ring has
+        // nothing to re-arm.
+        rearmNextOccurrence(context, habitId, alarmMinutes)
+
+        // ── The diagnostic id is not a habit — refuse it whole ───────────────
         // BUG FIX (security review, blocking). The "Send a test reminder now"
         // button in AlarmPermissionPromptDialog rings under
         // [HabitCheckInNotifier.DIAGNOSTIC_HABIT_ID] ("diagnostic_test"). If that
@@ -91,13 +117,11 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
             return
         }
 
-        val habitName = intent.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_NAME) ?: habitId
-        val alarmMinutes = intent
-            .getIntExtra(
-                HabitReminderReceiver.EXTRA_ALARM_MINUTES,
-                HabitReminderReceiver.NO_ALARM_MINUTES,
-            )
-            .takeIf { it != HabitReminderReceiver.NO_ALARM_MINUTES }
+        // ── Log the occurrences this habit's alarm already let pass ──────────
+        // Runs after the re-arm and before anything the user's answer does, and is
+        // internally guarded: a history write can never cost the alarm or the
+        // answer.
+        logMissedOccurrences(context, habitId, alarmMinutes)
 
         // The answer supersedes the notification: the reminder in the shade is
         // about the occurrence the user just answered, and leaving it behind
@@ -147,7 +171,10 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
             scheduledMinutes = alarmMinutes,
             outcome = AlarmEventOutcome.ACKNOWLEDGED,
         )
-        rearmNextOccurrence(context, habitId, alarmMinutes)
+        // No re-arm here: [handle] already re-armed this habit's next occurrence
+        // before the answer was even dispatched, so a failure at any point below
+        // could not leave the alarm un-armed. Re-arming again here would only
+        // duplicate work it has already done.
     }
 
     /**
@@ -184,7 +211,8 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
             scheduledMinutes = alarmMinutes,
             outcome = AlarmEventOutcome.DISMISSED,
         )
-        rearmNextOccurrence(context, habitId, alarmMinutes)
+        // No re-arm here either — see [recordDone]: [handle] re-arms first, so the
+        // next occurrence is already armed by the time this runs.
     }
 
     /**
@@ -203,6 +231,22 @@ class AlarmRingActionReceiver : BroadcastReceiver() {
                 ?: return
             HabitAlarmScheduler.scheduleNext(context, habitId, habit.name, minutes)
         }.onFailure { Log.w(TAG, "Could not re-arm the next occurrence for $habitId", it) }
+    }
+
+    /**
+     * Logs the occurrences of [habitId] that its alarm already let pass with
+     * nothing recorded — the "log missed alarms" half of Change B.
+     *
+     * Delegates to [HabitAlarmHistory.logMissedOccurrences], which owns the rule
+     * (a slot is missed when its time has gone and it has no event at all) and
+     * does its own guarding, so nothing here can affect the re-arm or the answer.
+     */
+    private fun logMissedOccurrences(context: Context, habitId: String, firedAlarmMinutes: Int?) {
+        HabitAlarmHistory.logMissedOccurrences(
+            context = context,
+            habitId = habitId,
+            beforeMinutes = firedAlarmMinutes,
+        )
     }
 
     private fun cancelNotification(context: Context, habitId: String) {
