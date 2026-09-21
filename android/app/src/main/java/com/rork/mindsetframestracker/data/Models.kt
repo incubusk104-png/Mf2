@@ -1,5 +1,8 @@
 package com.rork.mindsetframestracker.data
 
+import com.rork.mindsetframestracker.BuildConfig
+import com.rork.mindsetframestracker.billing.Entitlements
+import com.rork.mindsetframestracker.billing.SubscriptionTier
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -18,6 +21,41 @@ data class Habit(
     val createdAt: Long = 0L,
     /** Pinned (favorite) habits always sort to the top of habit lists. */
     val isPinned: Boolean = false,
+    /**
+     * The user has **archived** this habit: it is put away, not deleted.
+     *
+     * ## Why archiving is a flag and not a delete
+     *
+     * Phase 1's free-tier cap counts **active** habits, and archiving is the
+     * user's own way of freeing a slot without destroying anything. That only
+     * works as a promise if the data survives it: an archived habit keeps its
+     * check-ins, its streaks, its logs and its alarm metadata, and can be brought
+     * back with everything intact. A delete cannot promise that, which is why the
+     * cap is never answered by deleting a habit — see
+     * [Entitlements.canAddHabit] and the no-data-loss promise in the limit dialog.
+     *
+     * ## Archived is excluded from the count; paused is not
+     *
+     * These are deliberately two different things (see [isActive]):
+     *
+     *  * **Archived** — "I am not doing this one at all for now." It does not
+     *    occupy a free slot, so a user at the cap can archive and start something
+     *    new.
+     *  * **Paused** — "I am not doing this on these days / for a while, but it is
+     *    still mine." It still occupies its slot, which is what keeps "pause" a
+     *    scheduling choice rather than a way to get a sixth habit for free.
+     *
+     * ## Orthogonal to the alarm
+     *
+     * Archiving does not by itself stop or re-arm anything. The scheduling layer
+     * decides what to arm, and it already skips habits with no alarm times; giving
+     * this flag a second, hidden meaning at ring time is how an alarm disappears
+     * without the user asking for it.
+     *
+     * Defaults to `false`, so every habit in an existing install decodes as active
+     * and no user is locked out of a habit they already had by an update.
+     */
+    val isArchived: Boolean = false,
     /** Minutes from midnight for this habit's own reminder. Null = no individual alarm.
      *
      * ## Why this still exists alongside [alarmTimes]
@@ -76,7 +114,7 @@ data class Habit(
     /** Human-readable label of the monitored app, for display. */
     val monitoredAppLabel: String? = null,
     /**
-     * Which tracking tool this habit uses \u2014 see [HabitTrackingMode].
+     * Which tracking tool this habit uses — see [HabitTrackingMode].
      *
      * Null means "not configured by the user", and the habit resolves its mode
      * from its own [iconId] instead (see [Habit.trackingModeOrDefault]). That
@@ -137,6 +175,47 @@ const val REPEAT_WEEKDAYS = 0b0011111
 
 /** [Habit.repeatDaysMask] for Saturday + Sunday. */
 const val REPEAT_WEEKENDS = 0b1100000
+
+/**
+ * True when this habit occupies one of the free tier's slots.
+ *
+ * Phase 1's rule, in one predicate: **archived habits are excluded, paused ones
+ * are counted.** See [Habit.isArchived] for why those are two different things.
+ *
+ * Everything that counts habits for the cap goes through here —
+ * [AppData.activeHabitCount], [Entitlements.canAddHabit] and therefore the
+ * "x of 5" indicator and the creation block — so the number the user is shown
+ * and the number that is enforced are computed by the same expression rather
+ * than by two implementations that happen to agree today.
+ */
+val Habit.isActive: Boolean get() = !isArchived
+
+/**
+ * The habits that occupy a free-tier slot, in stored order. The set the cap
+ * counts and the set the "x of 5" indicator reports.
+ */
+val AppData.activeHabits: List<Habit> get() = habits.filter { it.isActive }
+
+/**
+ * How many habits the free-tier cap counts — the single number behind both the
+ * "x of 5" indicator and the creation block.
+ */
+val AppData.activeHabitCount: Int get() = habits.count { it.isActive }
+
+/**
+ * Whether the app may create **one more** habit.
+ *
+ * **UX only.** This decides whether to open the creation flow or raise the
+ * upgrade prompt; it is not, and must never be treated as, the enforcement point.
+ * `canAddHabit` here runs on the user's own device, where a modified APK can
+ * answer it any way it likes — the habit Edge Function enforces the same cap
+ * server-side and answers `403 habit_limit`, which is what actually keeps the
+ * tier honest. The two are kept consistent by construction: both read the single
+ * `MAX_FREE_HABITS`, and this one counts [activeHabitCount], the same active set
+ * the server counts.
+ */
+fun AppSettings.canAddHabit(data: AppData): Boolean =
+    Entitlements.canAddHabit(subscriptionTier(), data.activeHabitCount)
 
 /** True when this habit tracks phone screen time instead of a manual check-in. */
 val Habit.isScreenTimeHabit: Boolean
@@ -454,7 +533,7 @@ data class AppData(
     val activityRecords: List<ActivityRecord> = emptyList(),
     /**
      * Detailed records of what was actually done, one per completion, newest
-     * last \u2014 see [HabitLogEntry]. Complements [checkIns] rather than
+     * last — see [HabitLogEntry]. Complements [checkIns] rather than
      * replacing it: [checkIns] is the cheap boolean that streaks, badges and
      * the heatmap read, this is the payload (duration, journal text, amount)
      * that the habit's own tracking tool produced.
@@ -600,8 +679,41 @@ fun AppData.fullCompletionStreak(): Int {
     return streak
 }
 
-/** Max number of habits on the free tier. Premium removes the cap. */
-const val MAX_FREE_HABITS = 5
+/**
+ * Max number of **active** habits on the free tier. Premium removes the cap.
+ *
+ * ## This is not a literal, on purpose
+ *
+ * The number lives in exactly one place in the project: `freeHabitsMax` in
+ * `android/gradle/libs.versions.toml`. `app/build.gradle.kts` turns it into
+ * `BuildConfig.MAX_FREE_HABITS` (which is what this val reads), and the habits
+ * Edge Function enforces the same value from its own `MAX_FREE_HABITS`
+ * environment variable, injected from that same catalog entry.
+ *
+ * Phase 1 asked for the limit to be single-sourced because it used to be written
+ * out twice — `const val MAX_FREE_HABITS = 5` here and
+ * `const MAX_FREE_HABITS = 5` in `functions/habits/index.ts` — where the second
+ * was declared and then never used, so the client showed "5 of 5" while the
+ * server accepted unlimited creates. Reading it from `BuildConfig` is what makes
+ * that impossible: there is no Kotlin copy left to fall out of step.
+ *
+ * Changing the cap is a one-line edit in `libs.versions.toml`. Do not reintroduce
+ * the number here, in the Edge Function, or at any call site.
+ */
+val MAX_FREE_HABITS: Int = BuildConfig.MAX_FREE_HABITS
+
+/**
+ * The wire code a habit-cap refusal carries, so it is never mistaken for a
+ * backup failure.
+ *
+ * Mirrors `HABIT_LIMIT_CODE` in the habits Edge Function's `_shared/freeTier.ts`.
+ * A wire string is the one thing on this boundary that *cannot* be shared across
+ * the two languages, so it is declared once per side and named here rather than
+ * written out at the check that reads it — a literal typo would silently turn a
+ * correct refusal back into the generic "cloud storage broke" dead end the code
+ * exists to prevent.
+ */
+const val HABIT_LIMIT_CODE = "habit_limit"
 
 /**
  * Premium-level content access — gates extended prompt packs, the exclusive
