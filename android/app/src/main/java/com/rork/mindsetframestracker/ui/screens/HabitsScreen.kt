@@ -78,7 +78,6 @@ import com.rork.mindsetframestracker.data.withAlarmMessage
 import com.rork.mindsetframestracker.data.Dates
 import com.rork.mindsetframestracker.data.MotivationalMessages
 import com.rork.mindsetframestracker.data.HabitIcon
-import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
 import com.rork.mindsetframestracker.data.REPEAT_DAILY
 import com.rork.mindsetframestracker.data.REPEAT_ONCE
 import com.rork.mindsetframestracker.data.REPEAT_WEEKDAYS
