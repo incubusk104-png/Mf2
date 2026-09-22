@@ -39,6 +39,7 @@ import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.screenTimeSummary
 import com.rork.mindsetframestracker.data.ScreenTimeLimitInput
 import com.rork.mindsetframestracker.data.MAX_FREE_HABITS
+import com.rork.mindsetframestracker.data.activeHabitCount
 import com.rork.mindsetframestracker.data.MindsetRepository
 import com.rork.mindsetframestracker.data.MoodMode
 import com.rork.mindsetframestracker.data.hasFeatureAccess
@@ -230,7 +231,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Premium subscription (Huawei IAP) ─────────────────────────────
+    // ── Premium subscription (Huawei IAP) ──────────────────────────────
 
     /**
      * The product the user is currently buying — SubscriptionBilling launches
@@ -272,7 +273,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // ORDER_PRODUCT_OWNED can arrive with an EMPTY purchase payload
                 // (a re-tap of a button for something already owned). That is
                 // not evidence of a new payment, so no claim is attempted at
-                // all \u2014 attempting one would either be refused by the server or,
+                // all — attempting one would either be refused by the server or,
                 // worse, burn a slot on a purchase that was never made.
                 if (Entitlements.tierForProductId(result.productId) == SubscriptionTier.FOUNDING) {
                     if (result.purchaseData.isBlank()) {
@@ -296,7 +297,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             is SubscriptionResult.Cancelled -> {
-                // Silent \u2014 the user closed the payment sheet. Nothing is granted
+                // Silent — the user closed the payment sheet. Nothing is granted
                 // and no slot is claimed.
             }
             is SubscriptionResult.Error -> {
@@ -359,7 +360,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Strava connection ─────────────────────────────────────────
+    // ── Strava connection ─────────────────────────────────────────────
 
     private val _stravaMessage = MutableStateFlow<String?>(null)
     val stravaMessage: StateFlow<String?> = _stravaMessage.asStateFlow()
@@ -526,7 +527,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Polar connection ────────────────────────────────────────────
+    // ── Polar connection ──────────────────────────────────────────────
 
     fun isPolarConnected(): Boolean = !_state.value.settings.polarAccessToken.isNullOrBlank()
 
@@ -568,7 +569,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Screen-time habits (UsageStats) ──────────────────────────────
+    // ── Screen-time habits (UsageStats) ────────────────────────────────
 
     /**
      * Evaluates every screen-time habit against today's measured app usage:
@@ -736,7 +737,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _stravaMessage.value = "Polar disconnected."
     }
 
-    // ── Health Connect (Google) connection ───────────────────────────
+    // ── Health Connect (Google) connection ─────────────────────────────
 
     /**
      * One-shot flag: when set to true, AppNavigation picks it up and
@@ -958,7 +959,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Companion Studio task unlocks ──────────────────────────
+    // ── Companion Studio task unlocks ────────────────────────────────
 
     private val _newCompanionUnlocks = MutableStateFlow<List<String>>(emptyList())
 
@@ -1013,7 +1014,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Tip purchase result (delivered via MainActivity.onActivityResult,
     // since Huawei IAP's resolution must launch through the classic
-    // startActivityForResult path — see TipBilling.kt) ────────────────────
+    // startActivityForResult path — see TipBilling.kt) ──────────────────
 
     private val _tipMessage = MutableStateFlow<String?>(null)
     val tipMessage: StateFlow<String?> = _tipMessage.asStateFlow()
@@ -1113,7 +1114,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * the signed purchase with Huawei before consuming a slot, so the outcome
      * is only known once it answers. The user has already been granted the
      * entitlement locally (Huawei completed the payment), so a refusal here
-     * never revokes it \u2014 but it must be visible, because it means the founding
+     * never revokes it — but it must be visible, because it means the founding
      * slot was not recorded and support may need to reconcile it.
      */
     fun recordFoundingMemberClaim(
@@ -1145,7 +1146,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _tipMessage.value = null
     }
 
-    // ── Save-your-data prompt ────────────────────────────────
+    // ── Save-your-data prompt ────────────────────────────────────────
 
     private val _showAuthPrompt = MutableStateFlow(false)
     val showAuthPrompt: StateFlow<Boolean> = _showAuthPrompt.asStateFlow()
@@ -1200,7 +1201,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _syncState.value = _syncState.value.copy(showSetNewPasswordSheet = false)
     }
 
-    // ── Privacy consent ────────────────────────────────────────
+    // ── Privacy consent ──────────────────────────────────────────────
 
     fun acceptPrivacyConsent() {
         update { it.copy(settings = it.settings.copy(privacyConsentAccepted = true)) }
@@ -1245,7 +1246,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         busy = false,
                         message = if (resendError == null) {
                             "Your account exists but the email isn't verified yet. " +
-                                "We've just sent a fresh confirmation link to ${email.trim()} — " +
+                                "We've just sent a fresh confirmation link to ${email.trim()} \u2014 " +
                                 "tap it, then sign in."
                         } else {
                             "Your account exists but the email isn't verified yet, and we " +
@@ -1274,7 +1275,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         "account yet, tap \"New here? Create an account\" below. Otherwise " +
                         "double-check for typos or use \"Forgot password?\" to reset it."
             "email not confirmed" in normalized ->
-                "Please confirm your email first — check your inbox for the verification link we sent."
+                "Please confirm your email first \u2014 check your inbox for the verification link we sent."
             else -> raw
         }
     }
@@ -1323,7 +1324,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val errorCode = params["error_code"] ?: params["error"]
         if (errorCode != null) {
             val friendly = if (errorCode == "otp_expired" || errorCode == "access_denied") {
-                "That email link has expired — request a fresh one from the sign-in screen."
+                "That email link has expired \u2014 request a fresh one from the sign-in screen."
             } else {
                 "That email link couldn't be verified. Request a new one and try again."
             }
@@ -1350,7 +1351,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             isError = false,
                         )
                     } else {
-                        onSignedIn("Email verified — you're signed in!")
+                        onSignedIn("Email verified \u2014 you're signed in!")
                     }
                 }
             }
@@ -1416,7 +1417,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 provider = supabaseSync.sessionProvider,
                 message = when {
                     alreadyExists -> "An account with this email already exists. Please log in instead."
-                    else -> message ?: "Account created — you're signed in"
+                    else -> message ?: "Account created \u2014 you're signed in"
                 },
                 isError = message != null && !signedIn && !message.startsWith("Account created"),
                 suggestSignIn = alreadyExists,
@@ -1448,7 +1449,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             email = null,
             provider = null,
             lastSyncAtMs = 0L,
-            message = "Signed out — your data stays on this device.",
+            message = "Signed out \u2014 your data stays on this device.",
             isError = false,
         )
     }
@@ -1471,7 +1472,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 email = null,
                 provider = null,
                 lastSyncAtMs = 0L,
-                message = "Account deleted — your cloud data is permanently erased. " +
+                message = "Account deleted \u2014 your cloud data is permanently erased. " +
                     "Your habits stay on this device.",
                 isError = false,
             )
@@ -1646,7 +1647,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!supabaseSync.isOnline) {
             if (supabaseSync.isSignedIn) supabaseSync.hasPendingPush = true
             _syncState.value = state.copy(
-                message = "You're offline — your data is saved on this device and will back up when you're back online.",
+                message = "You're offline \u2014 your data is saved on this device and will back up when you're back online.",
                 isError = false,
             )
             return
@@ -1654,7 +1655,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (isBatteryLow(getApplication())) {
             if (supabaseSync.isSignedIn) supabaseSync.hasPendingPush = true
             _syncState.value = state.copy(
-                message = "Low Power — sync is paused below 20% battery to conserve energy. Your data is saved on this device.",
+                message = "Low Power \u2014 sync is paused below 20% battery to conserve energy. Your data is saved on this device.",
                 isError = false,
             )
             return
@@ -1825,8 +1826,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Whether the app may create **one more** habit.
+     *
+     * Counts [AppData.activeHabitCount] — archived habits excluded, paused ones
+     * counted — which is the same set the habits Edge Function counts and the
+     * same number the "x of 5" indicator shows. Counting `habits.size` here
+     * disagreed with both: an archived habit kept occupying a slot on the client
+     * while the server had already freed it, so the app refused a create the
+     * backend would have accepted.
+     */
     fun canAddHabit(): Boolean =
-        _state.value.settings.hasFeatureAccess() || _state.value.habits.size < MAX_FREE_HABITS
+        _state.value.settings.hasFeatureAccess() || _state.value.activeHabitCount < MAX_FREE_HABITS
 
     fun addHabit(name: String): Boolean {
         val trimmed = name.trim().take(MAX_HABIT_NAME_LENGTH)
@@ -2010,7 +2021,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (trimmedNames.isEmpty()) return BulkAddResult(emptyList(), emptyList())
 
         val hasFullAccess = _state.value.settings.hasFeatureAccess()
-        val currentCount = _state.value.habits.size
+        // The active set, not every stored habit: an archived habit does not
+        // occupy a slot, so it must not consume one of the remaining free slots
+        // here either — see [canAddHabit].
+        val currentCount = _state.value.activeHabitCount
         val remainingFreeSlots = (MAX_FREE_HABITS - currentCount).coerceAtLeast(0)
 
         val toAdd = if (hasFullAccess) trimmedNames else trimmedNames.take(remainingFreeSlots)
