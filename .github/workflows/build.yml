@@ -8,7 +8,7 @@ name: Build
 # The Gradle project lives in the android/ subfolder of this repo, so every
 # step runs with android/ as its working directory.
 #
-# ─────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 # REQUIRED ONE-TIME SETUP (release builds must be signed):
 # Add these repository secrets under
 #   Settings -> Secrets and variables -> Actions -> New repository secret
@@ -25,7 +25,7 @@ name: Build
 #   keytool -genkeypair -v -keystore release.keystore -alias mindset \
 #     -keyalg RSA -keysize 2048 -validity 10000
 # Keep release.keystore safe and NEVER commit it.
-# ─────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # OPTIONAL (activity-sync integrations): to have Strava/Polar "Connect"
 # actually work in APKs built by this workflow, also add:
@@ -41,7 +41,7 @@ name: Build
 # will show "isn't configured for this build yet." instead of opening
 # the OAuth consent screen. Google Health Connect does not need any of
 # these — it uses an on-device permission dialog, no client id.)
-# ─────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # REQUIRED (backend connectivity — sign-in, backup/restore, and BOTH the
 # Strava/Polar token-exchange Edge Functions AND their runtime client-id
@@ -57,7 +57,7 @@ name: Build
 # both fall back to (CLIENT_ID.isNotBlank() || SUPABASE_URL.isNotBlank()),
 # so a missing SUPABASE_URL removes their only other path to working when
 # STRAVA_CLIENT_ID / POLAR_CLIENT_ID aren't set either.
-# ─────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # HUAWEI SIGN-IN. Two separate failure modes, two separate fixes — see
 # HUAWEI_SIGNIN_SETUP.md for the full runbook:
@@ -76,7 +76,7 @@ name: Build
 #     not enabled under AppGallery Connect -> Build -> Account Kit. The
 #     "Print release signing SHA-256" step prints the exact fingerprint this
 #     run used — copy it from the Actions log into AppGallery Connect.
-# ─────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   push:
@@ -239,8 +239,38 @@ jobs:
       # which touch an Android class. They were the missing P1-3 coverage — a
       # bug in the day-of-week maths or the per-alarm message rotation is now
       # caught here rather than on a user's phone at 07:00.
+      #
+      # ── Why this step passes explicit memory flags ────────────────────────
+      # It is the ONLY Gradle invocation in this workflow that did not, and that
+      # is exactly why it was the only one that failed. `gradle.properties`
+      # budgets `org.gradle.jvmargs=-Xmx3g` plus `kotlin.daemon.jvmargs=-Xmx2g`
+      # — 5 GB of JVM heap — with `org.gradle.parallel=true` on top. The release
+      # build below overrides that down to `-Xmx4g`; this step inherited the
+      # full 5 GB and the runner's OOM killer took the daemon out mid-compile.
+      #
+      # The failure mode is worth spelling out, because it does not look like an
+      # out-of-memory kill. The daemon dies while compiling, so Gradle never
+      # reaches the test task, so no JUnit XML is ever written — and the "Upload
+      # unit test reports" step below then reports "No files were found with the
+      # provided path: android/app/build/reports/tests/ ... test-results/". The
+      # run reads as a failing test suite when in fact no test ever ran, and the
+      # whole job finishes in ~35s, which is far too fast for a real suite.
+      #
+      # The flags are the ones this project already verified locally — see
+      # verification/v12-meta.txt, which records 19 suites / 285 tests / 0
+      # failures with exactly these values — so this is a known-good
+      # configuration rather than a guess. `-Pkotlin.compiler.execution.strategy=
+      # in-process` keeps the Kotlin compiler inside the Gradle daemon instead of
+      # forking a second multi-GB JVM, and `-Dorg.gradle.workers.max=1` stops
+      # parallel workers from multiplying the peak. The heap is raised from the
+      # verified 768m to 2g for headroom over the code Phase 1 added, while
+      # staying well inside the ~7 GB runner.
       - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
+        run: >-
+          ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon --no-parallel
+          -Dorg.gradle.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8"
+          -Pkotlin.compiler.execution.strategy=in-process
+          -Dorg.gradle.workers.max=1
 
       - name: Upload unit test reports
         # Runs even when the tests fail, so the failure is diagnosable from the
