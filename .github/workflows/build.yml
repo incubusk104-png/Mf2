@@ -265,12 +265,35 @@ jobs:
       # parallel workers from multiplying the peak. The heap is raised from the
       # verified 768m to 2g for headroom over the code Phase 1 added, while
       # staying well inside the ~7 GB runner.
+      #
+      # `-Porg.gradle.configuration-cache=false` mirrors the release step, whose
+      # own comment says it disables the configuration cache "to avoid flaky CI
+      # failures". `gradle.properties` turns it ON, and the test step never
+      # overrode it — the one remaining difference from the invocation that has
+      # always worked on CI.
       - name: Run unit tests
-        run: >-
-          ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon --no-parallel
-          -Dorg.gradle.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8"
-          -Pkotlin.compiler.execution.strategy=in-process
-          -Dorg.gradle.workers.max=1
+        # The output is teed to a file and, on failure, the key lines are
+        # re-emitted as `::error::` annotations. That is deliberate: the job log
+        # itself requires an authenticated session to read, while annotations are
+        # readable through the public API — so a failure here is diagnosable
+        # without signing in. `set -o pipefail` keeps Gradle's exit code as the
+        # step's exit code despite the pipe into `tee`.
+        run: |
+          set -o pipefail
+          ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon --no-parallel \
+            -Dorg.gradle.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8" \
+            -Pkotlin.compiler.execution.strategy=in-process \
+            -Porg.gradle.configuration-cache=false \
+            -Dorg.gradle.workers.max=1 2>&1 | tee /tmp/unit-tests.log
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Unit tests failed with exit $status — key lines follow"
+            grep -E "^e: |error:|FAILED|What went wrong|Caused by|Execution failed|Could not resolve|Unresolved reference|OutOfMemory|Killed" \
+              /tmp/unit-tests.log | head -40 | while IFS= read -r line; do
+                echo "::error::$line"
+              done
+          fi
+          exit "$status"
 
       - name: Upload unit test reports
         # Runs even when the tests fail, so the failure is diagnosable from the
