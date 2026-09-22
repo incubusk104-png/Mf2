@@ -86,6 +86,7 @@ import com.rork.mindsetframestracker.data.HabitRepeat
 import com.rork.mindsetframestracker.data.hasFeatureAccess
 import com.rork.mindsetframestracker.data.isScreenTimeHabit
 import com.rork.mindsetframestracker.data.subscriptionTier
+import com.rork.mindsetframestracker.data.activeHabitCount
 import com.rork.mindsetframestracker.integrations.TrackerConnections
 import com.rork.mindsetframestracker.integrations.PolarClient
 import com.rork.mindsetframestracker.integrations.ScreenTimeMonitor
@@ -171,12 +172,18 @@ fun HabitsScreen(
      * The habits that occupy a free-tier slot.
      *
      * Phase 1's rule counts **active** habits: archived ones are excluded and
-     * paused ones still count. Until the model exposes `isArchived` this is every
-     * stored habit — deliberately the same set `canAddHabit()` counts, so the
-     * indicator can never report a different number from the one the limit
-     * actually enforces.
+     * paused ones still count. This reads [AppData.activeHabitCount] — the model
+     * layer's own definition of that set — rather than counting `data.habits`
+     * here, so the indicator, the paywall and `canAddHabit()` are all computed by
+     * the same expression instead of by three that happen to agree today.
+     *
+     * Counting `data.habits.size` was the bug: it included archived habits, so a
+     * user who archived one to free a slot still saw "5 of 5" and was still
+     * refused, while the server (which counts `is_archived = false`) would have
+     * accepted the create. The number shown and the number enforced have to be
+     * the same number.
      */
-    val activeHabitCount = data.habits.size
+    val activeHabitCount = data.activeHabitCount
 
     // ── Tracker connect pop-up ────────────────────────────────────────────────
     // "add a pop-up that lets the user connect external fitness trackers —
