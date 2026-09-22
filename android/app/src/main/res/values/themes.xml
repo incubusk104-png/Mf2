@@ -1,4 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.MindsetFrames" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- ── The app theme the manifest points at ──────────────────────────────
+         `AndroidManifest.xml` sets `android:theme="@style/AppTheme"` on
+         <application>, but this style was never defined anywhere in the project.
+
+         That is not a runtime fallback — it is a build failure. AAPT does not
+         complain at the point of the reference; it fails when the manifest is
+         linked, with
+
+             error: resource style/AppTheme
+                    (aka com.mindsetframes.habittracker:style/AppTheme) not found.
+
+         which aborts `:app:processDebugResources` and therefore every task that
+         depends on it, including `:app:testDebugUnitTest`. That is why the CI
+         "Run unit tests" step goes red without a single test ever running, and
+         why the step that uploads the test reports then warns that
+         `android/app/build/reports/tests/` and `.../test-results/` do not exist:
+         the test task never executed, so it never wrote them.
+
+         It inherits `Theme.MindsetFrames` rather than restating a parent, so the
+         API-31 splash-screen items in `values-v31/themes.xml` are picked up
+         automatically on Android 12+ (resource resolution selects the v31
+         `Theme.MindsetFrames` there) while every device below API 31 still gets
+         a theme. Defining it only in `values-v31/` would leave API 24–30 — the
+         app's minSdk — with no theme at all; see the note in
+         `values-v31/styles.xml`. -->
+    <style name="AppTheme" parent="Theme.MindsetFrames" />
+
+    <!-- ── The alarm ringing screens' theme ──────────────────────────────────
+         `AlarmRingingActivity` and `HabitAlarmDialogActivity` both declare
+         `android:theme="@style/Theme.MindsetFrames.Alarm"`, and this style was
+         likewise never defined — the same missing-resource failure as `AppTheme`
+         above, reported twice because two activities reference it.
+
+         It inherits the app theme, which is already a NoActionBar theme, so the
+         full-screen alarm screens render without an action bar. The activities
+         carry the wake-and-show behaviour themselves (`showWhenLocked` /
+         `turnScreenOn`), so nothing about the ring depends on this style; it
+         exists so the screens link and are themed consistently with the rest of
+         the app. -->
+    <style name="Theme.MindsetFrames.Alarm" parent="Theme.MindsetFrames" />
 </resources>

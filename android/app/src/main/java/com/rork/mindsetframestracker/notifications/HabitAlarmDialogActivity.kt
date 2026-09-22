@@ -133,15 +133,25 @@ class HabitAlarmDialogActivity : ComponentActivity() {
                 return
             }
         habitId = id
-        habitName = source.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_NAME)
-            ?: source.getStringExtra(LEGACY_EXTRA_HABIT_NAME)
+        // `source` is `Intent?`, so every read off it must be a safe call. The
+        // two reads above already use `?.`; these did not, which is a hard
+        // compile error on a nullable receiver — "Only safe (?.) or non-null
+        // asserted (!!.) calls are allowed on a nullable receiver of type
+        // 'Intent?'" — and it stops `:app:compileDebugKotlin` outright.
+        //
+        // It only became visible once the missing `@style/AppTheme` resource was
+        // defined. Resource linking runs before Kotlin compilation, so the
+        // missing-style error masked this one; fixing the resource merely
+        // exposed the next failure in the chain.
+        habitName = source?.getStringExtra(HabitReminderReceiver.EXTRA_HABIT_NAME)
+            ?: source?.getStringExtra(LEGACY_EXTRA_HABIT_NAME)
             ?: DEFAULT_TITLE
         alarmMinutes = source
-            .getIntExtra(
+            ?.getIntExtra(
                 HabitReminderReceiver.EXTRA_ALARM_MINUTES,
                 HabitReminderReceiver.NO_ALARM_MINUTES,
             )
-            .takeIf { it != HabitReminderReceiver.NO_ALARM_MINUTES }
+            ?.takeIf { it != HabitReminderReceiver.NO_ALARM_MINUTES }
 
         showOverLockScreen()
         // See the class note: the ring is owned by the service, and starting it
